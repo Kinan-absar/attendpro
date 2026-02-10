@@ -25,18 +25,9 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
     setProcessing(true);
     try {
       if (activeRecord) {
-        await dataService.checkOut(user.id);
+        await dataService.checkOut(user);
       } else {
-        let loc = undefined;
-        try {
-          const pos = await new Promise<GeolocationPosition>((res, rej) => 
-            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 })
-          );
-          loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        } catch (e) {
-          console.warn("Location check failed");
-        }
-        await dataService.checkIn(user, loc);
+        await dataService.checkIn(user);
       }
       onAction();
     } catch (err) {
@@ -141,9 +132,9 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
 
           <div className="bg-slate-900 p-6 rounded-3xl shadow-xl text-white overflow-hidden relative">
             <i className="fa-solid fa-shield-halved absolute -right-4 -bottom-4 text-7xl opacity-10"></i>
-            <h4 className="font-bold mb-2">Location Security</h4>
+            <h4 className="font-bold mb-2">Cloud Synced</h4>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Geofencing is active. Your check-in location is recorded for compliance.
+              Firebase Authentication and Firestore are enabled. Your shift data is synced in real-time.
             </p>
           </div>
         </div>

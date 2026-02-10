@@ -19,7 +19,8 @@ const AdminReports: React.FC = () => {
   }, []);
 
   const handleViewEmployee = async (employeeName: string) => {
-    const allUsers = dataService.getUsers();
+    // Fix: getUsers() returns a Promise<User[]>, so it must be awaited before using array methods like .find()
+    const allUsers = await dataService.getUsers();
     const user = allUsers.find(u => u.name === employeeName);
     if (user) {
       const history = await dataService.getAttendanceHistory(user.id);

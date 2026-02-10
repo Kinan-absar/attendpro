@@ -4,7 +4,7 @@ export type UserRole = 'admin' | 'employee';
 export interface User {
   id: string;
   username: string;
-  password?: string; // Only for local mock "database"
+  password?: string;
   name: string;
   employeeId: string;
   department: string;
@@ -12,32 +12,34 @@ export interface User {
   avatar?: string;
 }
 
-export interface OdooConfig {
-  url: string;
-  db: string;
-  username: string;
-  password?: string;
-}
-
+// Added UserProfile interface required by odooService
 export interface UserProfile {
   id: string;
   name: string;
   employeeId: string;
-  avatar: string;
   department: string;
+  avatar?: string;
+}
+
+// Added OdooConfig interface required by odooService
+export interface OdooConfig {
+  url: string;
+  db: string;
+  username: string;
+  apiKey: string;
 }
 
 export interface AttendanceRecord {
-  id: number;
+  id: string | number;
   userId: string;
-  userName: string; // Redundant but helpful for reporting
+  userName: string;
   checkIn: Date;
   checkOut?: Date;
   location?: {
     lat: number;
     lng: number;
   };
-  duration?: number; // Minutes
+  duration?: number;
 }
 
 export interface AIInsight {

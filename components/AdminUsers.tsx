@@ -5,6 +5,7 @@ import { User, UserRole } from '../types';
 
 const AdminUsers: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [newUser, setNewUser] = useState({
     username: '',
@@ -15,14 +16,21 @@ const AdminUsers: React.FC = () => {
     role: 'employee' as UserRole
   });
 
+  const fetchUsers = async () => {
+    setLoading(true);
+    const u = await dataService.getUsers();
+    setUsers(u);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    setUsers(dataService.getUsers());
+    fetchUsers();
   }, []);
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    dataService.addUser(newUser);
-    setUsers(dataService.getUsers());
+    await dataService.addUser(newUser);
+    await fetchUsers();
     setShowForm(false);
     setNewUser({
       username: '',
@@ -107,39 +115,45 @@ const AdminUsers: React.FC = () => {
         </form>
       )}
 
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-slate-50/50">
-            <tr>
-              <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">User</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">Department</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">ID</th>
-              <th className="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase">Role</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {users.map((u) => (
-              <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="flex items-center space-x-3">
-                    <img src={u.avatar} className="w-8 h-8 rounded-full" alt="" />
-                    <div>
-                      <p className="font-bold text-slate-900">{u.name}</p>
-                      <p className="text-xs text-slate-400">@{u.username}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-sm text-slate-600">{u.department}</td>
-                <td className="px-6 py-4 text-sm text-slate-600 font-mono">{u.employeeId}</td>
-                <td className="px-6 py-4 text-right">
-                  <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>
-                    {u.role}
-                  </span>
-                </td>
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden min-h-[200px]">
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead className="bg-slate-50/50">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">User</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">Department</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">ID</th>
+                <th className="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase">Role</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {users.map((u) => (
+                <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center space-x-3">
+                      <img src={u.avatar} className="w-8 h-8 rounded-full" alt="" />
+                      <div>
+                        <p className="font-bold text-slate-900">{u.name}</p>
+                        <p className="text-xs text-slate-400">@{u.username}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{u.department}</td>
+                  <td className="px-6 py-4 text-sm text-slate-600 font-mono">{u.employeeId}</td>
+                  <td className="px-6 py-4 text-right">
+                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>
+                      {u.role}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
