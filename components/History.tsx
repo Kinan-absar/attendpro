@@ -9,10 +9,6 @@ interface Props {
 }
 
 const History: React.FC<Props> = ({ history, user }) => {
-  const handleExport = () => {
-   // dataService.exportToCSV(history, `Timesheet_${user.name.replace(' ', '_')}_${new Date().toISOString().split('T')[0]}`);
-  };
-
   const handlePrint = () => {
     window.print();
   };
@@ -46,13 +42,6 @@ const History: React.FC<Props> = ({ history, user }) => {
           >
             <i className="fa-solid fa-print"></i>
             <span>Print Timesheet</span>
-          </button>
-          <button 
-            onClick={handleExport}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-700 font-bold text-sm hover:bg-slate-50 transition-all shadow-sm"
-          >
-            <i className="fa-solid fa-file-csv text-emerald-600"></i>
-            <span>Export CSV</span>
           </button>
         </div>
       </div>
