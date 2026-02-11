@@ -14,13 +14,13 @@ export default defineConfig({
         theme_color: '#4f46e5',
         icons: [
           {
-            src: './pwa-icon.png',
+            src: './my-logo.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: './pwa-icon.png',
+            src: './my-logo.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',

@@ -1,5 +1,5 @@
 {
-  "id": "com.attendancepro.app.v7",
+  "id": "com.attendancepro.app.v8",
   "name": "Attendance Pro Workforce",
   "short_name": "Attended",
   "description": "Professional Workforce Attendance Tracking",
@@ -11,13 +11,13 @@
   "theme_color": "#4f46e5",
   "icons": [
     {
-      "src": "./pwa-icon.png",
+      "src": "./my-logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./pwa-icon.png",
+      "src": "./my-logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
