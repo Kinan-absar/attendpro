@@ -56,7 +56,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4 md:p-8">
       <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200 overflow-hidden transition-all duration-500">
         <div className="bg-indigo-600 p-10 text-center relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
@@ -193,6 +193,12 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         </form>
       </div>
 
+      <div className="mt-8 text-center px-4 max-w-sm">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+          For the best experience, use <span className="text-indigo-600">Safari</span> on iOS or <span className="text-indigo-600">Chrome</span> on Android and select "Add to Home Screen" from your browser menu.
+        </p>
+      </div>
+
       {/* FIX MODAL (PERMISSIONS GUIDE) */}
       {showFixModal && (
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[500] flex items-center justify-center p-6">
@@ -232,7 +238,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
               <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex items-start">
                 <i className="fa-solid fa-triangle-exclamation text-amber-500 mt-1 mr-3"></i>
                 <p className="text-[10px] text-amber-700 font-medium leading-relaxed">
-                  <strong>Wait:</strong> After publishing, wait about 1 minute for propagation. If "Fetch History" still fails, you may need to create a manual index for the `checkIn` field. Check the browser's developer console for the link.
+                  Wait about 1 minute after publishing for propagation. If you still encounter issues, check the browser console.
                 </p>
               </div>
 
