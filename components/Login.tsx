@@ -85,7 +85,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           </button>
 
           <div className="text-center pt-2">
-            <p className="text-xs text-slate-400">Demo Access: admin/123 or john/123</p>
+            <p className="text-xs text-slate-400">Absar Alomran Construction Co.</p>
           </div>
         </form>
       </div>
