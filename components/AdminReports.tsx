@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { dataService } from '../services/dataService';
 import { MonthlyReport, AttendanceRecord, User } from '../types';
@@ -10,10 +11,14 @@ const AdminReports: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<{ user: User; records: AttendanceRecord[] } | null>(null);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  
+  // Persistence state for manual inputs
   const [requiredHours, setRequiredHours] = useState<Record<string, number>>({});
+  const [grossRates, setGrossRates] = useState<Record<string, number>>({});
+  const [overtimeRates, setOvertimeRates] = useState<Record<string, number>>({});
 
-  const handleRequiredChange = (name: string, value: number) => {
-    setRequiredHours(prev => ({
+  const handleInputChange = (setter: React.Dispatch<React.SetStateAction<Record<string, number>>>, name: string, value: number) => {
+    setter(prev => ({
       ...prev,
       [name]: value
     }));
@@ -46,7 +51,12 @@ const AdminReports: React.FC = () => {
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-slate-500">Generating reports...</div>;
+    return (
+      <div className="p-20 text-center space-y-4">
+        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+        <p className="text-slate-500 font-medium">Generating financial reports...</p>
+      </div>
+    );
   }
 
   if (selectedEmployee) {
@@ -54,9 +64,10 @@ const AdminReports: React.FC = () => {
       <div className="space-y-6">
         <button
           onClick={() => setSelectedEmployee(null)}
-          className="flex items-center text-indigo-600 font-semibold mb-4"
+          className="flex items-center text-indigo-600 font-bold hover:text-indigo-800 transition-colors"
         >
-          ← Back to Reports
+          <i className="fa-solid fa-arrow-left mr-2"></i>
+          Back to Reports
         </button>
         <History history={selectedEmployee.records} user={selectedEmployee.user} />
       </div>
@@ -64,169 +75,223 @@ const AdminReports: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Manager Dashboard</h1>
-        <p className="text-slate-500">Aggregate monthly hours for all staff</p>
+    <div className="space-y-8 pb-12 animate-fadeIn">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Payroll & Reports</h1>
+          <p className="text-slate-500">Manage hours, rates, and financial adjustments</p>
+        </div>
+        
+        <div className="flex flex-wrap gap-3 no-print">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">From</span>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+            />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">To</span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+            />
+          </div>
+        </div>
       </div>
 
-      {reports.map((report) => {
+      {reports.length === 0 ? (
+        <div className="bg-white p-20 rounded-3xl border border-dashed border-slate-300 text-center">
+          <i className="fa-solid fa-file-invoice-dollar text-4xl text-slate-200 mb-4"></i>
+          <p className="text-slate-400 font-medium">No attendance data found for the selected period.</p>
+        </div>
+      ) : (
+        reports.map((report) => {
+          const filteredEmployees =
+            selectedEmployeeFilter === 'all'
+              ? report.employees
+              : report.employees.filter(e => e.name === selectedEmployeeFilter);
 
-        const filteredEmployees =
-          selectedEmployeeFilter === 'all'
-            ? report.employees
-            : report.employees.filter(e => e.name === selectedEmployeeFilter);
+          const totals = filteredEmployees.reduce((acc, e) => {
+            const req = requiredHours[e.name] || 0;
+            const diff = e.totalHours - req;
+            const gross = grossRates[e.name] || 0;
+            const ot = overtimeRates[e.name] || 0;
+            
+            const deduction = diff < 0 ? Math.abs(diff) * gross : 0;
+            const otPay = diff > 0 ? diff * ot : 0;
 
-        const totalShifts = filteredEmployees.reduce((acc, e) => acc + e.shiftCount, 0);
-        const totalHours = filteredEmployees.reduce((acc, e) => acc + e.totalHours, 0);
-        const totalDifference = filteredEmployees.reduce((acc, e) => {
-          const required = requiredHours[e.name] || 0;
-          return acc + (e.totalHours - required);
-        }, 0);
+            return {
+              shifts: acc.shifts + e.shiftCount,
+              hours: acc.hours + e.totalHours,
+              deductions: acc.deductions + deduction,
+              overtime: acc.overtime + otPay
+            };
+          }, { shifts: 0, hours: 0, deductions: 0, overtime: 0 });
 
-        return (
-          <div
-            key={`${report.year}-${report.month}`}
-            className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden"
-          >
+          return (
+            <div
+              key={`${report.year}-${report.month}`}
+              className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-12"
+            >
+              <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-6 items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+                    <i className="fa-solid fa-calendar-check text-xl"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 leading-none mb-1">
+                      {report.month} {report.year}
+                    </h3>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                      {filteredEmployees.length} Staff Members
+                    </p>
+                  </div>
+                </div>
 
-            {/* ================= HEADER ================= */}
-            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-6 items-end justify-between">
-
-              <div>
-                <h3 className="font-bold text-slate-800">
-                  {report.month} {report.year}
-                </h3>
-                <span className="text-xs text-slate-400 uppercase">
-                  {filteredEmployees.length} Active Staff
-                </span>
-              </div>
-
-              {/* Filters */}
-              <div className="flex gap-4 items-end">
-
-                <div className="flex flex-col">
-                  <label className="text-xs text-slate-400 uppercase mb-1">Employee</label>
+                <div className="no-print">
                   <select
                     value={selectedEmployeeFilter}
                     onChange={(e) => setSelectedEmployeeFilter(e.target.value)}
-                    className="px-3 py-2 border border-slate-200 rounded-lg"
+                    className="pl-4 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer"
                   >
                     <option value="all">All Employees</option>
                     {report.employees.map(emp => (
-                      <option key={emp.name} value={emp.name}>
-                        {emp.name}
-                      </option>
+                      <option key={emp.name} value={emp.name}>{emp.name}</option>
                     ))}
                   </select>
                 </div>
+              </div>
 
-                <div className="flex flex-col">
-                  <label className="text-xs text-slate-400 uppercase mb-1">From</label>
-                  <input
-                    type="date"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="px-3 py-2 border border-slate-200 rounded-lg"
-                  />
-                </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50/50">
+                      <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee</th>
+                      <th className="px-4 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Shifts</th>
+                      <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Total Hrs</th>
+                      <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Req. Hrs</th>
+                      <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Diff</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross Rate</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">OT Rate</th>
+                      <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest">Deduction</th>
+                      <th className="px-4 py-4 text-right font-black text-emerald-400 uppercase text-[10px] tracking-widest">OT Pay</th>
+                      <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest no-print">Actions</th>
+                    </tr>
+                  </thead>
 
-                <div className="flex flex-col">
-                  <label className="text-xs text-slate-400 uppercase mb-1">To</label>
-                  <input
-                    type="date"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="px-3 py-2 border border-slate-200 rounded-lg"
-                  />
-                </div>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredEmployees.map((emp) => {
+                      const req = requiredHours[emp.name] || 0;
+                      const diff = emp.totalHours - req;
+                      const gross = grossRates[emp.name] || 0;
+                      const ot = overtimeRates[emp.name] || 0;
+                      
+                      const deductionAmount = diff < 0 ? Math.abs(diff) * gross : 0;
+                      const overtimePay = diff > 0 ? diff * ot : 0;
 
+                      return (
+                        <tr key={emp.name} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <span className="font-bold text-slate-900">{emp.name}</span>
+                          </td>
+
+                          <td className="px-4 py-4 text-center">
+                            <span className="px-2 py-1 bg-slate-100 rounded text-xs font-black text-slate-500">
+                              {emp.shiftCount}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-4 text-right font-mono font-bold text-slate-700">
+                            {emp.totalHours.toFixed(2)}
+                          </td>
+
+                          <td className="px-4 py-4 text-right no-print">
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={requiredHours[emp.name] ?? ''}
+                              onChange={(e) => handleInputChange(setRequiredHours, emp.name, parseFloat(e.target.value) || 0)}
+                              className="w-16 text-right px-2 py-1 bg-white border border-slate-200 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-400 outline-none"
+                              placeholder="0"
+                            />
+                          </td>
+                          <td className="px-4 py-4 text-right print:table-cell hidden">
+                            <span className="font-mono font-bold text-slate-700">{req.toFixed(2)}</span>
+                          </td>
+
+                          <td className={`px-4 py-4 text-right font-mono font-bold ${
+                            diff < 0 ? 'text-rose-500' : diff > 0 ? 'text-emerald-500' : 'text-slate-400'
+                          }`}>
+                            {diff > 0 ? '+' : ''}{diff.toFixed(2)}
+                          </td>
+
+                          <td className="px-4 py-4 text-right">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={grossRates[emp.name] ?? ''}
+                              onChange={(e) => handleInputChange(setGrossRates, emp.name, parseFloat(e.target.value) || 0)}
+                              className="w-20 text-right px-2 py-1 bg-white border border-indigo-100 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-400 outline-none text-indigo-600 font-bold"
+                              placeholder="0.00"
+                            />
+                          </td>
+
+                          <td className="px-4 py-4 text-right">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={overtimeRates[emp.name] ?? ''}
+                              onChange={(e) => handleInputChange(setOvertimeRates, emp.name, parseFloat(e.target.value) || 0)}
+                              className="w-20 text-right px-2 py-1 bg-white border border-indigo-100 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-400 outline-none text-indigo-600 font-bold"
+                              placeholder="0.00"
+                            />
+                          </td>
+
+                          <td className={`px-4 py-4 text-right font-mono font-black ${deductionAmount > 0 ? 'text-rose-600' : 'text-slate-200'}`}>
+                            {deductionAmount > 0 ? `- $${deductionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                          </td>
+
+                          <td className={`px-4 py-4 text-right font-mono font-black ${overtimePay > 0 ? 'text-emerald-600' : 'text-slate-200'}`}>
+                            {overtimePay > 0 ? `+ $${overtimePay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                          </td>
+
+                          <td className="px-6 py-4 text-right no-print">
+                            <button
+                              onClick={() => handleViewEmployee(emp.name)}
+                              className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 tracking-wider"
+                            >
+                              Log Details
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    <tr className="bg-slate-900 text-white font-black">
+                      <td className="px-6 py-5 rounded-bl-3xl">TOTALS</td>
+                      <td className="px-4 py-5 text-center">{totals.shifts}</td>
+                      <td className="px-4 py-5 text-right font-mono">{totals.hours.toFixed(2)}</td>
+                      <td colSpan={4}></td>
+                      <td className="px-4 py-5 text-right font-mono text-rose-400">
+                        -${totals.deductions.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-5 text-right font-mono text-emerald-400">
+                        +${totals.overtime.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-6 py-5 rounded-br-3xl no-print"></td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            {/* ================= TABLE ================= */}
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">Employee</th>
-                    <th className="px-6 py-3 text-center text-xs font-bold text-slate-400 uppercase">Shifts</th>
-                    <th className="px-6 py-3 text-right text-xs font-bold text-slate-400 uppercase">Total Hours</th>
-                    <th className="px-6 py-3 text-right text-xs font-bold text-slate-400 uppercase">Required</th>
-                    <th className="px-6 py-3 text-right text-xs font-bold text-slate-400 uppercase">Difference</th>
-                    <th className="px-6 py-3 text-right text-xs font-bold text-slate-400 uppercase">Actions</th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-slate-100">
-                  {filteredEmployees.map((emp) => {
-
-                    const required = requiredHours[emp.name] || 0;
-                    const diff = emp.totalHours - required;
-
-                    return (
-                      <tr key={emp.name}>
-                        <td className="px-6 py-4 font-semibold">{emp.name}</td>
-
-                        <td className="px-6 py-4 text-center">
-                          <span className="px-2 py-1 bg-slate-100 rounded-md text-sm">
-                            {emp.shiftCount}
-                          </span>
-                        </td>
-
-                        <td className="px-6 py-4 text-right font-mono font-bold text-indigo-600">
-                          {emp.totalHours.toFixed(2)} hrs
-                        </td>
-
-                        <td className="px-6 py-4 text-right">
-                          <input
-                            type="number"
-                            step="0.25"
-                            value={requiredHours[emp.name] ?? ''}
-                            onChange={(e) =>
-                              handleRequiredChange(emp.name, parseFloat(e.target.value) || 0)
-                            }
-                            className="w-24 text-right px-2 py-1 border border-slate-200 rounded-lg"
-                          />
-                        </td>
-
-                        <td className={`px-6 py-4 text-right font-mono font-bold ${
-                          diff < 0 ? 'text-rose-500'
-                          : diff > 0 ? 'text-emerald-600'
-                          : 'text-slate-500'
-                        }`}>
-                          {diff.toFixed(2)} hrs
-                        </td>
-
-                        <td className="px-6 py-4 text-right">
-                          <button
-                            onClick={() => handleViewEmployee(emp.name)}
-                            className="text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-lg"
-                          >
-                            View Logs
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {/* Monthly Totals */}
-                  <tr className="bg-indigo-50/30 font-bold">
-                    <td className="px-6 py-4">Monthly Total</td>
-                    <td className="px-6 py-4 text-center">{totalShifts}</td>
-                    <td className="px-6 py-4 text-right">{totalHours.toFixed(2)} hrs</td>
-                    <td></td>
-                    <td className="px-6 py-4 text-right">{totalDifference.toFixed(2)} hrs</td>
-                    <td></td>
-                  </tr>
-
-                </tbody>
-              </table>
-            </div>
-
-          </div>
-        );
-      })}
+          );
+        })
+      )}
     </div>
   );
 };
