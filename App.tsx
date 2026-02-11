@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-// Fix: Use namespace import to resolve "no exported member" errors that can occur in some TypeScript/module resolution configurations.
 import * as ReactRouterDOM from 'react-router-dom';
 import { dataService } from './services/dataService';
 import { AttendanceRecord, User } from './types';
@@ -11,8 +10,8 @@ import AdminReports from './components/AdminReports';
 import Login from './components/Login';
 import ActiveEmployees from './components/ActiveEmployees';
 import AdminLocationSettings from './components/AdminLocationSettings';
+import AdminUserManagement from './components/AdminUserManagement';
 
-// Fix: Destructure from the namespace to maintain compatibility with the v6-style components used in the app.
 const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDOM as any;
 
 const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
@@ -26,6 +25,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
   if (user.role === 'admin') {
     links.push({ path: '/admin', label: 'Reports', icon: 'fa-chart-pie' });
     links.push({ path: '/admin/active', label: 'Active', icon: 'fa-user-clock' });
+    links.push({ path: '/admin/users', label: 'Staff', icon: 'fa-users-gear' });
     links.push({ path: '/admin/location', label: 'Worksite', icon: 'fa-location-dot' });
   }
 
@@ -39,7 +39,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
           <span className="font-bold text-xl tracking-tight">AttendancePro</span>
         </div>
         <div className="p-3 bg-slate-50 rounded-2xl flex items-center space-x-3">
-          <img src={user.avatar} className="w-8 h-8 rounded-full border border-white shadow-sm" alt="U" />
+          <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} className="w-8 h-8 rounded-full border border-white shadow-sm" alt="U" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-slate-900 truncate">{user.name}</p>
             <p className="text-[10px] text-slate-400 capitalize">{user.role}</p>
@@ -135,6 +135,7 @@ const App: React.FC = () => {
                   <Route path="/admin" element={<AdminReports />} />
                   <Route path="/admin/active" element={<ActiveEmployees />} />
                   <Route path="/admin/location" element={<AdminLocationSettings />} />
+                  <Route path="/admin/users" element={<AdminUserManagement />} />
                 </>
               )}
               <Route path="*" element={<Navigate to="/" replace />} />

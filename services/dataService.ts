@@ -16,8 +16,10 @@ import {
 } from 'firebase/firestore';
 import {
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  User as FirebaseUser
 } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { AttendanceRecord, User, MonthlyReport, Project } from '../types';
@@ -34,12 +36,12 @@ class DataService {
     return this.currentUser;
   }
 
-  /* 🔐 LOGIN */
+  /* 🔐 AUTHENTICATION */
   async login(email: string, password: string): Promise<User> {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const snap = await getDoc(doc(db, USERS, cred.user.uid));
-      if (!snap.exists()) throw new Error('User profile missing in database');
+      if (!snap.exists()) throw new Error('User profile missing in database. Please sign up again.');
       const data = snap.data();
       const user: User = {
         id: cred.user.uid,
@@ -58,8 +60,40 @@ class DataService {
     }
   }
 
+  async signup(email: string, password: string, name: string, employeeId: string, department: string): Promise<User> {
+    let cred;
+    try {
+      cred = await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      console.error("Auth Signup failed:", error);
+      throw error;
+    }
+
+    try {
+      const userId = cred.user.uid;
+      const userData = {
+        name,
+        email,
+        employeeId,
+        department,
+        role: 'employee',
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+      };
+
+      await setDoc(doc(db, USERS, userId), userData);
+      
+      const user: User = { id: userId, ...userData } as User;
+      this.currentUser = user;
+      return user;
+    } catch (error) {
+      console.error("Firestore Profile Creation failed:", error);
+      if (cred?.user) await signOut(auth);
+      throw error;
+    }
+  }
+
   initAuth(onUser: (user: User | null) => void) {
-    onAuthStateChanged(auth, async (firebaseUser) => {
+    onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       this.authInitialized = true;
       if (!firebaseUser) {
         this.currentUser = null;
@@ -69,7 +103,6 @@ class DataService {
       try {
         const snap = await getDoc(doc(db, USERS, firebaseUser.uid));
         if (!snap.exists()) {
-          console.error("Authenticated but no document in 'users' collection for UID:", firebaseUser.uid);
           onUser(null);
           return;
         }
@@ -101,7 +134,7 @@ class DataService {
     }
   }
 
-  /* ⏱️ CHECK IN */
+  /* ⏱️ ATTENDANCE ACTIONS */
   async checkIn(user: User, location?: { lat: number, lng: number, accuracy?: number }) {
     try {
       await addDoc(collection(db, ATTENDANCE), {
@@ -116,7 +149,6 @@ class DataService {
     }
   }
 
-  /* ⏱️ CHECK OUT */
   async checkOut(recordId: string, location?: { lat: number, lng: number, accuracy?: number }) {
     try {
       await updateDoc(doc(db, ATTENDANCE, recordId), {
@@ -129,7 +161,6 @@ class DataService {
     }
   }
 
-  /* 📜 HISTORY */
   async getAttendanceHistory(userId: string): Promise<AttendanceRecord[]> {
     try {
       const q = query(
@@ -158,32 +189,21 @@ class DataService {
     }
   }
 
-  /* 🏗️ PROJECTS & LOCATIONS */
   async getProjects(userId?: string): Promise<Project[]> {
-    if (!this.authInitialized || !this.currentUser) return [];
-    
     try {
       let q;
       if (userId) {
-        // Employees fetch only their assigned projects
         q = query(collection(db, PROJECTS), where('assignedUserIds', 'array-contains', userId));
       } else {
-        // Admins fetch all projects for management
         q = query(collection(db, PROJECTS));
       }
-      
       const snap = await getDocs(q);
       return snap.docs.map(d => ({
         id: d.id,
         ...(d.data() as Omit<Project, 'id'>)
       }));
     } catch (error) {
-      const fError = error as FirestoreError;
-      if (fError.code === 'permission-denied') {
-        console.error(`[Security Error] Fetch Projects: Permission Denied. Rule update required.`);
-        throw error; // Re-throw so UI can handle
-      }
-      console.error("Fetch Projects failed:", error);
+      this.handleFirestoreError(error, "Fetch Projects");
       return [];
     }
   }
@@ -216,26 +236,56 @@ class DataService {
     }
   }
 
-  /* 👥 USERS (ADMIN) */
   async getUsers(): Promise<User[]> {
     try {
-      if (!this.currentUser || this.currentUser.role !== 'admin') return [];
       const snap = await getDocs(collection(db, USERS));
       return snap.docs.map(d => ({
         id: d.id,
         ...(d.data() as Omit<User, 'id'>)
       }));
     } catch (error) {
-      this.handleFirestoreError(error, "Fetch Users (Admin)");
+      this.handleFirestoreError(error, "Fetch Users");
       return [];
     }
   }
 
-  /* 📊 REPORTS */
+  async saveUser(user: Partial<User>) {
+    try {
+      if (!this.currentUser || this.currentUser.role !== 'admin') throw new Error("Unauthorized: Admin role required");
+      
+      const userId = user.id || doc(collection(db, USERS)).id;
+      const userRef = doc(db, USERS, userId);
+      
+      const data = {
+        name: user.name || '',
+        email: user.email || '',
+        employeeId: user.employeeId || '',
+        department: user.department || '',
+        role: user.role || 'employee',
+        avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || '')}&background=random`
+      };
+
+      await setDoc(userRef, data, { merge: true });
+      return { id: userId, ...data };
+    } catch (error) {
+      this.handleFirestoreError(error, "Save User");
+      throw error;
+    }
+  }
+
+  async deleteUser(userId: string) {
+    try {
+      if (!this.currentUser || this.currentUser.role !== 'admin') throw new Error("Unauthorized: Admin role required");
+      await deleteDoc(doc(db, USERS, userId));
+    } catch (error) {
+      this.handleFirestoreError(error, "Delete User");
+      throw error;
+    }
+  }
+
   async getMonthlyReports(from?: Date, to?: Date): Promise<MonthlyReport[]> {
     try {
       if (!this.currentUser || this.currentUser.role !== 'admin') return [];
-      
       const attendance = await getDocs(collection(db, ATTENDANCE));
       const users = await this.getUsers();
       const grouped: Record<string, MonthlyReport> = {};
@@ -301,11 +351,42 @@ class DataService {
 
   private handleFirestoreError(error: any, context: string) {
     const fError = error as FirestoreError;
-    if (fError && fError.code === 'permission-denied') {
-      console.error(`[Security Error] ${context}: Permission Denied. Check Firestore Rules.`);
+    if (fError && (fError.code === 'permission-denied' || fError.message?.includes('permission'))) {
+      console.error(`[Security Error] ${context}: Permission Denied. Check your Firestore Security Rules.`);
+    } else if (fError && fError.code === 'failed-precondition') {
+      console.error(`[Index Error] ${context}: Missing index. Check your browser console for a link to create it.`);
     } else {
       console.error(`[Database Error] ${context}:`, error);
     }
+  }
+
+  getRecommendedRules(): string {
+    return `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update, delete: if request.auth != null && (request.auth.uid == userId || isAdmin());
+    }
+
+    match /attendance/{docId} {
+      allow read, create: if request.auth != null;
+      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /projects/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+  }
+}`;
   }
 }
 

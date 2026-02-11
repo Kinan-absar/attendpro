@@ -1,0 +1,310 @@
+
+import React, { useState, useEffect } from 'react';
+import { dataService } from '../services/dataService';
+import { User, UserRole } from '../types';
+
+const AdminUserManagement: React.FC = () => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [showSecurityGuide, setShowSecurityGuide] = useState(false);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const u = await dataService.getUsers();
+      setUsers(u);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const handleSave = async () => {
+    if (!editingUser?.name || !editingUser?.email) {
+      return alert('Name and Email are required.');
+    }
+    setSaving(true);
+    try {
+      await dataService.saveUser(editingUser);
+      await fetchUsers();
+      setEditingUser(null);
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === 'permission-denied' || err.message?.includes('permission')) {
+        alert('Permission Denied: Ensure Firestore Security Rules allow admins to write to the users collection.');
+      } else {
+        alert('Failed to save user.');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure? This will remove their Firestore profile.')) return;
+    try {
+      await dataService.deleteUser(id);
+      setUsers(users.filter(u => u.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete user.');
+    }
+  };
+
+  const filteredUsers = users.filter(u => 
+    u.name.toLowerCase().includes(search.toLowerCase()) || 
+    u.email.toLowerCase().includes(search.toLowerCase()) ||
+    u.employeeId.toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (loading && users.length === 0) return (
+    <div className="p-20 text-center">
+      <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Loading Staff Directory...</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-8 animate-fadeIn pb-20">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Staff Management</h1>
+          <p className="text-slate-500">Create and manage employee profiles in Firestore</p>
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowSecurityGuide(true)}
+            className="w-12 h-12 bg-white border border-slate-200 rounded-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-all shadow-sm"
+            title="Fix Permissions"
+          >
+            <i className="fa-solid fa-shield-halved"></i>
+          </button>
+          <button 
+            onClick={() => setEditingUser({ name: '', email: '', employeeId: '', department: '', role: 'employee' })}
+            className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center space-x-2"
+          >
+            <i className="fa-solid fa-user-plus"></i>
+            <span>Add New Staff</span>
+          </button>
+        </div>
+      </div>
+
+      {/* SECURITY GUIDE MODAL */}
+      {showSecurityGuide && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-fadeIn">
+            <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-black">Firestore Security Rules</h2>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Fix 'Insufficient Permissions' Errors</p>
+              </div>
+              <button onClick={() => setShowSecurityGuide(false)} className="text-slate-500 hover:text-white transition-colors">
+                <i className="fa-solid fa-circle-xmark text-2xl"></i>
+              </button>
+            </div>
+            <div className="p-8 space-y-4">
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Copy and paste these rules into your <strong>Firebase Console &gt; Firestore Database &gt; Rules</strong> tab to allow users to sign up and admins to manage staff.
+              </p>
+              <pre className="bg-slate-50 p-6 rounded-2xl border border-slate-100 overflow-x-auto text-[11px] font-mono text-slate-700 select-all leading-relaxed">
+                {dataService.getRecommendedRules()}
+              </pre>
+              <div className="pt-4 flex justify-end">
+                <button 
+                  onClick={() => setShowSecurityGuide(false)}
+                  className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-sm"
+                >
+                  Got it
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEARCH BAR */}
+      <div className="relative group max-w-md">
+        <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input 
+          type="text"
+          placeholder="Search by name, ID, or email..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+        />
+      </div>
+
+      {/* MODAL / FORM */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-fadeIn">
+            <div className="bg-indigo-600 p-8 text-white">
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-2xl font-black">{editingUser.id ? 'Edit Profile' : 'New Employee'}</h2>
+                <button onClick={() => setEditingUser(null)} className="text-white/60 hover:text-white transition-colors">
+                  <i className="fa-solid fa-circle-xmark text-2xl"></i>
+                </button>
+              </div>
+              <p className="text-indigo-100 text-sm opacity-80">Update Firestore identity for {editingUser.name || 'new staff'}</p>
+            </div>
+
+            <div className="p-8 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Full Name</label>
+                  <input 
+                    type="text"
+                    value={editingUser.name}
+                    onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Email</label>
+                  <input 
+                    type="email"
+                    value={editingUser.email}
+                    onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Employee ID</label>
+                  <input 
+                    type="text"
+                    value={editingUser.employeeId}
+                    onChange={(e) => setEditingUser({ ...editingUser, employeeId: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Department</label>
+                  <input 
+                    type="text"
+                    value={editingUser.department}
+                    onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">System Role</label>
+                  <select 
+                    value={editingUser.role}
+                    onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as UserRole })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all appearance-none"
+                  >
+                    <option value="employee">Employee</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-4">
+                <button 
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
+                >
+                  {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : (editingUser.id ? 'Update Profile' : 'Create Profile')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* USER LIST */}
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-slate-50/50">
+              <tr>
+                <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee</th>
+                <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Contact</th>
+                <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Department</th>
+                <th className="px-6 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Role</th>
+                <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filteredUsers.map(u => (
+                <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center space-x-3">
+                      <img 
+                        src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}&background=random`} 
+                        className="w-10 h-10 rounded-2xl border border-slate-100" 
+                        alt="" 
+                      />
+                      <div>
+                        <p className="font-bold text-slate-900">{u.name}</p>
+                        <p className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter">ID: {u.employeeId}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="text-sm font-medium text-slate-600">{u.email}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">
+                      {u.department}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                      u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button 
+                        onClick={() => setEditingUser(u)}
+                        className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                        title="Edit Profile"
+                      >
+                        <i className="fa-solid fa-pen-to-square text-xs"></i>
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(u.id)}
+                        className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all"
+                        title="Delete User"
+                      >
+                        <i className="fa-solid fa-trash-can text-xs"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredUsers.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="p-20 text-center">
+                    <i className="fa-solid fa-users-slash text-4xl text-slate-200 mb-4 block"></i>
+                    <p className="text-slate-400 font-medium tracking-tight">No matching staff members found.</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AdminUserManagement;

@@ -1,5 +1,4 @@
-
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AttendanceRecord, User, Project } from '../types';
 import { dataService } from '../services/dataService';
 import {
@@ -18,6 +17,7 @@ interface Props {
   onAction: () => Promise<void> | void;
 }
 
+// Fixed: Added React import to resolve 'Cannot find namespace React' error
 const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   const [processing, setProcessing] = useState(false);
   const [now, setNow] = useState(new Date());
