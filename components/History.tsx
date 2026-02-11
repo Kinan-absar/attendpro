@@ -10,7 +10,7 @@ interface Props {
 
 const History: React.FC<Props> = ({ history, user }) => {
   const handleExport = () => {
-    dataService.exportToCSV(history, `Timesheet_${user.name.replace(' ', '_')}_${new Date().toISOString().split('T')[0]}`);
+   // dataService.exportToCSV(history, `Timesheet_${user.name.replace(' ', '_')}_${new Date().toISOString().split('T')[0]}`);
   };
 
   const handlePrint = () => {
@@ -94,7 +94,7 @@ const History: React.FC<Props> = ({ history, user }) => {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <span className="font-mono font-bold text-slate-500">
-                        {record.duration ? `${(record.duration / 60).toFixed(1)}h` : '--'}
+                        {record.duration ? `${(record.duration / 60).toFixed(2)}h` : '--'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right no-print">
@@ -109,7 +109,7 @@ const History: React.FC<Props> = ({ history, user }) => {
                 <tr className="bg-slate-50/30 print:bg-white border-t-2 border-slate-200">
                   <td colSpan={2} className="px-6 py-4 font-bold text-right text-slate-400 uppercase text-xs">Total Tracked Hours</td>
                   <td className="px-6 py-4 text-center font-bold text-indigo-600 text-lg">
-                    {(history.reduce((acc, r) => acc + (r.duration || 0), 0) / 60).toFixed(1)} hrs
+                    {(history.reduce((acc, r) => acc + (r.duration || 0), 0) / 60).toFixed(2)} hrs
                   </td>
                   <td className="no-print"></td>
                 </tr>

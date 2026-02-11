@@ -1,4 +1,3 @@
-
 import {
   collection,
   addDoc,
@@ -7,42 +6,82 @@ import {
   where,
   orderBy,
   serverTimestamp,
-  Timestamp,
+  doc,
+  getDoc,
+  updateDoc
 } from 'firebase/firestore';
-// Fix: Use modular imports for auth functions
-import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { AttendanceRecord, User } from '../types';
+import { AttendanceRecord, User, MonthlyReport } from '../types';
 
-const ATTENDANCE_COLLECTION = 'attendance';
+const USERS = 'users';
+const ATTENDANCE = 'attendance';
 
 class DataService {
   private currentUser: User | null = null;
 
-  async init() {
-    // nothing needed anymore
-    return;
-  }
-
-  getCurrentUser(): User | null {
+  getCurrentUser() {
     return this.currentUser;
   }
 
+  /* 🔐 LOGIN */
   async login(email: string, password: string): Promise<User> {
     const cred = await signInWithEmailAndPassword(auth, email, password);
 
+    const snap = await getDoc(doc(db, USERS, cred.user.uid));
+    if (!snap.exists()) throw new Error('User profile missing');
+
+    const data = snap.data();
+
     const user: User = {
       id: cred.user.uid,
-      username: cred.user.email || 'User',
-      name: cred.user.email?.split('@')[0] || 'User',
-      employeeId: 'EMP-TBD',
-      department: 'General',
-      role: 'employee',
-      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${cred.user.email}`,
+      email: cred.user.email!,
+      name: data.name,
+      employeeId: data.employeeId,
+      department: data.department,
+      role: data.role, // 🔥 admin / employee
+      avatar: data.avatar
     };
 
     this.currentUser = user;
     return user;
+  }
+
+  /* 🔄 AUTH REHYDRATION (FIXES ADMIN UI ISSUE) */
+  initAuth(onUser: (user: User | null) => void) {
+    onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        this.currentUser = null;
+        onUser(null);
+        return;
+      }
+
+      const snap = await getDoc(doc(db, USERS, firebaseUser.uid));
+      if (!snap.exists()) {
+        console.error('User profile missing');
+        onUser(null);
+        return;
+      }
+
+      const data = snap.data();
+
+      const user: User = {
+        id: firebaseUser.uid,
+        email: firebaseUser.email!,
+        name: data.name,
+        employeeId: data.employeeId,
+        department: data.department,
+        role: data.role, // ✅ ADMIN FLAG
+        avatar: data.avatar
+      };
+
+      this.currentUser = user;
+      onUser(user);
+    });
   }
 
   async logout() {
@@ -50,70 +89,150 @@ class DataService {
     this.currentUser = null;
   }
 
+  /* ⏱️ CHECK IN */
   async checkIn(user: User) {
-    await addDoc(collection(db, ATTENDANCE_COLLECTION), {
+    await addDoc(collection(db, ATTENDANCE), {
       userId: user.id,
       userName: user.name,
-      type: 'in',
-      time: serverTimestamp(),
+      checkIn: serverTimestamp()
     });
   }
 
-  async checkOut(user: User) {
-    await addDoc(collection(db, ATTENDANCE_COLLECTION), {
-      userId: user.id,
-      userName: user.name,
-      type: 'out',
-      time: serverTimestamp(),
+  /* ⏱️ CHECK OUT — FIXED */
+  async checkOut(recordId: string) {
+    await updateDoc(doc(db, ATTENDANCE, recordId), {
+      checkOut: serverTimestamp()
     });
   }
 
+  /* 📜 HISTORY */
   async getAttendanceHistory(userId: string): Promise<AttendanceRecord[]> {
     const q = query(
-      collection(db, ATTENDANCE_COLLECTION),
+      collection(db, ATTENDANCE),
       where('userId', '==', userId),
-      orderBy('time', 'desc')
+      orderBy('checkIn', 'desc')
     );
 
     const snap = await getDocs(q);
 
-    // Map Firebase event stream back to Paired AttendanceRecord format for UI compatibility
-    const events = snap.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as any[];
-
-    const records: AttendanceRecord[] = [];
-    let currentOut: any = null;
-
-    // Iterate backwards to pair Ins with Outs
-    for (let i = 0; i < events.length; i++) {
-      const event = events[i];
-      const eventDate = (event.time as Timestamp)?.toDate() || new Date();
-      
-      if (event.type === 'out') {
-        currentOut = event;
-      } else if (event.type === 'in') {
-        records.push({
-          id: event.id,
-          userId: event.userId,
-          userName: event.userName || 'Employee',
-          checkIn: eventDate,
-          checkOut: currentOut ? (currentOut.time as Timestamp).toDate() : undefined,
-          duration: currentOut ? Math.round(((currentOut.time as Timestamp).toDate().getTime() - eventDate.getTime()) / 60000) : undefined
-        });
-        currentOut = null; // Reset for next pair
-      }
-    }
-
-    return records;
+    return snap.docs.map(d => {
+      const r = d.data();
+      return {
+        id: d.id,
+        userId: r.userId,
+        userName: r.userName,
+        checkIn: r.checkIn.toDate(),
+        checkOut: r.checkOut?.toDate(),
+        duration: r.checkOut
+          ? (r.checkOut.toDate().getTime() - r.checkIn.toDate().getTime()) / 60000
+          : undefined
+      };
+    });
   }
 
-  // Stubs for admin features to prevent crashes after replacement
-  async getUsers(): Promise<User[]> { return []; }
-  async addUser(userData: any) { return null; }
-  async getMonthlyReports(): Promise<any[]> { return []; }
-  exportToCSV(records: any, filename: string) { console.log("CSV Export not implemented in basic Firebase version"); }
+  /* 👥 USERS (ADMIN) */
+  async getUsers(): Promise<User[]> {
+    const snap = await getDocs(collection(db, USERS));
+    return snap.docs.map(d => ({
+      id: d.id,
+      ...(d.data() as Omit<User, 'id'>)
+    }));
+  }
+
+  /* 📊 REPORTS */
+    async getMonthlyReports(from?: Date, to?: Date): Promise<MonthlyReport[]> {
+      const attendance = await getDocs(collection(db, ATTENDANCE));
+      const users = await this.getUsers();
+
+      const grouped: Record<string, MonthlyReport> = {};
+
+      attendance.docs.forEach(docSnap => {
+        const r = docSnap.data();
+        if (!r.checkIn || !r.checkOut) return;
+
+        const checkIn = r.checkIn.toDate();
+        const checkOut = r.checkOut.toDate();
+        
+        if (from && checkIn < from) return;
+        if (to && checkIn > to) return;
+        // 🔥 Payroll month logic (26 → 25)
+        let year = checkIn.getFullYear();
+        let month = checkIn.getMonth();
+
+        if (checkIn.getDate() >= 26) {
+          month += 1;
+          if (month === 12) {
+            month = 0;
+            year += 1;
+          }
+        }
+
+        const monthName = new Date(year, month).toLocaleString('default', {
+          month: 'long'
+        });
+
+        const key = `${year}-${month}`;
+
+        grouped[key] ??= {
+          month: monthName,
+          year,
+          employees: []
+        };
+
+        const user = users.find(u => u.id === r.userId);
+        if (!user) return;
+
+        let emp = grouped[key].employees.find(e => e.name === user.name);
+
+        if (!emp) {
+          emp = {
+            name: user.name,
+            shiftCount: 0,
+            totalHours: 0
+          };
+          grouped[key].employees.push(emp);
+        }
+
+        emp.shiftCount++;
+        emp.totalHours +=
+          (checkOut.getTime() - checkIn.getTime()) / 3600000;
+      });
+
+      return Object.values(grouped);
+      
+    }
+
+  async getAllAttendance(): Promise<AttendanceRecord[]> {
+    const snap = await getDocs(collection(db, ATTENDANCE));
+
+    return snap.docs
+      .map(d => {
+        const r = d.data();
+
+        // 🚨 Skip broken records
+        if (!r.checkIn || typeof r.checkIn.toDate !== 'function') {
+          console.warn('Skipping invalid attendance record:', d.id);
+          return null;
+        }
+
+        const checkIn = r.checkIn.toDate();
+        const checkOut = r.checkOut?.toDate?.();
+
+        return {
+          id: d.id,
+          userId: r.userId,
+          userName: r.userName,
+          checkIn,
+          checkOut,
+          duration: checkOut
+            ? (checkOut.getTime() - checkIn.getTime()) / 60000
+            : undefined,
+        };
+      })
+      .filter(Boolean) as AttendanceRecord[];
+  }
+
+
 }
 
 export const dataService = new DataService();
