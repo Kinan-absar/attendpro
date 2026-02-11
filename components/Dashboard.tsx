@@ -22,6 +22,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   const [processing, setProcessing] = useState(false);
   const [now, setNow] = useState(new Date());
   const [userProject, setUserProject] = useState<Project | null>(null);
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [userLocation, setUserLocation] = useState<GeolocationCoordinates | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [loadingProject, setLoadingProject] = useState(true);
@@ -33,25 +34,31 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   }, []);
 
   useEffect(() => {
-    const fetchUserProject = async () => {
+    const fetchData = async () => {
       setLoadingProject(true);
       setPermissionDenied(false);
       try {
-        // Try to fetch specifically assigned projects for this user
-        let projects = await dataService.getProjects(user.id);
+        // Fetch projects assigned to this specific user
+        const assigned = await dataService.getProjects(user.id);
         
-        // If nothing assigned specifically to this user ID, 
-        // and user is admin, fetch all projects and pick the first one for testing/monitoring
-        if (projects.length === 0 && user.role === 'admin') {
-          const allProjects = await dataService.getProjects();
-          if (allProjects.length > 0) {
-            projects = [allProjects[0]];
+        if (user.role === 'admin') {
+          // Admins get to see all projects in a switcher
+          const all = await dataService.getProjects();
+          setAllProjects(all);
+          
+          // If admin is assigned to something, show that first. 
+          // Otherwise, don't default to anything (user must select).
+          if (assigned.length > 0) {
+            setUserProject(assigned[0]);
+          } else {
+            setUserProject(null);
           }
+        } else {
+          // Employees only see their assigned project
+          setUserProject(assigned[0] || null);
         }
-        
-        setUserProject(projects[0] || null);
       } catch (err: any) {
-        console.warn("Dashboard: Project fetch failed", err);
+        console.warn("Dashboard: Data fetch failed", err);
         if (err.code === 'permission-denied') {
           setPermissionDenied(true);
         }
@@ -59,7 +66,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
         setLoadingProject(false);
       }
     };
-    fetchUserProject();
+    fetchData();
   }, [user.id, user.role]);
 
   useEffect(() => {
@@ -168,15 +175,35 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
           <p className="text-slate-500">Track your productivity and attendance</p>
         </div>
 
-        <div className="bg-white px-6 py-4 rounded-3xl border flex items-center gap-4 shadow-sm">
-          <div className="text-right">
-            <p className="font-black text-slate-900">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-              {now.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' })}
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-            <i className="fa-solid fa-clock" />
+        <div className="flex flex-col md:items-end gap-2">
+          {user.role === 'admin' && allProjects.length > 0 && (
+            <div className="relative group no-print">
+              <select 
+                value={userProject?.id || ''} 
+                onChange={(e) => setUserProject(allProjects.find(p => p.id === e.target.value) || null)}
+                className="pl-4 pr-10 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black uppercase tracking-wider text-slate-600 appearance-none cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+              >
+                <option value="">Select Worksite to Monitor</option>
+                {allProjects.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.assignedUserIds?.includes(user.id) ? '(Assigned)' : ''}
+                  </option>
+                ))}
+              </select>
+              <i className="fa-solid fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[10px]"></i>
+            </div>
+          )}
+          
+          <div className="bg-white px-6 py-4 rounded-3xl border flex items-center gap-4 shadow-sm">
+            <div className="text-right">
+              <p className="font-black text-slate-900">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                {now.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' })}
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+              <i className="fa-solid fa-clock" />
+            </div>
           </div>
         </div>
       </div>
@@ -205,7 +232,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
             </div>
             <div>
               <p className="font-black uppercase text-[10px] tracking-widest opacity-80">
-                {user.role === 'admin' && !userProject.assignedUserIds?.includes(user.id) ? 'Previewing Site' : 'Assigned Project'}: {userProject.name}
+                {user.role === 'admin' && !userProject.assignedUserIds?.includes(user.id) ? 'Monitoring Mode' : 'Assigned Project'}: {userProject.name}
               </p>
               <p className="text-sm font-bold">
                 {locationError ? locationError : (isInsideZone ? 'You are within the project zone' : 'You are outside the project zone')}
@@ -225,8 +252,12 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
         <div className="p-4 rounded-3xl border bg-amber-50 border-amber-100 text-amber-700 flex items-center space-x-3">
           <i className="fa-solid fa-triangle-exclamation text-xl"></i>
           <div>
-            <p className="font-black uppercase text-[10px] tracking-widest">No Project Assigned</p>
-            <p className="text-sm font-medium">You aren't assigned to a worksite. Please contact admin to assign your ID: <span className="font-mono text-[10px]">{user.id}</span></p>
+            <p className="font-black uppercase text-[10px] tracking-widest">No Project Selected</p>
+            <p className="text-sm font-medium">
+              {user.role === 'admin' 
+                ? 'Select a worksite from the dropdown above to begin monitoring or testing.' 
+                : `You aren't assigned to a worksite. Please contact admin to assign your ID: ${user.id}`}
+            </p>
           </div>
         </div>
       ) : null}
@@ -274,7 +305,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
             )}
             {!userProject && !activeRecord && !loadingProject && !permissionDenied && (
               <p className="text-center text-amber-600 text-xs font-bold uppercase tracking-wider">
-                Waiting for project assignment...
+                {user.role === 'admin' ? 'Select project to enable shift button' : 'Waiting for project assignment...'}
               </p>
             )}
           </div>
