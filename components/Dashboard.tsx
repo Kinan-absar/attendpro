@@ -1,3 +1,4 @@
+
 import React, { useEffect, useMemo, useState } from 'react';
 import { AttendanceRecord, User, Project } from '../types';
 import { dataService } from '../services/dataService';
@@ -165,7 +166,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
       <div className="flex flex-col md:flex-row justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-            {activeRecord ? 'Shift in progress' : `Hello, ${user.name.split(' ')[0]}!`}
+            {activeRecord ? 'Shift in progress' : `Hello, ${(user.name || 'User').split(' ')[0]}!`}
           </h1>
           <p className="text-slate-500">Track your productivity and attendance</p>
         </div>

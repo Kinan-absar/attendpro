@@ -45,12 +45,12 @@ class DataService {
       const data = snap.data();
       const user: User = {
         id: cred.user.uid,
-        email: cred.user.email!,
-        name: data.name,
-        employeeId: data.employeeId,
-        department: data.department,
-        role: data.role,
-        avatar: data.avatar
+        email: cred.user.email || '',
+        name: data.name || 'Unknown User',
+        employeeId: data.employeeId || 'N/A',
+        department: data.department || 'General',
+        role: data.role || 'employee',
+        avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`
       };
       this.currentUser = user;
       return user;
@@ -72,12 +72,12 @@ class DataService {
     try {
       const userId = cred.user.uid;
       const userData = {
-        name,
-        email,
-        employeeId,
-        department,
+        name: name || '',
+        email: email || '',
+        employeeId: employeeId || '',
+        department: department || '',
         role: 'employee',
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=random`
       };
 
       await setDoc(doc(db, USERS, userId), userData);
@@ -109,12 +109,12 @@ class DataService {
         const data = snap.data();
         const user: User = {
           id: firebaseUser.uid,
-          email: firebaseUser.email!,
-          name: data.name,
-          employeeId: data.employeeId,
-          department: data.department,
-          role: data.role,
-          avatar: data.avatar
+          email: firebaseUser.email || '',
+          name: data.name || 'Unknown User',
+          employeeId: data.employeeId || 'N/A',
+          department: data.department || 'General',
+          role: data.role || 'employee',
+          avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`
         };
         this.currentUser = user;
         onUser(user);
@@ -173,8 +173,8 @@ class DataService {
         const r = d.data();
         return {
           id: d.id,
-          userId: r.userId,
-          userName: r.userName,
+          userId: r.userId || '',
+          userName: r.userName || 'Unknown',
           checkIn: r.checkIn?.toDate() || new Date(),
           checkOut: r.checkOut?.toDate(),
           location: r.location,
@@ -239,10 +239,18 @@ class DataService {
   async getUsers(): Promise<User[]> {
     try {
       const snap = await getDocs(collection(db, USERS));
-      return snap.docs.map(d => ({
-        id: d.id,
-        ...(d.data() as Omit<User, 'id'>)
-      }));
+      return snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          email: data.email || '',
+          name: data.name || '',
+          employeeId: data.employeeId || '',
+          department: data.department || '',
+          role: data.role || 'employee',
+          avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`
+        };
+      });
     } catch (error) {
       this.handleFirestoreError(error, "Fetch Users");
       return [];
@@ -253,16 +261,21 @@ class DataService {
     try {
       if (!this.currentUser || this.currentUser.role !== 'admin') throw new Error("Unauthorized: Admin role required");
       
+      // Enforce the same validation as signup
+      if (!user.name || !user.email || !user.employeeId) {
+        throw new Error("Missing required profile information: Name, Email, and Staff ID are mandatory.");
+      }
+
       const userId = user.id || doc(collection(db, USERS)).id;
       const userRef = doc(db, USERS, userId);
       
       const data = {
-        name: user.name || '',
-        email: user.email || '',
-        employeeId: user.employeeId || '',
-        department: user.department || '',
+        name: user.name.trim(),
+        email: user.email.trim().toLowerCase(),
+        employeeId: user.employeeId.trim(),
+        department: (user.department || '').trim(),
         role: user.role || 'employee',
-        avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || '')}&background=random`
+        avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name.trim())}&background=random`
       };
 
       await setDoc(userRef, data, { merge: true });
@@ -336,8 +349,8 @@ class DataService {
         const checkOut = r.checkOut?.toDate?.();
         return {
           id: d.id,
-          userId: r.userId,
-          userName: r.userName,
+          userId: r.userId || '',
+          userName: r.userName || 'Unknown',
           checkIn,
           checkOut,
           duration: checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60000 : undefined,

@@ -39,10 +39,10 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
           <span className="font-bold text-xl tracking-tight">AttendancePro</span>
         </div>
         <div className="p-3 bg-slate-50 rounded-2xl flex items-center space-x-3">
-          <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} className="w-8 h-8 rounded-full border border-white shadow-sm" alt="U" />
+          <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}`} className="w-8 h-8 rounded-full border border-white shadow-sm" alt="U" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-900 truncate">{user.name}</p>
-            <p className="text-[10px] text-slate-400 capitalize">{user.role}</p>
+            <p className="text-xs font-bold text-slate-900 truncate">{user.name || 'User'}</p>
+            <p className="text-[10px] text-slate-400 capitalize">{user.role || 'Employee'}</p>
           </div>
         </div>
       </div>

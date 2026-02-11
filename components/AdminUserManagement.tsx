@@ -28,8 +28,8 @@ const AdminUserManagement: React.FC = () => {
   }, []);
 
   const handleSave = async () => {
-    if (!editingUser?.name || !editingUser?.email) {
-      return alert('Name and Email are required.');
+    if (!editingUser?.name || !editingUser?.email || !editingUser?.employeeId) {
+      return alert('Mandatory Fields: Full Name, Email, and Staff ID are required.');
     }
     setSaving(true);
     try {
@@ -41,7 +41,7 @@ const AdminUserManagement: React.FC = () => {
       if (err.code === 'permission-denied' || err.message?.includes('permission')) {
         alert('Permission Denied: Ensure Firestore Security Rules allow admins to write to the users collection.');
       } else {
-        alert('Failed to save user.');
+        alert(err.message || 'Failed to save user.');
       }
     } finally {
       setSaving(false);
@@ -59,11 +59,13 @@ const AdminUserManagement: React.FC = () => {
     }
   };
 
-  const filteredUsers = users.filter(u => 
-    u.name.toLowerCase().includes(search.toLowerCase()) || 
-    u.email.toLowerCase().includes(search.toLowerCase()) ||
-    u.employeeId.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredUsers = users.filter(u => {
+    const s = search.toLowerCase();
+    const name = (u.name || '').toLowerCase();
+    const email = (u.email || '').toLowerCase();
+    const empId = (u.employeeId || '').toLowerCase();
+    return name.includes(s) || email.includes(s) || empId.includes(s);
+  });
 
   if (loading && users.length === 0) return (
     <div className="p-20 text-center">
@@ -148,64 +150,94 @@ const AdminUserManagement: React.FC = () => {
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-fadeIn">
             <div className="bg-indigo-600 p-8 text-white">
               <div className="flex justify-between items-center mb-2">
-                <h2 className="text-2xl font-black">{editingUser.id ? 'Edit Profile' : 'New Employee'}</h2>
+                <h2 className="text-2xl font-black">{editingUser.id ? 'Edit Profile' : 'Add New Staff'}</h2>
                 <button onClick={() => setEditingUser(null)} className="text-white/60 hover:text-white transition-colors">
                   <i className="fa-solid fa-circle-xmark text-2xl"></i>
                 </button>
               </div>
-              <p className="text-indigo-100 text-sm opacity-80">Update Firestore identity for {editingUser.name || 'new staff'}</p>
+              <p className="text-indigo-100 text-sm opacity-80">
+                {editingUser.id ? `Managing ${editingUser.name}'s account` : 'Creating a new workforce identity in Firestore'}
+              </p>
             </div>
 
             <div className="p-8 space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Full Name</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                    Full Name <span className="text-rose-500">*</span>
+                  </label>
                   <input 
                     type="text"
-                    value={editingUser.name}
+                    required
+                    value={editingUser.name || ''}
                     onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    className={`w-full px-4 py-3 bg-slate-50 border rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all ${!editingUser.name ? 'border-rose-200' : 'border-slate-200'}`}
+                    placeholder="e.g. Mitchell Admin"
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Email</label>
+                <div className="col-span-2">
+                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                    Corporate Email <span className="text-rose-500">*</span>
+                  </label>
                   <input 
                     type="email"
-                    value={editingUser.email}
+                    required
+                    value={editingUser.email || ''}
                     onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    className={`w-full px-4 py-3 bg-slate-50 border rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all ${!editingUser.email ? 'border-rose-200' : 'border-slate-200'}`}
+                    placeholder="name@company.com"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Employee ID</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                    Staff ID <span className="text-rose-500">*</span>
+                  </label>
                   <input 
                     type="text"
-                    value={editingUser.employeeId}
+                    required
+                    value={editingUser.employeeId || ''}
                     onChange={(e) => setEditingUser({ ...editingUser, employeeId: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    className={`w-full px-4 py-3 bg-slate-50 border rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all ${!editingUser.employeeId ? 'border-rose-200' : 'border-slate-200'}`}
+                    placeholder="EMP-000"
                   />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Department</label>
                   <input 
                     type="text"
-                    value={editingUser.department}
+                    value={editingUser.department || ''}
                     onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    placeholder="e.g. Operations"
                   />
                 </div>
-                <div>
+                <div className="col-span-2">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">System Role</label>
-                  <select 
-                    value={editingUser.role}
-                    onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as UserRole })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all appearance-none"
-                  >
-                    <option value="employee">Employee</option>
-                    <option value="admin">Admin</option>
-                  </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => setEditingUser({ ...editingUser, role: 'employee' })}
+                      className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest border-2 transition-all ${editingUser.role === 'employee' ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-white border-slate-100 text-slate-400'}`}
+                    >
+                      Employee
+                    </button>
+                    <button 
+                      onClick={() => setEditingUser({ ...editingUser, role: 'admin' })}
+                      className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest border-2 transition-all ${editingUser.role === 'admin' ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-white border-slate-100 text-slate-400'}`}
+                    >
+                      Admin
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {!editingUser.id && (
+                <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex items-start">
+                  <i className="fa-solid fa-circle-info text-amber-500 mt-1 mr-3"></i>
+                  <p className="text-[10px] text-amber-700 font-bold leading-relaxed uppercase tracking-tight">
+                    Note: Adding a profile here only creates the database record. The employee must still sign up using the same email to create their login password.
+                  </p>
+                </div>
+              )}
 
               <div className="pt-4 flex gap-4">
                 <button 
@@ -246,29 +278,29 @@ const AdminUserManagement: React.FC = () => {
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
                       <img 
-                        src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}&background=random`} 
+                        src={u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || 'User')}&background=random`} 
                         className="w-10 h-10 rounded-2xl border border-slate-100" 
                         alt="" 
                       />
                       <div>
-                        <p className="font-bold text-slate-900">{u.name}</p>
-                        <p className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter">ID: {u.employeeId}</p>
+                        <p className="font-bold text-slate-900">{u.name || 'Unnamed Employee'}</p>
+                        <p className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter">ID: {u.employeeId || 'N/A'}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm font-medium text-slate-600">{u.email}</p>
+                    <p className="text-sm font-medium text-slate-600">{u.email || 'No email'}</p>
                   </td>
                   <td className="px-6 py-4">
                     <span className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">
-                      {u.department}
+                      {u.department || 'Unassigned'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
                     <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
                       u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
                     }`}>
-                      {u.role}
+                      {u.role || 'employee'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
