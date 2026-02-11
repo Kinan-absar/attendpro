@@ -38,23 +38,17 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
       setLoadingProject(true);
       setPermissionDenied(false);
       try {
-        // Fetch projects assigned to this specific user
         const assigned = await dataService.getProjects(user.id);
         
         if (user.role === 'admin') {
-          // Admins get to see all projects in a switcher
           const all = await dataService.getProjects();
           setAllProjects(all);
-          
-          // If admin is assigned to something, show that first. 
-          // Otherwise, don't default to anything (user must select).
           if (assigned.length > 0) {
             setUserProject(assigned[0]);
           } else {
             setUserProject(null);
           }
         } else {
-          // Employees only see their assigned project
           setUserProject(assigned[0] || null);
         }
       } catch (err: any) {
@@ -82,7 +76,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
       },
       (err) => {
         console.error("Location error:", err);
-        setLocationError("Please enable location access to check in.");
+        setLocationError("Please enable location access for tracking.");
       },
       { enableHighAccuracy: true }
     );
@@ -91,7 +85,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   }, []);
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371e3; // meters
+    const R = 6371e3;
     const φ1 = (lat1 * Math.PI) / 180;
     const φ2 = (lat2 * Math.PI) / 180;
     const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -104,11 +98,12 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   };
 
   const currentDistance = useMemo(() => {
-    if (!userLocation || !userProject?.geofence) return null;
+    if (!userLocation || !userProject?.geofence || !userProject.geofence.enabled) return null;
     return calculateDistance(userLocation.latitude, userLocation.longitude, userProject.geofence.lat, userProject.geofence.lng);
   }, [userLocation, userProject]);
 
   const isInsideZone = useMemo(() => {
+    // If geofence is disabled for the project, the user is ALWAYS considered "inside"
     if (!userProject?.geofence?.enabled) return true;
     if (currentDistance === null) return false;
     return currentDistance <= userProject.geofence.radius;
@@ -186,7 +181,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
                 <option value="">Select Worksite to Monitor</option>
                 {allProjects.map(p => (
                   <option key={p.id} value={p.id}>
-                    {p.name} {p.assignedUserIds?.includes(user.id) ? '(Assigned)' : ''}
+                    {p.name} {!p.geofence.enabled ? '🌎' : '📍'}
                   </option>
                 ))}
               </select>
@@ -214,7 +209,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
           <i className="fa-solid fa-shield-halved text-xl"></i>
           <div>
             <p className="font-black uppercase text-[10px] tracking-widest">Access Restricted</p>
-            <p className="text-sm font-medium">Your account cannot read project data. Please ask admin to update Firestore Rules.</p>
+            <p className="text-sm font-medium">Your account cannot read project data.</p>
           </div>
         </div>
       )}
@@ -222,30 +217,43 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
       {/* PROJECT STATUS BANNER */}
       {!loadingProject && userProject ? (
         <div className={`p-4 rounded-3xl border flex items-center justify-between ${
-          isInsideZone ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'
+          !userProject.geofence.enabled ? 'bg-indigo-50 border-indigo-100 text-indigo-700' :
+          isInsideZone ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 
+          'bg-rose-50 border-rose-100 text-rose-700'
         }`}>
           <div className="flex items-center space-x-3">
             <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-              isInsideZone ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white animate-pulse'
+              !userProject.geofence.enabled ? 'bg-indigo-500 text-white' :
+              isInsideZone ? 'bg-emerald-500 text-white' : 
+              'bg-rose-500 text-white animate-pulse'
             }`}>
-              <i className={`fa-solid ${isInsideZone ? 'fa-location-dot' : 'fa-location-crosshairs'}`}></i>
+              <i className={`fa-solid ${!userProject.geofence.enabled ? 'fa-globe' : isInsideZone ? 'fa-location-dot' : 'fa-location-crosshairs'}`}></i>
             </div>
             <div>
               <p className="font-black uppercase text-[10px] tracking-widest opacity-80">
-                {user.role === 'admin' && !userProject.assignedUserIds?.includes(user.id) ? 'Monitoring Mode' : 'Assigned Project'}: {userProject.name}
+                {userProject.name} {!userProject.geofence.enabled ? '(Flexible Location)' : '(Fixed Site)'}
               </p>
               <p className="text-sm font-bold">
-                {locationError ? locationError : (isInsideZone ? 'You are within the project zone' : 'You are outside the project zone')}
+                {!userProject.geofence.enabled ? 'Check-in allowed from any location' :
+                 locationError ? locationError : 
+                 (isInsideZone ? 'You are within the project zone' : 'You are outside the project zone')}
               </p>
             </div>
           </div>
           <div className="text-right">
-            {currentDistance !== null && (
-              <p className="font-black text-lg leading-none">
-                {currentDistance < 1000 ? `${Math.round(currentDistance)}m` : `${(currentDistance/1000).toFixed(1)}km`}
-              </p>
+            {userProject.geofence.enabled && currentDistance !== null && (
+              <>
+                <p className="font-black text-lg leading-none">
+                  {currentDistance < 1000 ? `${Math.round(currentDistance)}m` : `${(currentDistance/1000).toFixed(1)}km`}
+                </p>
+                <p className="text-[10px] uppercase font-black opacity-60">From Center</p>
+              </>
             )}
-            <p className="text-[10px] uppercase font-black opacity-60">From Center</p>
+            {!userProject.geofence.enabled && (
+               <div className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-black uppercase">
+                 Anywhere
+               </div>
+            )}
           </div>
         </div>
       ) : !loadingProject && !userProject && !permissionDenied ? (
@@ -255,8 +263,8 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
             <p className="font-black uppercase text-[10px] tracking-widest">No Project Selected</p>
             <p className="text-sm font-medium">
               {user.role === 'admin' 
-                ? 'Select a worksite from the dropdown above to begin monitoring or testing.' 
-                : `You aren't assigned to a worksite. Please contact admin to assign your ID: ${user.id}`}
+                ? 'Select a worksite from the dropdown above to begin.' 
+                : 'You aren\'t assigned to a worksite. Please contact your supervisor.'}
             </p>
           </div>
         </div>
@@ -303,11 +311,6 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
                 Action blocked: Must be at {userProject.name}
               </p>
             )}
-            {!userProject && !activeRecord && !loadingProject && !permissionDenied && (
-              <p className="text-center text-amber-600 text-xs font-bold uppercase tracking-wider">
-                {user.role === 'admin' ? 'Select project to enable shift button' : 'Waiting for project assignment...'}
-              </p>
-            )}
           </div>
         </div>
 
@@ -347,7 +350,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
               <h4 className="font-black uppercase text-xs tracking-widest">Security Policy</h4>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed font-medium">
-              Location authentication is tied to your specific worksite. Ensure GPS is enabled for accurate recording.
+              Your location is recorded for verification. If geofencing is enabled, you must be within the defined boundary.
             </p>
           </div>
         </div>

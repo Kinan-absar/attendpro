@@ -105,7 +105,7 @@ const AdminLocationSettings: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Worksites & Projects</h1>
-          <p className="text-slate-500">Manage multiple locations and assign staff (including yourself)</p>
+          <p className="text-slate-500">Manage locations or create flexible remote work groups</p>
         </div>
         <div className="flex gap-2">
            <button 
@@ -148,22 +148,7 @@ const AdminLocationSettings: React.FC = () => {
           
           <div className="bg-white/80 p-6 rounded-2xl border border-rose-100 space-y-4">
             <p className="text-sm text-slate-700 leading-relaxed">
-              The application is unable to <strong>list</strong> projects. Even if you can save, listing requires <code>read</code> access on the entire collection. Update your Firestore Rules:
-            </p>
-            <pre className="bg-slate-900 text-indigo-300 p-4 rounded-xl text-[10px] font-mono overflow-x-auto">
-{`// Add this to your rules file
-match /projects/{projectId} {
-  allow read, write: if request.auth != null;
-}
-
-// Or if you want to restrict to admins:
-match /projects/{projectId} {
-  allow read, write: if request.auth != null && 
-    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-}`}
-            </pre>
-            <p className="text-xs text-slate-500 italic">
-              After updating rules, click the refresh button above.
+              Listing requires <code>read</code> access. Ensure your rules allow logged-in users to read projects.
             </p>
           </div>
         </div>
@@ -186,108 +171,113 @@ match /projects/{projectId} {
                   type="text"
                   value={editingProject.name}
                   onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
-                  placeholder="e.g. Takaad Project"
+                  placeholder="e.g. Remote Sales Team"
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                 />
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-slate-900 text-sm">Enforce Geofence</p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Mandatory check-in location</p>
-                </div>
-                <button 
-                  onClick={() => setEditingProject({
-                    ...editingProject,
-                    geofence: { ...editingProject.geofence!, enabled: !editingProject.geofence?.enabled }
-                  })}
-                  className={`w-12 h-6 rounded-full relative transition-all ${editingProject.geofence?.enabled ? 'bg-indigo-600' : 'bg-slate-300'}`}
-                >
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${editingProject.geofence?.enabled ? 'left-7' : 'left-1'}`}></div>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Lat</label>
-                  <input 
-                    type="number"
-                    value={editingProject.geofence?.lat}
-                    onChange={(e) => setEditingProject({
+              <div className={`p-4 rounded-2xl border transition-all ${editingProject.geofence?.enabled ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="font-bold text-slate-900 text-sm">Enforce Location Boundary</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Restrict check-in to specific GPS area</p>
+                  </div>
+                  <button 
+                    onClick={() => setEditingProject({
                       ...editingProject,
-                      geofence: { ...editingProject.geofence!, lat: parseFloat(e.target.value) }
+                      geofence: { ...editingProject.geofence!, enabled: !editingProject.geofence?.enabled }
                     })}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-mono text-xs"
-                  />
+                    className={`w-12 h-6 rounded-full relative transition-all ${editingProject.geofence?.enabled ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${editingProject.geofence?.enabled ? 'left-7' : 'left-1'}`}></div>
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Lng</label>
-                  <input 
-                    type="number"
-                    value={editingProject.geofence?.lng}
-                    onChange={(e) => setEditingProject({
-                      ...editingProject,
-                      geofence: { ...editingProject.geofence!, lng: parseFloat(e.target.value) }
-                    })}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-mono text-xs"
-                  />
-                </div>
-              </div>
 
-              <button 
-                onClick={captureLocation}
-                className="w-full py-3 bg-slate-100 text-slate-700 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center space-x-2"
-              >
-                <i className="fa-solid fa-crosshairs"></i>
-                <span>Use Current Location</span>
-              </button>
+                {editingProject.geofence?.enabled && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Lat</label>
+                        <input 
+                          type="number"
+                          value={editingProject.geofence?.lat}
+                          onChange={(e) => setEditingProject({
+                            ...editingProject,
+                            geofence: { ...editingProject.geofence!, lat: parseFloat(e.target.value) }
+                          })}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Lng</label>
+                        <input 
+                          type="number"
+                          value={editingProject.geofence?.lng}
+                          onChange={(e) => setEditingProject({
+                            ...editingProject,
+                            geofence: { ...editingProject.geofence!, lng: parseFloat(e.target.value) }
+                          })}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-mono text-xs"
+                        />
+                      </div>
+                    </div>
 
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Radius: {editingProject.geofence?.radius}m</label>
-                <input 
-                  type="range" min="10" max="1000" step="10"
-                  value={editingProject.geofence?.radius}
-                  onChange={(e) => setEditingProject({
-                    ...editingProject,
-                    geofence: { ...editingProject.geofence!, radius: parseInt(e.target.value) }
-                  })}
-                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                />
+                    <button 
+                      onClick={captureLocation}
+                      className="w-full py-3 bg-white text-slate-700 border border-slate-200 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center space-x-2"
+                    >
+                      <i className="fa-solid fa-crosshairs"></i>
+                      <span>Use Current Location</span>
+                    </button>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Radius: {editingProject.geofence?.radius}m</label>
+                      <input 
+                        type="range" min="10" max="1000" step="10"
+                        value={editingProject.geofence?.radius}
+                        onChange={(e) => setEditingProject({
+                          ...editingProject,
+                          geofence: { ...editingProject.geofence!, radius: parseInt(e.target.value) }
+                        })}
+                        className="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                      />
+                    </div>
+                  </div>
+                )}
+                {!editingProject.geofence?.enabled && (
+                  <div className="p-4 text-center bg-white/50 rounded-xl border border-dashed border-slate-300">
+                    <i className="fa-solid fa-globe text-2xl text-slate-200 mb-2"></i>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Flexible location mode active</p>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="flex flex-col">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Assign Staff</label>
               <div className="flex-1 overflow-y-auto max-h-[300px] border border-slate-100 rounded-2xl bg-slate-50 p-2 space-y-1">
-                {users.length === 0 ? (
-                  <div className="p-10 text-center text-slate-300 italic text-xs">No users found</div>
-                ) : (
-                  users.map(user => {
-                    const isAssigned = editingProject.assignedUserIds?.includes(user.id);
-                    return (
-                      <button
-                        key={user.id}
-                        onClick={() => toggleUserAssignment(user.id)}
-                        className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${
-                          isAssigned ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-100'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} className="w-6 h-6 rounded-full border border-white/20" />
-                          <div className="text-left">
-                            <p className="text-xs font-bold leading-none">{user.name}</p>
-                            <p className={`text-[8px] font-black uppercase tracking-tighter ${isAssigned ? 'text-indigo-200' : 'text-slate-400'}`}>{user.role}</p>
-                          </div>
+                {users.map(user => {
+                  const isAssigned = editingProject.assignedUserIds?.includes(user.id);
+                  return (
+                    <button
+                      key={user.id}
+                      onClick={() => toggleUserAssignment(user.id)}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${
+                        isAssigned ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} className="w-6 h-6 rounded-full border border-white/20" />
+                        <div className="text-left">
+                          <p className="text-xs font-bold leading-none">{user.name}</p>
+                          <p className={`text-[8px] font-black uppercase tracking-tighter ${isAssigned ? 'text-indigo-200' : 'text-slate-400'}`}>{user.role}</p>
                         </div>
-                        {isAssigned && <i className="fa-solid fa-check text-[10px]"></i>}
-                      </button>
-                    );
-                  })
-                )}
+                      </div>
+                      {isAssigned && <i className="fa-solid fa-check text-[10px]"></i>}
+                    </button>
+                  );
+                })}
               </div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase mt-2 px-2 italic">
-                {editingProject.assignedUserIds?.length || 0} Staff members selected
-              </p>
             </div>
           </div>
 
@@ -297,62 +287,54 @@ match /projects/{projectId} {
               disabled={saving}
               className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
             >
-              {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Save Project Configuration'}
+              {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Save Changes'}
             </button>
           </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects.length === 0 ? (
-            <div className="col-span-full py-20 bg-white rounded-3xl border border-dashed text-center">
-              <i className="fa-solid fa-map-location text-4xl text-slate-100 mb-4"></i>
-              <p className="text-slate-400 font-medium">No projects found.</p>
-              {permissionError && <p className="text-rose-500 text-xs font-bold mt-2 uppercase">Permission Denied</p>}
-            </div>
-          ) : (
-            projects.map(project => (
-              <div key={project.id} className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col group">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
-                    <i className="fa-solid fa-building-shield text-xl"></i>
-                  </div>
-                  <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-all">
-                    <button onClick={() => setEditingProject(project)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors">
-                      <i className="fa-solid fa-pen-to-square text-xs"></i>
-                    </button>
-                    <button onClick={() => handleDelete(project.id)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-rose-600 transition-colors">
-                      <i className="fa-solid fa-trash-can text-xs"></i>
-                    </button>
-                  </div>
+          {projects.map(project => (
+            <div key={project.id} className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col group">
+              <div className="flex justify-between items-start mb-4">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${project.geofence.enabled ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                  <i className={`fa-solid ${project.geofence.enabled ? 'fa-building-shield' : 'fa-globe'} text-xl`}></i>
                 </div>
-
-                <h3 className="text-xl font-black text-slate-900 mb-1">{project.name}</h3>
-                <div className="flex items-center space-x-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">
-                  <i className="fa-solid fa-location-dot"></i>
-                  <span>Radius: {project.geofence.radius}m</span>
-                </div>
-
-                <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
-                  <div className="flex -space-x-2">
-                    {(project.assignedUserIds || []).slice(0, 4).map(uid => {
-                      const u = users.find(user => user.id === uid);
-                      return u ? (
-                        <img key={uid} src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} className="w-6 h-6 rounded-full border-2 border-white" title={u.name} />
-                      ) : null;
-                    })}
-                    {(project.assignedUserIds || []).length > 4 && (
-                      <div className="w-6 h-6 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[8px] font-black text-slate-500">
-                        +{(project.assignedUserIds || []).length - 4}
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-[10px] font-black text-slate-300 uppercase">
-                    {(project.assignedUserIds || []).length} Staff
-                  </span>
+                <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-all">
+                  <button onClick={() => setEditingProject(project)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors">
+                    <i className="fa-solid fa-pen-to-square text-xs"></i>
+                  </button>
+                  <button onClick={() => handleDelete(project.id)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-rose-600 transition-colors">
+                    <i className="fa-solid fa-trash-can text-xs"></i>
+                  </button>
                 </div>
               </div>
-            ))
-          )}
+
+              <h3 className="text-xl font-black text-slate-900 mb-1">{project.name}</h3>
+              <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-widest mb-6">
+                {project.geofence.enabled ? (
+                   <span className="text-indigo-500 flex items-center">
+                     <i className="fa-solid fa-location-dot mr-1"></i> {project.geofence.radius}m Radius
+                   </span>
+                ) : (
+                   <span className="text-emerald-500">Flexible Location</span>
+                )}
+              </div>
+
+              <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
+                <div className="flex -space-x-2">
+                  {(project.assignedUserIds || []).slice(0, 4).map(uid => {
+                    const u = users.find(user => user.id === uid);
+                    return u ? (
+                      <img key={uid} src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} className="w-6 h-6 rounded-full border-2 border-white" title={u.name} />
+                    ) : null;
+                  })}
+                </div>
+                <span className="text-[10px] font-black text-slate-300 uppercase">
+                  {(project.assignedUserIds || []).length} Assigned
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
