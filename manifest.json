@@ -1,5 +1,5 @@
 {
-  "id": "com.attendancepro.app.v9",
+  "id": "com.attendancepro.app.v10",
   "name": "Attendance Pro Workforce",
   "short_name": "Attended",
   "description": "Professional Workforce Attendance Tracking",
@@ -17,9 +17,15 @@
       "purpose": "any"
     },
     {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "apple-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "apple-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "maskable"
     }
   ]
