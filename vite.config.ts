@@ -15,14 +15,28 @@ export default defineConfig({
         theme_color: '#4f46e5',
         icons: [
           {
-            src: 'logo.svg',
-            sizes: '192x192',
+            src: 'app-icon.svg',
+            sizes: '192x192",
             type: 'image/svg+xml',
+            purpose: 'any',
           },
           {
-            src: 'logo.svg',
+            src: 'app-icon.svg',
             sizes: '512x512',
             type: 'image/svg+xml',
+            purpose: 'any',
+          },
+          {
+            src: 'app-icon.svg',
+            sizes: '192x192',
+            type: 'image/svg+xml',
+            purpose: 'maskable',
+          },
+          {
+            src: 'app-icon.svg',
+            sizes: '512x512',
+            type: 'image/svg+xml',
+            purpose: 'maskable',
           },
         ],
       },
@@ -32,4 +46,3 @@ export default defineConfig({
     }),
   ],
 });
-    
