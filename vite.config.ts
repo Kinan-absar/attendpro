@@ -14,25 +14,25 @@ export default defineConfig({
         theme_color: '#4f46e5',
         icons: [
           {
-            src: 'icon.svg',
+            src: './pwa-icon-v5.svg',
             sizes: '192x192',
             type: 'image/svg+xml',
             purpose: 'any',
           },
           {
-            src: 'icon.svg',
+            src: './pwa-icon-v5.svg',
             sizes: '512x512',
             type: 'image/svg+xml',
             purpose: 'any',
           },
           {
-            src: 'icon.svg',
+            src: './pwa-icon-v5.svg',
             sizes: '192x192',
             type: 'image/svg+xml',
             purpose: 'maskable',
           },
           {
-            src: 'icon.svg',
+            src: './pwa-icon-v5.svg',
             sizes: '512x512',
             type: 'image/svg+xml',
             purpose: 'maskable',
