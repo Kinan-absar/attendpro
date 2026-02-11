@@ -12,12 +12,12 @@ const AdminReports: React.FC = () => {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   
-  // Persistence state for manual inputs
-  const [requiredHours, setRequiredHours] = useState<Record<string, number>>({});
+  // Financial Configuration
+  const [globalRequiredHours, setGlobalRequiredHours] = useState<number>(160); // Default to 160
   const [grossRates, setGrossRates] = useState<Record<string, number>>({});
   const [overtimeRates, setOvertimeRates] = useState<Record<string, number>>({});
 
-  const handleInputChange = (setter: React.Dispatch<React.SetStateAction<Record<string, number>>>, name: string, value: number) => {
+  const handleRateChange = (setter: React.Dispatch<React.SetStateAction<Record<string, number>>>, name: string, value: number) => {
     setter(prev => ({
       ...prev,
       [name]: value
@@ -76,15 +76,31 @@ const AdminReports: React.FC = () => {
 
   return (
     <div className="space-y-8 pb-12 animate-fadeIn">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* HEADER SECTION */}
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Payroll & Reports</h1>
-          <p className="text-slate-500">Manage hours, rates, and financial adjustments</p>
+          <p className="text-slate-500">Manage hours, rates, and financial adjustments for all staff</p>
         </div>
         
-        <div className="flex flex-wrap gap-3 no-print">
+        <div className="flex flex-wrap items-end gap-4 no-print bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">From</span>
+            <span className="text-[10px] font-black text-indigo-600 uppercase mb-1 ml-1 flex items-center">
+              <i className="fa-solid fa-clock-rotate-left mr-1"></i> Global Required Hours
+            </span>
+            <input
+              type="number"
+              value={globalRequiredHours}
+              onChange={(e) => setGlobalRequiredHours(parseFloat(e.target.value) || 0)}
+              className="px-4 py-2 w-32 bg-indigo-50 border border-indigo-100 rounded-xl text-sm font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              placeholder="e.g. 160"
+            />
+          </div>
+
+          <div className="h-10 w-px bg-slate-200 hidden md:block"></div>
+
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">From Date</span>
             <input
               type="date"
               value={fromDate}
@@ -93,7 +109,7 @@ const AdminReports: React.FC = () => {
             />
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">To</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">To Date</span>
             <input
               type="date"
               value={toDate}
@@ -117,8 +133,7 @@ const AdminReports: React.FC = () => {
               : report.employees.filter(e => e.name === selectedEmployeeFilter);
 
           const totals = filteredEmployees.reduce((acc, e) => {
-            const req = requiredHours[e.name] || 0;
-            const diff = e.totalHours - req;
+            const diff = e.totalHours - globalRequiredHours;
             const gross = grossRates[e.name] || 0;
             const ot = overtimeRates[e.name] || 0;
             
@@ -148,7 +163,7 @@ const AdminReports: React.FC = () => {
                       {report.month} {report.year}
                     </h3>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                      {filteredEmployees.length} Staff Members
+                      Standard: {globalRequiredHours} Hrs
                     </p>
                   </div>
                 </div>
@@ -186,8 +201,7 @@ const AdminReports: React.FC = () => {
 
                   <tbody className="divide-y divide-slate-100">
                     {filteredEmployees.map((emp) => {
-                      const req = requiredHours[emp.name] || 0;
-                      const diff = emp.totalHours - req;
+                      const diff = emp.totalHours - globalRequiredHours;
                       const gross = grossRates[emp.name] || 0;
                       const ot = overtimeRates[emp.name] || 0;
                       
@@ -210,18 +224,10 @@ const AdminReports: React.FC = () => {
                             {emp.totalHours.toFixed(2)}
                           </td>
 
-                          <td className="px-4 py-4 text-right no-print">
-                            <input
-                              type="number"
-                              step="0.5"
-                              value={requiredHours[emp.name] ?? ''}
-                              onChange={(e) => handleInputChange(setRequiredHours, emp.name, parseFloat(e.target.value) || 0)}
-                              className="w-16 text-right px-2 py-1 bg-white border border-slate-200 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-400 outline-none"
-                              placeholder="0"
-                            />
-                          </td>
-                          <td className="px-4 py-4 text-right print:table-cell hidden">
-                            <span className="font-mono font-bold text-slate-700">{req.toFixed(2)}</span>
+                          <td className="px-4 py-4 text-right">
+                            <span className="font-mono text-slate-400 text-xs">
+                              {globalRequiredHours}
+                            </span>
                           </td>
 
                           <td className={`px-4 py-4 text-right font-mono font-bold ${
@@ -235,7 +241,7 @@ const AdminReports: React.FC = () => {
                               type="number"
                               step="0.1"
                               value={grossRates[emp.name] ?? ''}
-                              onChange={(e) => handleInputChange(setGrossRates, emp.name, parseFloat(e.target.value) || 0)}
+                              onChange={(e) => handleRateChange(setGrossRates, emp.name, parseFloat(e.target.value) || 0)}
                               className="w-20 text-right px-2 py-1 bg-white border border-indigo-100 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-400 outline-none text-indigo-600 font-bold"
                               placeholder="0.00"
                             />
@@ -246,7 +252,7 @@ const AdminReports: React.FC = () => {
                               type="number"
                               step="0.1"
                               value={overtimeRates[emp.name] ?? ''}
-                              onChange={(e) => handleInputChange(setOvertimeRates, emp.name, parseFloat(e.target.value) || 0)}
+                              onChange={(e) => handleRateChange(setOvertimeRates, emp.name, parseFloat(e.target.value) || 0)}
                               className="w-20 text-right px-2 py-1 bg-white border border-indigo-100 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-400 outline-none text-indigo-600 font-bold"
                               placeholder="0.00"
                             />
