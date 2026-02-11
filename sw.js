@@ -1,8 +1,9 @@
-const CACHE_NAME = 'attendance-pro-v8';
+const CACHE_NAME = 'attendance-pro-v9';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
+  './icon.svg',
   './my-logo.png',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
