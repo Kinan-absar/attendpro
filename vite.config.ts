@@ -15,14 +15,14 @@ export default defineConfig({
         theme_color: '#4f46e5',
         icons: [
           {
-            src: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png',
+            src: 'logo.svg',
             sizes: '192x192',
-            type: 'image/png',
+            type: 'image/svg+xml',
           },
           {
-            src: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png',
+            src: 'logo.svg',
             sizes: '512x512',
-            type: 'image/png',
+            type: 'image/svg+xml',
           },
         ],
       },
@@ -32,3 +32,4 @@ export default defineConfig({
     }),
   ],
 });
+    

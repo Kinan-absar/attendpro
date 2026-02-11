@@ -48,8 +48,9 @@ export const odooService = {
   checkIn: async (location?: { lat: number; lng: number }): Promise<AttendanceRecord> => {
     const history = await odooService.getAttendanceHistory();
     const profile = await odooService.getProfile();
+    // Fix: Convert number from Date.now() to string for the record ID
     const newRecord: AttendanceRecord = {
-      id: Date.now(),
+      id: Date.now().toString(),
       userId: profile.id,
       userName: profile.name,
       checkIn: new Date(),
