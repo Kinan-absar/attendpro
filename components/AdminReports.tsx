@@ -176,8 +176,8 @@ const AdminReports: React.FC = () => {
                       <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Total Hrs</th>
                       <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Req. Hrs</th>
                       <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Diff</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross Rate</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">OT Rate</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross Rate (SR)</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">OT Rate (SR)</th>
                       <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest">Deduction</th>
                       <th className="px-4 py-4 text-right font-black text-emerald-400 uppercase text-[10px] tracking-widest">OT Pay</th>
                       <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest no-print">Actions</th>
@@ -253,11 +253,11 @@ const AdminReports: React.FC = () => {
                           </td>
 
                           <td className={`px-4 py-4 text-right font-mono font-black ${deductionAmount > 0 ? 'text-rose-600' : 'text-slate-200'}`}>
-                            {deductionAmount > 0 ? `- $${deductionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                            {deductionAmount > 0 ? `- SR ${deductionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
                           </td>
 
                           <td className={`px-4 py-4 text-right font-mono font-black ${overtimePay > 0 ? 'text-emerald-600' : 'text-slate-200'}`}>
-                            {overtimePay > 0 ? `+ $${overtimePay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                            {overtimePay > 0 ? `+ SR ${overtimePay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
                           </td>
 
                           <td className="px-6 py-4 text-right no-print">
@@ -278,10 +278,10 @@ const AdminReports: React.FC = () => {
                       <td className="px-4 py-5 text-right font-mono">{totals.hours.toFixed(2)}</td>
                       <td colSpan={4}></td>
                       <td className="px-4 py-5 text-right font-mono text-rose-400">
-                        -${totals.deductions.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        -SR {totals.deductions.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
                       <td className="px-4 py-5 text-right font-mono text-emerald-400">
-                        +${totals.overtime.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        +SR {totals.overtime.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
                       <td className="px-6 py-5 rounded-br-3xl no-print"></td>
                     </tr>
