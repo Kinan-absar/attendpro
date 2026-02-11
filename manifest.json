@@ -1,9 +1,8 @@
-
 {
-  "id": "com.attendancepro.app.v6",
+  "id": "com.attendancepro.app.v7",
   "name": "Attendance Pro Workforce",
   "short_name": "Attended",
-  "description": "Professional Standalone Workforce Attendance Tracking",
+  "description": "Professional Workforce Attendance Tracking",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -15,12 +14,6 @@
       "src": "./pwa-icon.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "./pwa-icon-v5.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
       "purpose": "any"
     },
     {
