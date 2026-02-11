@@ -1,5 +1,6 @@
+
 {
-  "name": "Copy of Odoo Connect: Smart Check-In",
+  "name": "Odoo Connect: Smart Check-In",
   "description": "A high-performance React application for Odoo attendance tracking, featuring real-time status updates, historical reporting, and AI-powered shift analysis via Gemini.",
   "requestFramePermissions": [
     "geolocation"
