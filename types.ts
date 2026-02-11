@@ -21,13 +21,28 @@ export interface AttendanceRecord {
   location?: {
     lat: number;
     lng: number;
+    accuracy?: number;
   };
+}
+
+export interface Geofence {
+  lat: number;
+  lng: number;
+  radius: number; // in meters
+  enabled: boolean;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  geofence: Geofence;
+  assignedUserIds: string[];
 }
 
 export interface MonthlyReport {
   month: string;
   year: number;
-  requiredHours?: number; // 🔥 new
+  requiredHours?: number;
   employees: {
     name: string;
     totalHours: number;
@@ -35,7 +50,6 @@ export interface MonthlyReport {
   }[];
 }
 
-// Added missing UserProfile interface used by odooService
 export interface UserProfile {
   id: string;
   name: string;
@@ -44,7 +58,6 @@ export interface UserProfile {
   department: string;
 }
 
-// Added missing OdooConfig interface used by odooService
 export interface OdooConfig {
   url?: string;
   db?: string;
@@ -52,7 +65,6 @@ export interface OdooConfig {
   password?: string;
 }
 
-// Added missing AIInsight interface for Gemini analysis results
 export interface AIInsight {
   summary: string;
   suggestions: string[];

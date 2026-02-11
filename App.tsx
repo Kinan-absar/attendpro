@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { HashRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+// Fix: Use namespace import to resolve "no exported member" errors that can occur in some TypeScript/module resolution configurations.
+import * as ReactRouterDOM from 'react-router-dom';
 import { dataService } from './services/dataService';
 import { AttendanceRecord, User } from './types';
 import Dashboard from './components/Dashboard';
@@ -9,6 +10,10 @@ import AIInsights from './components/AIInsights';
 import AdminReports from './components/AdminReports';
 import Login from './components/Login';
 import ActiveEmployees from './components/ActiveEmployees';
+import AdminLocationSettings from './components/AdminLocationSettings';
+
+// Fix: Destructure from the namespace to maintain compatibility with the v6-style components used in the app.
+const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDOM as any;
 
 const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
   const location = useLocation();
@@ -21,6 +26,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
   if (user.role === 'admin') {
     links.push({ path: '/admin', label: 'Reports', icon: 'fa-chart-pie' });
     links.push({ path: '/admin/active', label: 'Active', icon: 'fa-user-clock' });
+    links.push({ path: '/admin/location', label: 'Worksite', icon: 'fa-location-dot' });
   }
 
   return (
@@ -93,7 +99,6 @@ const App: React.FC = () => {
     });
   }, []);
 
-
   useEffect(() => {
     if (user) refreshData();
   }, [user, refreshData]);
@@ -129,7 +134,8 @@ const App: React.FC = () => {
                 <>
                   <Route path="/admin" element={<AdminReports />} />
                   <Route path="/admin/active" element={<ActiveEmployees />} />
-                                  </>
+                  <Route path="/admin/location" element={<AdminLocationSettings />} />
+                </>
               )}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
