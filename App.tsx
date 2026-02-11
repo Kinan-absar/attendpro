@@ -7,8 +7,8 @@ import Dashboard from './components/Dashboard';
 import History from './components/History';
 import AIInsights from './components/AIInsights';
 import AdminReports from './components/AdminReports';
+import AdminUsers from './components/AdminUsers';
 import Login from './components/Login';
-import ActiveEmployees from './components/ActiveEmployees';
 
 const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
   const location = useLocation();
@@ -20,7 +20,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
 
   if (user.role === 'admin') {
     links.push({ path: '/admin', label: 'Reports', icon: 'fa-chart-pie' });
-    links.push({ path: '/admin/active', label: 'Active', icon: 'fa-user-clock' });
+    links.push({ path: '/admin/users', label: 'Staff', icon: 'fa-users-gear' });
   }
 
   return (
@@ -87,12 +87,14 @@ const App: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
-    dataService.initAuth((u) => {
-      setUser(u);
+    dataService.init(); // Initialize Local DB
+    const activeUser = dataService.getCurrentUser();
+    if (activeUser) {
+      setUser(activeUser);
+    } else {
       setLoading(false);
-    });
+    }
   }, []);
-
 
   useEffect(() => {
     if (user) refreshData();
@@ -128,8 +130,8 @@ const App: React.FC = () => {
               {user.role === 'admin' && (
                 <>
                   <Route path="/admin" element={<AdminReports />} />
-                  <Route path="/admin/active" element={<ActiveEmployees />} />
-                                  </>
+                  <Route path="/admin/users" element={<AdminUsers />} />
+                </>
               )}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
