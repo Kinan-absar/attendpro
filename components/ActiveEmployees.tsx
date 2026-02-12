@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { dataService } from '../services/dataService';
 import { AttendanceRecord, User } from '../types';
 
@@ -14,7 +14,7 @@ const ActiveEmployees: React.FC = () => {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60000); // Update every minute for duration calculation
+    const timer = setInterval(() => setNow(new Date()), 1000); 
     return () => clearInterval(timer);
   }, []);
 
@@ -26,22 +26,28 @@ const ActiveEmployees: React.FC = () => {
           dataService.getAllAttendance()
         ]);
         
-        // Group by userId and take only the latest active record per user
-        const latestActives: Record<string, ActiveShift> = {};
+        // Filter strictly for records with a valid checkIn AND no checkOut
+        // Also ensure checkIn is NOT the fallback 1970 date
+        const currentActiveRecords = allAttendance.filter(r => 
+          r.checkIn && 
+          r.checkIn.getTime() > 0 && 
+          !r.checkOut
+        );
         
-        allAttendance.forEach(record => {
-          if (record.checkIn && !record.checkOut) {
+        const activeShifts: ActiveShift[] = [];
+        const processedUserIds = new Set<string>();
+
+        currentActiveRecords.sort((a, b) => b.checkIn.getTime() - a.checkIn.getTime()).forEach(record => {
+          if (!processedUserIds.has(record.userId)) {
             const user = users.find(u => u.id === record.userId);
             if (user) {
-              // If we already have a record for this user, keep the newer one
-              if (!latestActives[user.id] || record.checkIn > latestActives[user.id].record.checkIn) {
-                latestActives[user.id] = { user, record };
-              }
+              activeShifts.push({ user, record });
+              processedUserIds.add(record.userId);
             }
           }
         });
 
-        setActive(Object.values(latestActives).sort((a, b) => b.record.checkIn.getTime() - a.record.checkIn.getTime()));
+        setActive(activeShifts);
       } catch (err) {
         console.error("Failed to load active employees", err);
       } finally {
@@ -53,7 +59,7 @@ const ActiveEmployees: React.FC = () => {
   }, []);
 
   const getDuration = (start: Date) => {
-    const diffMs = now.getTime() - start.getTime();
+    const diffMs = Math.max(0, now.getTime() - start.getTime());
     const hours = Math.floor(diffMs / 3600000);
     const minutes = Math.floor((diffMs % 3600000) / 60000);
     return `${hours}h ${minutes}m`;
@@ -99,7 +105,9 @@ const ActiveEmployees: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {active.map((a) => {
-                  const lastLog = a.record.mobilityLogs?.[a.record.mobilityLogs.length - 1];
+                  const logs = a.record.mobilityLogs || [];
+                  const lastLog = logs[logs.length - 1];
+                  const lastExit = [...logs].reverse().find(l => l.status === 'outside');
                   const isInside = lastLog ? lastLog.status === 'inside' : true;
 
                   return (
@@ -121,11 +129,15 @@ const ActiveEmployees: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-6 py-5">
-                        <div className="flex items-center space-x-2">
-                           <i className="fa-solid fa-clock text-indigo-300 text-xs"></i>
+                        <div className="flex flex-col">
                            <span className="font-mono font-bold text-slate-700">
                              {a.record.checkIn.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                            </span>
+                           {lastExit && !isInside && (
+                             <span className="text-[8px] font-black text-rose-400 uppercase tracking-tighter">
+                               Left at {lastExit.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                             </span>
+                           )}
                         </div>
                       </td>
                       <td className="px-6 py-5 text-center">
@@ -133,23 +145,13 @@ const ActiveEmployees: React.FC = () => {
                           isInside ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
                         }`}>
                           <i className={`fa-solid ${isInside ? 'fa-location-dot' : 'fa-person-walking-arrow-right'}`}></i>
-                          {isInside ? 'On Site' : 'Away from Site'}
+                          {isInside ? 'On Site' : 'Away'}
                         </span>
-                        {lastLog && !isInside && (
-                          <p className="text-[8px] font-black text-slate-300 mt-1 uppercase">
-                            Since {lastLog.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        )}
                       </td>
                       <td className="px-8 py-5 text-right">
-                        <div className="flex flex-col items-end">
-                          <span className="text-sm font-black text-indigo-600">
-                            {getDuration(a.record.checkIn)}
-                          </span>
-                          <div className="w-16 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                            <div className="h-full bg-indigo-500 animate-pulse" style={{ width: '40%' }}></div>
-                          </div>
-                        </div>
+                        <span className="text-sm font-black text-indigo-600">
+                          {getDuration(a.record.checkIn)}
+                        </span>
                       </td>
                     </tr>
                   );

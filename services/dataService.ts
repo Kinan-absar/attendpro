@@ -176,10 +176,12 @@ class DataService {
     });
   }
 
-  private convertToDate(val: any): Date {
+  private convertToDate(val: any): Date | undefined {
     if (val instanceof Timestamp) return val.toDate();
     if (val?.seconds) return new Date(val.seconds * 1000);
-    return new Date(val || Date.now());
+    if (val instanceof Date) return val;
+    if (typeof val === 'string' || typeof val === 'number') return new Date(val);
+    return undefined; // Strictly return undefined if missing
   }
 
   async getAttendanceHistory(userId: string): Promise<AttendanceRecord[]> {
@@ -197,14 +199,14 @@ class DataService {
         id: d.id,
         userId: r.userId || '',
         userName: r.userName || 'Unknown',
-        checkIn,
+        checkIn: checkIn || new Date(0), // Provide safe fallback for UI but filter handled elsewhere
         checkOut,
         location: r.location,
         mobilityLogs: (r.mobilityLogs || []).map((l: any) => ({
           ...l,
-          timestamp: this.convertToDate(l.timestamp)
+          timestamp: this.convertToDate(l.timestamp) || new Date()
         })),
-        duration: r.duration || (checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60000 : undefined)
+        duration: r.duration || (checkIn && checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60000 : undefined)
       };
     });
   }
@@ -278,9 +280,10 @@ class DataService {
 
     attendance.docs.forEach(docSnap => {
       const r = docSnap.data();
-      if (!r.checkIn || !r.checkOut) return;
       const checkIn = this.convertToDate(r.checkIn);
       const checkOut = this.convertToDate(r.checkOut);
+      if (!checkIn || !checkOut) return;
+      
       if (from && checkIn < from) return;
       if (to && checkIn > to) return;
       
@@ -321,12 +324,12 @@ class DataService {
         id: d.id,
         userId: r.userId || '',
         userName: r.userName || 'Unknown',
-        checkIn,
+        checkIn: checkIn || new Date(0),
         checkOut,
-        duration: r.duration || (checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60000 : undefined),
+        duration: r.duration || (checkIn && checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60000 : undefined),
         mobilityLogs: (r.mobilityLogs || []).map((l: any) => ({
           ...l,
-          timestamp: this.convertToDate(l.timestamp)
+          timestamp: this.convertToDate(l.timestamp) || new Date()
         }))
       };
     });

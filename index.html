@@ -32,13 +32,18 @@
 
         /* PRINT STYLES */
         @media print {
-            nav, .no-print, .update-toast { display: none !important; }
+            @page {
+                size: landscape;
+                margin: 10mm;
+            }
+            nav, .no-print, .update-toast, button { display: none !important; }
             body, html { 
                 background: white !important; 
                 height: auto !important; 
                 overflow: visible !important;
                 margin: 0 !important;
                 padding: 0 !important;
+                -webkit-print-color-adjust: exact;
             }
             main { 
                 padding: 0 !important; 
@@ -48,18 +53,21 @@
             }
             #root { position: static !important; }
             .card { 
-                border: 1px solid #eee !important; 
+                border: 1px solid #000 !important; 
                 box-shadow: none !important; 
                 border-radius: 0 !important;
                 margin-bottom: 20px !important;
-                page-break-inside: avoid;
+                width: 100% !important;
+                page-break-inside: auto;
             }
-            .print-header { display: block !important; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-            table { width: 100% !important; border-collapse: collapse !important; }
-            th, td { border-bottom: 1px solid #eee !important; }
-            .text-indigo-600 { color: #4f46e5 !important; }
+            .print-header { display: block !important; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; width: 100%; }
+            .signature-section { display: flex !important; margin-top: 40px; justify-content: space-between; page-break-inside: avoid; }
+            table { width: 100% !important; border-collapse: collapse !important; table-layout: auto !important; }
+            th, td { border: 1px solid #000 !important; padding: 8px !important; }
+            .text-indigo-600 { color: #000 !important; }
+            .bg-slate-900 { background-color: #eee !important; color: #000 !important; }
         }
-        .print-header { display: none; }
+        .print-header, .signature-section { display: none; }
         .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>

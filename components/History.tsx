@@ -30,7 +30,6 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
       await dataService.updateAttendanceRecord(editingRecord.id, { checkIn, checkOut });
       setEditingRecord(null);
       if (onRefresh) onRefresh();
-      alert("Shift record corrected successfully.");
     } catch (err) {
       alert("Update failed.");
     } finally {
@@ -43,20 +42,29 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
     return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
   };
 
+  const getLastExitTime = (record: AttendanceRecord) => {
+    if (!record.mobilityLogs || record.mobilityLogs.length === 0) return null;
+    const lastExit = [...record.mobilityLogs].reverse().find(log => log.status === 'outside');
+    return lastExit ? lastExit.timestamp : null;
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
-      {/* PROFESSIONAL PRINT HEADER (HIDDEN IN UI) */}
+      {/* PROFESSIONAL PRINT HEADER */}
       <div className="print-header">
-        <div className="flex justify-between items-start">
+        <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-4">
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Timesheet Report</h1>
-            <p className="text-indigo-600 font-bold uppercase tracking-widest text-xs mt-1">Absar Alomran Construction Co.</p>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">OFFICIAL TIMESHEET</h1>
+            <p className="font-bold uppercase tracking-widest text-sm mt-1">Absar Alomran Construction Co.</p>
           </div>
           <div className="text-right">
-            <p className="text-sm font-black text-slate-900">{user.name}</p>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Employee ID: {user.employeeId}</p>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dept: {user.department}</p>
+            <p className="text-lg font-black text-slate-900">{user.name}</p>
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Employee ID: {user.employeeId}</p>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dept: {user.department}</p>
           </div>
+        </div>
+        <div className="text-[10px] font-bold text-slate-400 uppercase mb-4">
+          Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
         </div>
       </div>
 
@@ -85,87 +93,109 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
             <table className="w-full text-left">
               <thead className="bg-slate-50/50">
                 <tr>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400">Date & Window</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400">Duration</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400">Status</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400">Date</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400">Clock In</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400">Clock Out</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400">Total Hrs</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400">Exit Audit</th>
                   <th className="px-6 py-4 text-right text-[10px] font-black uppercase text-slate-400 no-print">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {history.map((record) => (
-                  <React.Fragment key={record.id}>
-                    <tr className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <p className="font-bold text-slate-900">{record.checkIn.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                        <p className="text-[10px] font-black text-indigo-500 uppercase">
+                {history.map((record) => {
+                  const exitTime = getLastExitTime(record);
+                  return (
+                    <React.Fragment key={record.id}>
+                      <tr className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4 font-bold text-slate-900">
+                          {record.checkIn.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs font-bold text-indigo-600">
                           {record.checkIn.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          {record.checkOut ? ` - ${record.checkOut.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ' (Ongoing)'}
-                        </p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="font-mono font-black text-slate-600">
-                          {record.duration ? `${(record.duration / 60).toFixed(2)}h` : '--'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                         <button 
-                           onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}
-                           className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 no-print ${
-                             record.checkOut ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'
-                           }`}
-                         >
-                           {record.checkOut ? 'Complete' : 'In Progress'}
-                           <i className={`fa-solid fa-chevron-${expandedId === record.id ? 'up' : 'down'}`}></i>
-                         </button>
-                         {/* PRINT ONLY STATUS */}
-                         <span className={`hidden print:inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                             record.checkOut ? 'text-emerald-600' : 'text-indigo-600'
-                           }`}>
-                           {record.checkOut ? 'Complete' : 'Ongoing'}
-                         </span>
-                      </td>
-                      <td className="px-6 py-4 text-right no-print">
-                        {dataService.getCurrentUser()?.role === 'admin' && (
-                          <button 
-                            onClick={() => setEditingRecord(record)}
-                            className="w-9 h-9 rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all shadow-sm"
-                          >
-                            <i className="fa-solid fa-pen-to-square text-xs"></i>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                    {expandedId === record.id && (
-                      <tr className="bg-slate-50/30 no-print">
-                        <td colSpan={4} className="px-12 py-6">
-                           <div className="border-l-2 border-indigo-200 pl-6 space-y-4">
-                              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Site Presence Timeline</h4>
-                              {record.mobilityLogs && record.mobilityLogs.length > 0 ? (
-                                record.mobilityLogs.map((log, idx) => (
-                                  <div key={idx} className="flex items-center space-x-4 animate-fadeIn">
-                                    <div className={`w-2 h-2 rounded-full ${log.status === 'inside' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]' : 'bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.5)]'}`}></div>
-                                    <span className="text-[11px] font-bold text-slate-500 w-24">{log.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                                    <span className={`text-[10px] font-black uppercase tracking-widest ${log.status === 'inside' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                      {log.status === 'inside' ? (idx === 0 ? 'Clocked In (On Site)' : 'Returned to Site') : 'Exited Site boundary'}
-                                    </span>
-                                  </div>
-                                ))
-                              ) : (
-                                <p className="text-[10px] text-slate-400 font-bold italic">No mobility logs recorded for this shift.</p>
-                              )}
-                           </div>
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs font-bold text-indigo-600">
+                          {record.checkOut ? record.checkOut.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ongoing'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="font-mono font-black text-slate-600">
+                            {record.duration ? `${(record.duration / 60).toFixed(2)}h` : '--'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          {exitTime && record.checkOut && (
+                             <div className="space-y-0.5">
+                               <div className="text-[9px] font-black text-rose-500 uppercase">Left: {exitTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                               <div className="text-[9px] font-bold text-slate-400 uppercase">Out: {record.checkOut.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                             </div>
+                          )}
+                          {!exitTime && record.checkOut && (
+                            <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Normal Site Exit</span>
+                          )}
+                          {!record.checkOut && <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Active Shift</span>}
+                        </td>
+                        <td className="px-6 py-4 text-right no-print">
+                          <div className="flex justify-end items-center gap-2">
+                            <button 
+                              onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}
+                              className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-indigo-600 transition-all"
+                            >
+                              <i className={`fa-solid fa-eye text-xs`}></i>
+                            </button>
+                            {dataService.getCurrentUser()?.role === 'admin' && (
+                              <button 
+                                onClick={() => setEditingRecord(record)}
+                                className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-indigo-600 transition-all"
+                              >
+                                <i className="fa-solid fa-pen-to-square text-xs"></i>
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                ))}
+                      {expandedId === record.id && (
+                        <tr className="bg-slate-50/30 no-print">
+                          <td colSpan={6} className="px-12 py-6">
+                             <div className="border-l-2 border-indigo-200 pl-6 space-y-4">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Site Presence Timeline</h4>
+                                {record.mobilityLogs && record.mobilityLogs.length > 0 ? (
+                                  record.mobilityLogs.map((log, idx) => (
+                                    <div key={idx} className="flex items-center space-x-4 animate-fadeIn">
+                                      <div className={`w-2 h-2 rounded-full ${log.status === 'inside' ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
+                                      <span className="text-[11px] font-bold text-slate-500 w-24">{log.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                                      <span className={`text-[10px] font-black uppercase tracking-widest ${log.status === 'inside' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        {log.status === 'inside' ? (idx === 0 ? 'Clocked In (On Site)' : 'Returned to Site') : 'Exited Site boundary'}
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-[10px] text-slate-400 font-bold italic">No mobility logs recorded for this shift.</p>
+                                )}
+                             </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* ADMIN EDIT MODAL */}
+      <div className="signature-section mt-12 pt-12 border-t border-black">
+        <div className="w-5/12 text-center">
+          <div className="border-b border-black mb-2 h-12"></div>
+          <p className="text-[10px] font-black uppercase">Employee Signature</p>
+          <p className="text-[8px] text-slate-400">Date: ____/____/________</p>
+        </div>
+        <div className="w-5/12 text-center">
+          <div className="border-b border-black mb-2 h-12"></div>
+          <p className="text-[10px] font-black uppercase">Supervisor / Manager Signature</p>
+          <p className="text-[8px] text-slate-400">Date: ____/____/________</p>
+        </div>
+      </div>
+
       {editingRecord && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[200] flex items-center justify-center p-4 no-print">
           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-fadeIn">
@@ -200,8 +230,8 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
               </div>
               <div className="pt-4 flex gap-4">
                 <button type="button" onClick={() => setEditingRecord(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm">Cancel</button>
-                <button disabled={saving} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 flex items-center justify-center">
-                  {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Apply Changes'}
+                <button disabled={saving} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-100">
+                  {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Save Changes'}
                 </button>
               </div>
             </form>
