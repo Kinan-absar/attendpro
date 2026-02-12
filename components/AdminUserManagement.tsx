@@ -1,12 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { dataService } from '../services/dataService';
-import { User, UserRole } from '../types';
+import { User, AttendanceRecord } from '../types';
+import History from './History';
 
 const AdminUserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
+  const [viewingLogs, setViewingLogs] = useState<{ user: User; records: AttendanceRecord[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [showSecurityGuide, setShowSecurityGuide] = useState(false);
@@ -48,6 +50,18 @@ const AdminUserManagement: React.FC = () => {
     }
   };
 
+  const handleViewLogs = async (user: User) => {
+    setLoading(true);
+    try {
+      const logs = await dataService.getAttendanceHistory(user.id);
+      setViewingLogs({ user, records: logs });
+    } catch (err) {
+      alert("Failed to fetch logs for this user.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure? This will remove their Firestore profile.')) return;
     try {
@@ -66,6 +80,34 @@ const AdminUserManagement: React.FC = () => {
     const empId = (u.employeeId || '').toLowerCase();
     return name.includes(s) || email.includes(s) || empId.includes(s);
   });
+
+  if (viewingLogs) {
+    return (
+      <div className="space-y-6 animate-fadeIn">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setViewingLogs(null)}
+            className="flex items-center text-indigo-600 font-bold hover:text-indigo-800 transition-colors"
+          >
+            <i className="fa-solid fa-arrow-left mr-2"></i>
+            Back to Staff List
+          </button>
+          <div className="text-right">
+            <h2 className="text-lg font-black text-slate-900">{viewingLogs.user.name}</h2>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Employee Logs</p>
+          </div>
+        </div>
+        <History 
+          history={viewingLogs.records} 
+          user={dataService.getCurrentUser()!} 
+          onRefresh={async () => {
+             const updatedLogs = await dataService.getAttendanceHistory(viewingLogs.user.id);
+             setViewingLogs({ ...viewingLogs, records: updatedLogs });
+          }}
+        />
+      </div>
+    );
+  }
 
   if (loading && users.length === 0) return (
     <div className="p-20 text-center">
@@ -99,39 +141,6 @@ const AdminUserManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* SECURITY GUIDE MODAL */}
-      {showSecurityGuide && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-fadeIn">
-            <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
-              <div>
-                <h2 className="text-xl font-black">Firestore Security Rules</h2>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Fix 'Insufficient Permissions' Errors</p>
-              </div>
-              <button onClick={() => setShowSecurityGuide(false)} className="text-slate-500 hover:text-white transition-colors">
-                <i className="fa-solid fa-circle-xmark text-2xl"></i>
-              </button>
-            </div>
-            <div className="p-8 space-y-4">
-              <p className="text-sm text-slate-600 leading-relaxed">
-                Copy and paste these rules into your <strong>Firebase Console &gt; Firestore Database &gt; Rules</strong> tab to allow users to sign up and admins to manage staff.
-              </p>
-              <pre className="bg-slate-50 p-6 rounded-2xl border border-slate-100 overflow-x-auto text-[11px] font-mono text-slate-700 select-all leading-relaxed">
-                {dataService.getRecommendedRules()}
-              </pre>
-              <div className="pt-4 flex justify-end">
-                <button 
-                  onClick={() => setShowSecurityGuide(false)}
-                  className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-sm"
-                >
-                  Got it
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* SEARCH BAR */}
       <div className="relative group max-w-md">
         <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
@@ -147,7 +156,7 @@ const AdminUserManagement: React.FC = () => {
       {/* MODAL / FORM */}
       {editingUser && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-fadeIn">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-lg overflow-hidden animate-fadeIn">
             <div className="bg-indigo-600 p-8 text-white">
               <div className="flex justify-between items-center mb-2">
                 <h2 className="text-2xl font-black">{editingUser.id ? 'Edit Profile' : 'Add New Staff'}</h2>
@@ -230,15 +239,6 @@ const AdminUserManagement: React.FC = () => {
                 </div>
               </div>
 
-              {!editingUser.id && (
-                <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex items-start">
-                  <i className="fa-solid fa-circle-info text-amber-500 mt-1 mr-3"></i>
-                  <p className="text-[10px] text-amber-700 font-bold leading-relaxed uppercase tracking-tight">
-                    Note: Adding a profile here only creates the database record. The employee must still sign up using the same email to create their login password.
-                  </p>
-                </div>
-              )}
-
               <div className="pt-4 flex gap-4">
                 <button 
                   onClick={() => setEditingUser(null)}
@@ -306,6 +306,13 @@ const AdminUserManagement: React.FC = () => {
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
                       <button 
+                        onClick={() => handleViewLogs(u)}
+                        className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all"
+                        title="View Shift Logs"
+                      >
+                        <i className="fa-solid fa-list-check text-xs"></i>
+                      </button>
+                      <button 
                         onClick={() => setEditingUser(u)}
                         className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                         title="Edit Profile"
@@ -323,14 +330,6 @@ const AdminUserManagement: React.FC = () => {
                   </td>
                 </tr>
               ))}
-              {filteredUsers.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="p-20 text-center">
-                    <i className="fa-solid fa-users-slash text-4xl text-slate-200 mb-4 block"></i>
-                    <p className="text-slate-400 font-medium tracking-tight">No matching staff members found.</p>
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>

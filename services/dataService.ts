@@ -12,7 +12,9 @@ import {
   updateDoc,
   setDoc,
   deleteDoc,
-  FirestoreError
+  FirestoreError,
+  Timestamp,
+  arrayUnion
 } from 'firebase/firestore';
 import {
   signInWithEmailAndPassword,
@@ -22,7 +24,7 @@ import {
   User as FirebaseUser
 } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { AttendanceRecord, User, MonthlyReport, Project } from '../types';
+import { AttendanceRecord, User, MonthlyReport, Project, MobilityLog } from '../types';
 
 const USERS = 'users';
 const ATTENDANCE = 'attendance';
@@ -41,7 +43,7 @@ class DataService {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const snap = await getDoc(doc(db, USERS, cred.user.uid));
-      if (!snap.exists()) throw new Error('User profile missing in database. Please sign up again.');
+      if (!snap.exists()) throw new Error('User profile missing in database.');
       const data = snap.data();
       const user: User = {
         id: cred.user.uid,
@@ -65,7 +67,6 @@ class DataService {
     try {
       cred = await createUserWithEmailAndPassword(auth, email, password);
     } catch (error) {
-      console.error("Auth Signup failed:", error);
       throw error;
     }
 
@@ -81,12 +82,10 @@ class DataService {
       };
 
       await setDoc(doc(db, USERS, userId), userData);
-      
       const user: User = { id: userId, ...userData } as User;
       this.currentUser = user;
       return user;
     } catch (error) {
-      console.error("Firestore Profile Creation failed:", error);
       if (cred?.user) await signOut(auth);
       throw error;
     }
@@ -119,284 +118,226 @@ class DataService {
         this.currentUser = user;
         onUser(user);
       } catch (error) {
-        this.handleFirestoreError(error, "Auth Initialization");
         onUser(null);
       }
     });
   }
 
   async logout() {
-    try {
-      await signOut(auth);
-      this.currentUser = null;
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
+    await signOut(auth);
+    this.currentUser = null;
   }
 
   /* ⏱️ ATTENDANCE ACTIONS */
   async checkIn(user: User, location?: { lat: number, lng: number, accuracy?: number }) {
-    try {
-      await addDoc(collection(db, ATTENDANCE), {
-        userId: user.id,
-        userName: user.name,
-        checkIn: serverTimestamp(),
-        location: location || null
-      });
-    } catch (error) {
-      this.handleFirestoreError(error, "Check-in Attempt");
-      throw error;
-    }
+    await addDoc(collection(db, ATTENDANCE), {
+      userId: user.id,
+      userName: user.name,
+      checkIn: serverTimestamp(),
+      location: location || null,
+      mobilityLogs: [{
+        timestamp: new Date(),
+        status: 'inside'
+      }]
+    });
   }
 
   async checkOut(recordId: string, location?: { lat: number, lng: number, accuracy?: number }) {
+    await updateDoc(doc(db, ATTENDANCE, recordId), {
+      checkOut: serverTimestamp(),
+      checkOutLocation: location || null
+    });
+  }
+
+  /* 📍 TRACKER ACTIONS (AUTO-LOG ENTRY/EXIT) */
+  async logMobilityEvent(recordId: string, status: 'inside' | 'outside') {
     try {
       await updateDoc(doc(db, ATTENDANCE, recordId), {
-        checkOut: serverTimestamp(),
-        checkOutLocation: location || null
+        mobilityLogs: arrayUnion({
+          timestamp: new Date(),
+          status
+        })
       });
     } catch (error) {
-      this.handleFirestoreError(error, "Check-out Attempt");
-      throw error;
+      console.error("Mobility log failed:", error);
     }
+  }
+
+  /* 🛠️ ADMIN CORRECTIONS */
+  async updateAttendanceRecord(recordId: string, updates: { checkIn: Date, checkOut?: Date }) {
+    const duration = updates.checkOut 
+      ? (updates.checkOut.getTime() - updates.checkIn.getTime()) / 60000 
+      : 0;
+
+    await updateDoc(doc(db, ATTENDANCE, recordId), {
+      checkIn: Timestamp.fromDate(updates.checkIn),
+      checkOut: updates.checkOut ? Timestamp.fromDate(updates.checkOut) : null,
+      duration: duration > 0 ? duration : 0
+    });
+  }
+
+  private convertToDate(val: any): Date {
+    if (val instanceof Timestamp) return val.toDate();
+    if (val?.seconds) return new Date(val.seconds * 1000);
+    return new Date(val || Date.now());
   }
 
   async getAttendanceHistory(userId: string): Promise<AttendanceRecord[]> {
-    try {
-      const q = query(
-        collection(db, ATTENDANCE),
-        where('userId', '==', userId),
-        orderBy('checkIn', 'desc')
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map(d => {
-        const r = d.data();
-        return {
-          id: d.id,
-          userId: r.userId || '',
-          userName: r.userName || 'Unknown',
-          checkIn: r.checkIn?.toDate() || new Date(),
-          checkOut: r.checkOut?.toDate(),
-          location: r.location,
-          duration: r.checkOut && r.checkIn
-            ? (r.checkOut.toDate().getTime() - r.checkIn.toDate().getTime()) / 60000
-            : undefined
-        };
-      });
-    } catch (error) {
-      this.handleFirestoreError(error, "Fetch History");
-      return [];
-    }
+    const q = query(
+      collection(db, ATTENDANCE),
+      where('userId', '==', userId),
+      orderBy('checkIn', 'desc')
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => {
+      const r = d.data();
+      const checkIn = this.convertToDate(r.checkIn);
+      const checkOut = r.checkOut ? this.convertToDate(r.checkOut) : undefined;
+      return {
+        id: d.id,
+        userId: r.userId || '',
+        userName: r.userName || 'Unknown',
+        checkIn,
+        checkOut,
+        location: r.location,
+        mobilityLogs: (r.mobilityLogs || []).map((l: any) => ({
+          ...l,
+          timestamp: this.convertToDate(l.timestamp)
+        })),
+        duration: r.duration || (checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60000 : undefined)
+      };
+    });
   }
 
   async getProjects(userId?: string): Promise<Project[]> {
-    try {
-      let q;
-      if (userId) {
-        q = query(collection(db, PROJECTS), where('assignedUserIds', 'array-contains', userId));
-      } else {
-        q = query(collection(db, PROJECTS));
-      }
-      const snap = await getDocs(q);
-      return snap.docs.map(d => ({
-        id: d.id,
-        ...(d.data() as Omit<Project, 'id'>)
-      }));
-    } catch (error) {
-      this.handleFirestoreError(error, "Fetch Projects");
-      return [];
-    }
+    let q = userId 
+      ? query(collection(db, PROJECTS), where('assignedUserIds', 'array-contains', userId))
+      : query(collection(db, PROJECTS));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({
+      id: d.id,
+      ...(d.data() as Omit<Project, 'id'>)
+    }));
   }
 
   async saveProject(project: Partial<Project>) {
-    try {
-      const data = {
-        ...project,
-        assignedUserIds: project.assignedUserIds || []
-      };
-
-      if (project.id) {
-        const { id, ...updateData } = data;
-        await updateDoc(doc(db, PROJECTS, id), updateData);
-      } else {
-        await addDoc(collection(db, PROJECTS), data);
-      }
-    } catch (error) {
-      this.handleFirestoreError(error, "Save Project");
-      throw error;
+    const data = { ...project, assignedUserIds: project.assignedUserIds || [] };
+    if (project.id) {
+      const { id, ...updateData } = data;
+      await updateDoc(doc(db, PROJECTS, id), updateData);
+    } else {
+      await addDoc(collection(db, PROJECTS), data);
     }
   }
 
   async deleteProject(projectId: string) {
-    try {
-      await deleteDoc(doc(db, PROJECTS, projectId));
-    } catch (error) {
-      this.handleFirestoreError(error, "Delete Project");
-      throw error;
-    }
+    await deleteDoc(doc(db, PROJECTS, projectId));
   }
 
   async getUsers(): Promise<User[]> {
-    try {
-      const snap = await getDocs(collection(db, USERS));
-      return snap.docs.map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          email: data.email || '',
-          name: data.name || '',
-          employeeId: data.employeeId || '',
-          department: data.department || '',
-          role: data.role || 'employee',
-          avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`
-        };
-      });
-    } catch (error) {
-      this.handleFirestoreError(error, "Fetch Users");
-      return [];
-    }
+    const snap = await getDocs(collection(db, USERS));
+    return snap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        email: data.email || '',
+        name: data.name || '',
+        employeeId: data.employeeId || '',
+        department: data.department || '',
+        role: data.role || 'employee',
+        avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`
+      };
+    });
   }
 
   async saveUser(user: Partial<User>) {
-    try {
-      if (!this.currentUser || this.currentUser.role !== 'admin') throw new Error("Unauthorized: Admin role required");
-      
-      // Enforce the same validation as signup
-      if (!user.name || !user.email || !user.employeeId) {
-        throw new Error("Missing required profile information: Name, Email, and Staff ID are mandatory.");
-      }
-
-      const userId = user.id || doc(collection(db, USERS)).id;
-      const userRef = doc(db, USERS, userId);
-      
-      const data = {
-        name: user.name.trim(),
-        email: user.email.trim().toLowerCase(),
-        employeeId: user.employeeId.trim(),
-        department: (user.department || '').trim(),
-        role: user.role || 'employee',
-        avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name.trim())}&background=random`
-      };
-
-      await setDoc(userRef, data, { merge: true });
-      return { id: userId, ...data };
-    } catch (error) {
-      this.handleFirestoreError(error, "Save User");
-      throw error;
-    }
+    if (this.currentUser?.role !== 'admin') throw new Error("Unauthorized");
+    const userId = user.id || doc(collection(db, USERS)).id;
+    const data = {
+      name: user.name?.trim(),
+      email: user.email?.trim().toLowerCase(),
+      employeeId: user.employeeId?.trim(),
+      department: (user.department || '').trim(),
+      role: user.role || 'employee',
+      avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name?.trim() || 'U')}&background=random`
+    };
+    await setDoc(doc(db, USERS, userId), data, { merge: true });
+    return { id: userId, ...data };
   }
 
   async deleteUser(userId: string) {
-    try {
-      if (!this.currentUser || this.currentUser.role !== 'admin') throw new Error("Unauthorized: Admin role required");
-      await deleteDoc(doc(db, USERS, userId));
-    } catch (error) {
-      this.handleFirestoreError(error, "Delete User");
-      throw error;
-    }
+    if (this.currentUser?.role !== 'admin') throw new Error("Unauthorized");
+    await deleteDoc(doc(db, USERS, userId));
   }
 
   async getMonthlyReports(from?: Date, to?: Date): Promise<MonthlyReport[]> {
-    try {
-      if (!this.currentUser || this.currentUser.role !== 'admin') return [];
-      const attendance = await getDocs(collection(db, ATTENDANCE));
-      const users = await this.getUsers();
-      const grouped: Record<string, MonthlyReport> = {};
+    if (this.currentUser?.role !== 'admin') return [];
+    const attendance = await getDocs(collection(db, ATTENDANCE));
+    const users = await this.getUsers();
+    const grouped: Record<string, MonthlyReport> = {};
 
-      attendance.docs.forEach(docSnap => {
-        const r = docSnap.data();
-        if (!r.checkIn || !r.checkOut) return;
-        const checkIn = r.checkIn.toDate();
-        const checkOut = r.checkOut.toDate();
-        if (from && checkIn < from) return;
-        if (to && checkIn > to) return;
-        
-        let year = checkIn.getFullYear();
-        let month = checkIn.getMonth();
-        if (checkIn.getDate() >= 26) {
-          month += 1;
-          if (month === 12) { month = 0; year += 1; }
-        }
-        const monthName = new Date(year, month).toLocaleString('default', { month: 'long' });
-        const key = `${year}-${month}`;
-        grouped[key] ??= { month: monthName, year, employees: [] };
+    attendance.docs.forEach(docSnap => {
+      const r = docSnap.data();
+      if (!r.checkIn || !r.checkOut) return;
+      const checkIn = this.convertToDate(r.checkIn);
+      const checkOut = this.convertToDate(r.checkOut);
+      if (from && checkIn < from) return;
+      if (to && checkIn > to) return;
+      
+      let year = checkIn.getFullYear();
+      let month = checkIn.getMonth();
+      if (checkIn.getDate() >= 26) {
+        month += 1;
+        if (month === 12) { month = 0; year += 1; }
+      }
+      const key = `${year}-${month}`;
+      grouped[key] ??= { 
+        month: new Date(year, month).toLocaleString('default', { month: 'long' }), 
+        year, 
+        employees: [] 
+      };
 
-        const user = users.find(u => u.id === r.userId);
-        if (!user) return;
-        let emp = grouped[key].employees.find(e => e.name === user.name);
-        if (!emp) {
-          emp = { name: user.name, shiftCount: 0, totalHours: 0 };
-          grouped[key].employees.push(emp);
-        }
-        emp.shiftCount++;
-        emp.totalHours += (checkOut.getTime() - checkIn.getTime()) / 3600000;
-      });
-      return Object.values(grouped);
-    } catch (error) {
-      this.handleFirestoreError(error, "Monthly Reports");
-      return [];
-    }
+      const user = users.find(u => u.id === r.userId);
+      if (!user) return;
+      let emp = grouped[key].employees.find(e => e.name === user.name);
+      if (!emp) {
+        emp = { name: user.name, shiftCount: 0, totalHours: 0 };
+        grouped[key].employees.push(emp);
+      }
+      emp.shiftCount++;
+      emp.totalHours += (checkOut.getTime() - checkIn.getTime()) / 3600000;
+    });
+    return Object.values(grouped);
   }
 
   async getAllAttendance(): Promise<AttendanceRecord[]> {
-    try {
-      if (!this.currentUser || this.currentUser.role !== 'admin') return [];
-      const snap = await getDocs(collection(db, ATTENDANCE));
-      return snap.docs.map(d => {
-        const r = d.data();
-        if (!r.checkIn || typeof r.checkIn.toDate !== 'function') return null;
-        const checkIn = r.checkIn.toDate();
-        const checkOut = r.checkOut?.toDate?.();
-        return {
-          id: d.id,
-          userId: r.userId || '',
-          userName: r.userName || 'Unknown',
-          checkIn,
-          checkOut,
-          duration: checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60000 : undefined,
-        };
-      }).filter(Boolean) as AttendanceRecord[];
-    } catch (error) {
-      this.handleFirestoreError(error, "Fetch All Attendance");
-      return [];
-    }
-  }
-
-  private handleFirestoreError(error: any, context: string) {
-    const fError = error as FirestoreError;
-    if (fError && (fError.code === 'permission-denied' || fError.message?.includes('permission'))) {
-      console.error(`[Security Error] ${context}: Permission Denied. Check your Firestore Security Rules.`);
-    } else if (fError && fError.code === 'failed-precondition') {
-      console.error(`[Index Error] ${context}: Missing index. Check your browser console for a link to create it.`);
-    } else {
-      console.error(`[Database Error] ${context}:`, error);
-    }
+    if (this.currentUser?.role !== 'admin') return [];
+    const snap = await getDocs(collection(db, ATTENDANCE));
+    return snap.docs.map(d => {
+      const r = d.data();
+      const checkIn = this.convertToDate(r.checkIn);
+      const checkOut = r.checkOut ? this.convertToDate(r.checkOut) : undefined;
+      return {
+        id: d.id,
+        userId: r.userId || '',
+        userName: r.userName || 'Unknown',
+        checkIn,
+        checkOut,
+        duration: r.duration || (checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60000 : undefined),
+        mobilityLogs: (r.mobilityLogs || []).map((l: any) => ({
+          ...l,
+          timestamp: this.convertToDate(l.timestamp)
+        }))
+      };
+    });
   }
 
   getRecommendedRules(): string {
     return `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAdmin() {
-      return request.auth != null && 
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
-    match /users/{userId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow update, delete: if request.auth != null && (request.auth.uid == userId || isAdmin());
-    }
-
-    match /attendance/{docId} {
-      allow read, create: if request.auth != null;
-      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
-    }
-
-    match /projects/{docId} {
-      allow read: if request.auth != null;
-      allow write: if isAdmin();
+    match /{document=**} {
+      allow read, write: if request.auth != null;
     }
   }
 }`;

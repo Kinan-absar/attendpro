@@ -11,6 +11,11 @@ export interface User {
   avatar?: string;
 }
 
+export interface MobilityLog {
+  timestamp: Date;
+  status: 'inside' | 'outside';
+}
+
 export interface AttendanceRecord {
   id: string;
   userId: string;
@@ -23,6 +28,7 @@ export interface AttendanceRecord {
     lng: number;
     accuracy?: number;
   };
+  mobilityLogs?: MobilityLog[];
 }
 
 export interface Geofence {
