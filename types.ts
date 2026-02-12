@@ -11,6 +11,10 @@ export interface User {
   avatar?: string;
   grossSalary?: number;
   company?: string;
+  standardHours?: number; // Per-employee standard hours override
+  fixedPayroll?: boolean; // Deprecated: use granular toggles instead
+  disableOvertime?: boolean; // If true, do not calculate overtime pay
+  disableDeductions?: boolean; // If true, do not calculate non-attendance deductions
 }
 
 export interface MobilityLog {

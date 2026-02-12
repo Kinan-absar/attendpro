@@ -54,7 +54,10 @@ class DataService {
         role: data.role || 'employee',
         avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
         grossSalary: data.grossSalary || 0,
-        company: data.company || 'Absar Alomran'
+        company: data.company || 'Absar Alomran',
+        standardHours: data.standardHours ?? 225, // Enforce default on login
+        disableOvertime: data.disableOvertime ?? true, // Enforce default on login
+        disableDeductions: data.disableDeductions ?? false
       };
       this.currentUser = user;
       return user;
@@ -82,6 +85,9 @@ class DataService {
         role: 'employee',
         grossSalary: 0,
         company: 'Absar Alomran',
+        standardHours: 225,
+        disableOvertime: true,
+        disableDeductions: false,
         avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=random`
       };
 
@@ -119,7 +125,10 @@ class DataService {
           role: data.role || 'employee',
           avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
           grossSalary: data.grossSalary || 0,
-          company: data.company || 'Absar Alomran'
+          company: data.company || 'Absar Alomran',
+          standardHours: data.standardHours ?? 225,
+          disableOvertime: data.disableOvertime ?? true,
+          disableDeductions: data.disableDeductions ?? false
         };
         this.currentUser = user;
         onUser(user);
@@ -257,7 +266,10 @@ class DataService {
         role: data.role || 'employee',
         avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
         grossSalary: data.grossSalary || 0,
-        company: data.company || 'Absar Alomran'
+        company: data.company || 'Absar Alomran',
+        standardHours: data.standardHours ?? 225, // Fallback for Staff List UI
+        disableOvertime: data.disableOvertime ?? true, // Fallback for Staff List UI
+        disableDeductions: data.disableDeductions ?? false
       };
     });
   }
@@ -273,6 +285,9 @@ class DataService {
       role: user.role || 'employee',
       grossSalary: user.grossSalary || 0,
       company: user.company || 'Absar Alomran',
+      standardHours: user.standardHours ?? 225, 
+      disableOvertime: user.disableOvertime ?? true, 
+      disableDeductions: user.disableDeductions ?? false,
       avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name?.trim() || 'U')}&background=random`
     };
     await setDoc(doc(db, USERS, userId), data, { merge: true });
@@ -317,8 +332,6 @@ class DataService {
       
       const pId = r.projectId || 'none';
       
-      // We group by employee name and projectId. 
-      // If we aggregate later in the UI, we still have the site detail here.
       let emp = grouped[key].employees.find(e => e.name === user.name && e.projectId === pId);
       if (!emp) {
         emp = { name: user.name, shiftCount: 0, totalHours: 0, projectId: pId };

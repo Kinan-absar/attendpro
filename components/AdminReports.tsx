@@ -20,7 +20,7 @@ const AdminReports: React.FC = () => {
   const [toDate, setToDate] = useState('');
   
   // Financial Adjustment State (Manual Columns)
-  const [globalRequiredHours, setGlobalRequiredHours] = useState<number>(160); // Default to 160
+  const [globalRequiredHours, setGlobalRequiredHours] = useState<number>(225); 
   const [otherDeductions, setOtherDeductions] = useState<Record<string, number>>({});
   const [reimbursements, setReimbursements] = useState<Record<string, number>>({});
 
@@ -158,64 +158,61 @@ const AdminReports: React.FC = () => {
         </div>
       ) : (
         reports.map((report) => {
-          // Flatten and aggregate by employee name after filtering
-          const employeeAggregator: Record<string, { totalHours: number, shiftCount: number }> = {};
-          
-          report.employees.forEach(emp => {
-            const user = users.find(u => u.name === emp.name);
-            if (!user) return;
-
-            const matchesEmployee = selectedEmployeeFilter === 'all' || emp.name === selectedEmployeeFilter;
-            const matchesCompany = selectedCompanyFilter === 'all' || (user?.company || 'Absar Alomran') === selectedCompanyFilter;
+          // Identify all users that should be visible in this report based on filters
+          const visibleUsers = users.filter(u => {
+            const matchesEmployee = selectedEmployeeFilter === 'all' || u.name === selectedEmployeeFilter;
+            const matchesCompany = selectedCompanyFilter === 'all' || (u.company || 'Absar Alomran') === selectedCompanyFilter;
             
-            // IMPROVED PROJECT FILTER LOGIC:
             let matchesProject = false;
-            const userAssignedProjectIds = projects.filter(p => p.assignedUserIds.includes(user.id)).map(p => p.id);
+            const userAssignedProjectIds = projects.filter(p => p.assignedUserIds.includes(u.id)).map(p => p.id);
 
             if (selectedProjectFilter === 'all') {
               matchesProject = true;
             } else if (selectedProjectFilter === 'none') {
-              // Only show if the shift itself is 'none' AND the user is NOT assigned to any project in the database
-              matchesProject = (emp.projectId === 'none') && (userAssignedProjectIds.length === 0);
+              matchesProject = userAssignedProjectIds.length === 0;
             } else {
-              // Show if:
-              // 1. The shift was explicitly tagged with this project
-              // 2. The shift was untagged ('none') but the user is assigned to THIS specific project
-              matchesProject = (emp.projectId === selectedProjectFilter) || (emp.projectId === 'none' && userAssignedProjectIds.includes(selectedProjectFilter));
+              // User matches if they are assigned to the project or have shifts recorded for that project in this report
+              const hadShiftsInProject = report.employees.some(emp => emp.name === u.name && emp.projectId === selectedProjectFilter);
+              matchesProject = userAssignedProjectIds.includes(selectedProjectFilter) || hadShiftsInProject;
             }
 
-            if (matchesEmployee && matchesCompany && matchesProject) {
-              if (!employeeAggregator[emp.name]) {
-                employeeAggregator[emp.name] = { totalHours: 0, shiftCount: 0 };
-              }
-              employeeAggregator[emp.name].totalHours += emp.totalHours;
-              employeeAggregator[emp.name].shiftCount += emp.shiftCount;
-            }
-          });
+            return matchesEmployee && matchesCompany && matchesProject;
+          }).sort((a, b) => a.name.localeCompare(b.name));
 
-          const filteredEmployeeNames = Object.keys(employeeAggregator).sort();
-          if (filteredEmployeeNames.length === 0) return null;
+          if (visibleUsers.length === 0) return null;
 
-          const totals = filteredEmployeeNames.reduce((acc, name) => {
-            const e = employeeAggregator[name];
-            const user = users.find(u => u.name === name);
-            const grossSalary = user?.grossSalary || 0;
+          // Aggregator for calculations
+          const getEmployeeStats = (userName: string) => {
+            const shifts = report.employees.filter(e => e.name === userName);
+            return {
+              totalHours: shifts.reduce((acc, s) => acc + s.totalHours, 0),
+              shiftCount: shifts.reduce((acc, s) => acc + s.shiftCount, 0)
+            };
+          };
+
+          const totals = visibleUsers.reduce((acc, user) => {
+            const stats = getEmployeeStats(user.name);
+            const grossSalary = user.grossSalary || 0;
             const basicSalary = grossSalary / 1.35;
             const basicHourlyRate = basicSalary / 208;
             const grossHourlyRate = grossSalary / 208;
             const overtimeHourlyRate = grossHourlyRate + (0.5 * basicHourlyRate);
 
-            const diff = e.totalHours - globalRequiredHours;
-            const deduction = diff < 0 ? Math.abs(diff) * grossHourlyRate : 0;
-            const otPay = diff > 0 ? diff * overtimeHourlyRate : 0;
+            const targetHours = user.standardHours ?? globalRequiredHours;
+            const diff = stats.totalHours - targetHours;
+            const otDisabled = user.disableOvertime ?? true;
+            const dedDisabled = user.disableDeductions ?? false;
+
+            const deduction = (diff < 0 && !dedDisabled) ? Math.abs(diff) * grossHourlyRate : 0;
+            const otPay = (diff > 0 && !otDisabled) ? diff * overtimeHourlyRate : 0;
             
-            const otherDed = otherDeductions[name] || 0;
-            const reimb = reimbursements[name] || 0;
+            const otherDed = otherDeductions[user.name] || 0;
+            const reimb = reimbursements[user.name] || 0;
             const netSalary = grossSalary - deduction + otPay - otherDed + reimb;
 
             return {
-              shifts: acc.shifts + e.shiftCount,
-              hours: acc.hours + e.totalHours,
+              shifts: acc.shifts + stats.shiftCount,
+              hours: acc.hours + stats.totalHours,
               diff: acc.diff + diff,
               deductions: acc.deductions + deduction,
               overtime: acc.overtime + otPay,
@@ -241,7 +238,7 @@ const AdminReports: React.FC = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Std. Monthly Target: {globalRequiredHours} Hrs</p>
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Displaying {visibleUsers.length} Staff Members</p>
                 </div>
               </div>
 
@@ -254,8 +251,6 @@ const AdminReports: React.FC = () => {
                       <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Work Hrs</th>
                       <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Diff</th>
                       <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross Sal.</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest no-print">Rate</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest no-print">OT Rate</th>
                       <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest">Ded.</th>
                       <th className="px-4 py-4 text-right font-black text-emerald-400 uppercase text-[10px] tracking-widest">OT Pay</th>
                       <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest">Other Ded.</th>
@@ -265,41 +260,44 @@ const AdminReports: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredEmployeeNames.map((name) => {
-                      const emp = employeeAggregator[name];
-                      const user = users.find(u => u.name === name);
-                      const grossSalary = user?.grossSalary || 0;
+                    {visibleUsers.map((user) => {
+                      const stats = getEmployeeStats(user.name);
+                      const grossSalary = user.grossSalary || 0;
                       const basicSalary = grossSalary / 1.35;
                       const basicHourlyRate = basicSalary / 208;
                       const grossHourlyRate = grossSalary / 208;
                       const overtimeHourlyRate = grossHourlyRate + (0.5 * basicHourlyRate);
 
-                      const diff = emp.totalHours - globalRequiredHours;
-                      const deductionAmount = diff < 0 ? Math.abs(diff) * grossHourlyRate : 0;
-                      const overtimePay = diff > 0 ? diff * overtimeHourlyRate : 0;
+                      const targetHours = user.standardHours ?? globalRequiredHours;
+                      const diff = stats.totalHours - targetHours;
+                      const otDisabled = user.disableOvertime ?? true;
+                      const dedDisabled = user.disableDeductions ?? false;
+
+                      const deductionAmount = (diff < 0 && !dedDisabled) ? Math.abs(diff) * grossHourlyRate : 0;
+                      const overtimePay = (diff > 0 && !otDisabled) ? diff * overtimeHourlyRate : 0;
                       
-                      const otherDed = otherDeductions[name] || 0;
-                      const reimb = reimbursements[name] || 0;
+                      const otherDed = otherDeductions[user.name] || 0;
+                      const reimb = reimbursements[user.name] || 0;
                       const netSalary = grossSalary - deductionAmount + overtimePay - otherDed + reimb;
 
                       return (
-                        <tr key={name} className="hover:bg-slate-50/50 transition-colors">
+                        <tr key={user.id} className={`hover:bg-slate-50/50 transition-colors ${stats.shiftCount === 0 ? 'opacity-80 bg-slate-50/30' : ''}`}>
                           <td className="px-6 py-4">
-                            <span className="font-bold text-slate-900">{name}</span>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-slate-900">{user.name}</span>
+                            </div>
                           </td>
-                          <td className="px-4 py-4 text-center"><span className="px-2 py-1 bg-slate-100 rounded text-xs font-black text-slate-500">{emp.shiftCount}</span></td>
-                          <td className="px-4 py-4 text-right font-mono font-bold text-slate-700">{emp.totalHours.toFixed(2)}</td>
+                          <td className="px-4 py-4 text-center">
+                            <span className={`px-2 py-1 rounded text-xs font-black ${stats.shiftCount > 0 ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
+                              {stats.shiftCount}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-right font-mono font-bold text-slate-700">{stats.totalHours.toFixed(2)}</td>
                           <td className={`px-4 py-4 text-right font-mono font-bold ${diff < 0 ? 'text-rose-500' : diff > 0 ? 'text-emerald-500' : 'text-slate-400'}`}>
                             {diff > 0 ? '+' : ''}{diff.toFixed(2)}
                           </td>
                           <td className="px-4 py-4 text-right font-mono font-bold text-indigo-600">
                             {grossSalary.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-4 text-right font-mono text-[10px] text-slate-400 no-print">
-                            {grossHourlyRate.toFixed(2)}
-                          </td>
-                          <td className="px-4 py-4 text-right font-mono text-[10px] text-slate-400 no-print">
-                            {overtimeHourlyRate.toFixed(2)}
                           </td>
                           <td className={`px-4 py-4 text-right font-mono font-black ${deductionAmount > 0 ? 'text-rose-600' : 'text-slate-200'}`}>
                             {deductionAmount > 0 ? `-SR ${deductionAmount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : '-'}
@@ -309,7 +307,7 @@ const AdminReports: React.FC = () => {
                           </td>
                           <td className="px-4 py-4 text-right min-w-[100px]">
                             <div className="no-print">
-                              <input type="number" step="1" value={otherDeductions[name] ?? ''} onChange={(e) => handleValueChange(setOtherDeductions, name, parseFloat(e.target.value) || 0)} className="w-full text-right px-1 py-1 bg-white border border-rose-100 rounded font-mono text-[10px] outline-none text-rose-600 font-bold" placeholder="0" />
+                              <input type="number" step="1" value={otherDeductions[user.name] ?? ''} onChange={(e) => handleValueChange(setOtherDeductions, user.name, parseFloat(e.target.value) || 0)} className="w-full text-right px-1 py-1 bg-white border border-rose-100 rounded font-mono text-[10px] outline-none text-rose-600 font-bold" placeholder="0" />
                             </div>
                             <span className="hidden print:inline font-mono font-bold text-rose-600">
                               {otherDed > 0 ? `SR ${otherDed.toLocaleString()}` : '-'}
@@ -317,7 +315,7 @@ const AdminReports: React.FC = () => {
                           </td>
                           <td className="px-4 py-4 text-right min-w-[100px]">
                             <div className="no-print">
-                              <input type="number" step="1" value={reimbursements[name] ?? ''} onChange={(e) => handleValueChange(setReimbursements, name, parseFloat(e.target.value) || 0)} className="w-full text-right px-1 py-1 bg-white border border-emerald-100 rounded font-mono text-[10px] outline-none text-emerald-600 font-bold" placeholder="0" />
+                              <input type="number" step="1" value={reimbursements[user.name] ?? ''} onChange={(e) => handleValueChange(setReimbursements, user.name, parseFloat(e.target.value) || 0)} className="w-full text-right px-1 py-1 bg-white border border-emerald-100 rounded font-mono text-[10px] outline-none text-emerald-600 font-bold" placeholder="0" />
                             </div>
                             <span className="hidden print:inline font-mono font-bold text-emerald-600">
                               {reimb > 0 ? `SR ${reimb.toLocaleString()}` : '-'}
@@ -329,22 +327,19 @@ const AdminReports: React.FC = () => {
                              </span>
                           </td>
                           <td className="px-6 py-4 text-right no-print">
-                            <button onClick={() => handleViewEmployee(name)} className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 tracking-wider">Logs</button>
+                            <button onClick={() => handleViewEmployee(user.name)} className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 tracking-wider">Logs</button>
                           </td>
                         </tr>
                       );
                     })}
-                    {/* TOTALS FOOTER ROW */}
                     <tr className="bg-slate-900 text-white font-black">
-                      <td className="px-6 py-5">GRAND TOTALS</td>
+                      <td className="px-6 py-5">GRAND TOTALS ({visibleUsers.length} Staff)</td>
                       <td className="px-4 py-5 text-center">{totals.shifts}</td>
                       <td className="px-4 py-5 text-right font-mono">{totals.hours.toFixed(2)}</td>
                       <td className={`px-4 py-5 text-right font-mono ${totals.diff < 0 ? 'text-rose-400' : totals.diff > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
                         {totals.diff > 0 ? '+' : ''}{totals.diff.toFixed(2)}
                       </td>
                       <td></td>
-                      <td className="no-print"></td>
-                      <td className="no-print"></td>
                       <td className="px-4 py-5 text-right font-mono text-rose-400">
                         -SR {totals.deductions.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>

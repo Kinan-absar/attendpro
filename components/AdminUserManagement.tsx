@@ -132,7 +132,7 @@ const AdminUserManagement: React.FC = () => {
             <i className="fa-solid fa-shield-halved"></i>
           </button>
           <button 
-            onClick={() => setEditingUser({ name: '', email: '', employeeId: '', department: '', role: 'employee', grossSalary: 0, company: 'Absar Alomran' })}
+            onClick={() => setEditingUser({ name: '', email: '', employeeId: '', department: '', role: 'employee', grossSalary: 0, company: 'Absar Alomran', disableOvertime: true, disableDeductions: false, standardHours: 225 })}
             className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center space-x-2"
           >
             <i className="fa-solid fa-user-plus"></i>
@@ -230,29 +230,78 @@ const AdminUserManagement: React.FC = () => {
                     placeholder="e.g. Absar Alomran Construction"
                   />
                 </div>
-                <div className="col-span-2">
-                  <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-2 ml-1">Gross Salary (Monthly)</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">SR</span>
-                    <input 
-                      type="number"
-                      value={editingUser.grossSalary || ''}
-                      onChange={(e) => setEditingUser({ ...editingUser, grossSalary: parseFloat(e.target.value) || 0 })}
-                      className="w-full pl-12 pr-4 py-3 bg-indigo-50 border border-indigo-100 rounded-xl font-black text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                      placeholder="0.00"
-                    />
+
+                <div className="pt-4 border-t border-slate-100 col-span-2">
+                  <h3 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-4">Payroll Flexibility Settings</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Monthly Gross (SR)</label>
+                      <input 
+                        type="number"
+                        value={editingUser.grossSalary || ''}
+                        onChange={(e) => setEditingUser({ ...editingUser, grossSalary: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-4 py-3 bg-indigo-50/50 border border-indigo-100 rounded-xl font-black text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Personal Std. Hours</label>
+                      <input 
+                        type="number"
+                        value={editingUser.standardHours || ''}
+                        onChange={(e) => setEditingUser({ ...editingUser, standardHours: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                        placeholder="Default 225"
+                      />
+                    </div>
+                    <div className="col-span-2 space-y-3">
+                      <button 
+                        type="button"
+                        onClick={() => setEditingUser({ ...editingUser, disableOvertime: !editingUser.disableOvertime })}
+                        className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
+                          editingUser.disableOvertime 
+                            ? 'bg-rose-50 border-rose-500 text-rose-700' 
+                            : 'bg-white border-slate-100 text-slate-400'
+                        }`}
+                      >
+                        <div className="text-left">
+                          <p className="text-xs font-black uppercase tracking-tight">Disable Overtime Pay</p>
+                          <p className="text-[10px] font-medium opacity-70">Overtime hours will not be compensated</p>
+                        </div>
+                        <i className={`fa-solid ${editingUser.disableOvertime ? 'fa-toggle-on text-rose-600 text-2xl' : 'fa-toggle-off text-slate-300 text-2xl'}`}></i>
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={() => setEditingUser({ ...editingUser, disableDeductions: !editingUser.disableDeductions })}
+                        className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
+                          editingUser.disableDeductions 
+                            ? 'bg-rose-50 border-rose-500 text-rose-700' 
+                            : 'bg-white border-slate-100 text-slate-400'
+                        }`}
+                      >
+                        <div className="text-left">
+                          <p className="text-xs font-black uppercase tracking-tight">Disable Attendance Deduction</p>
+                          <p className="text-[10px] font-medium opacity-70">Missing hours will not be deducted from salary</p>
+                        </div>
+                        <i className={`fa-solid ${editingUser.disableDeductions ? 'fa-toggle-on text-rose-600 text-2xl' : 'fa-toggle-off text-slate-300 text-2xl'}`}></i>
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="col-span-2">
+
+                <div className="col-span-2 pt-4">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">System Role</label>
                   <div className="grid grid-cols-2 gap-2">
                     <button 
+                      type="button"
                       onClick={() => setEditingUser({ ...editingUser, role: 'employee' })}
                       className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest border-2 transition-all ${editingUser.role === 'employee' ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-white border-slate-100 text-slate-400'}`}
                     >
                       Employee
                     </button>
                     <button 
+                      type="button"
                       onClick={() => setEditingUser({ ...editingUser, role: 'admin' })}
                       className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest border-2 transition-all ${editingUser.role === 'admin' ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-white border-slate-100 text-slate-400'}`}
                     >
@@ -264,12 +313,14 @@ const AdminUserManagement: React.FC = () => {
 
               <div className="pt-4 flex gap-4">
                 <button 
+                  type="button"
                   onClick={() => setEditingUser(null)}
                   className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all"
                 >
                   Cancel
                 </button>
                 <button 
+                  type="button"
                   onClick={handleSave}
                   disabled={saving}
                   className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
@@ -290,9 +341,9 @@ const AdminUserManagement: React.FC = () => {
               <tr>
                 <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee</th>
                 <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Company</th>
-                <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Department</th>
+                <th className="px-6 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Std Hours</th>
                 <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Gross Salary</th>
-                <th className="px-6 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Role</th>
+                <th className="px-6 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Exceptions</th>
                 <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Actions</th>
               </tr>
             </thead>
@@ -316,9 +367,9 @@ const AdminUserManagement: React.FC = () => {
                     <p className="text-xs font-black text-slate-500 uppercase tracking-wider">{u.company || 'Absar Alomran'}</p>
                     <p className="text-[10px] text-slate-400">{u.email}</p>
                   </td>
-                  <td className="px-6 py-4">
-                    <span className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">
-                      {u.department || 'Unassigned'}
+                  <td className="px-6 py-4 text-center">
+                    <span className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-black text-slate-600">
+                      {u.standardHours || '--'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -327,11 +378,23 @@ const AdminUserManagement: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                      u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {u.role || 'employee'}
-                    </span>
+                    <div className="flex flex-col items-center gap-1">
+                      {u.disableOvertime && (
+                        <span className="px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full text-[8px] font-black uppercase tracking-widest">
+                          No OT
+                        </span>
+                      )}
+                      {u.disableDeductions && (
+                        <span className="px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full text-[8px] font-black uppercase tracking-widest">
+                          No Ded
+                        </span>
+                      )}
+                      {!u.disableOvertime && !u.disableDeductions && (
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-400 rounded-full text-[8px] font-black uppercase tracking-widest">
+                          Standard
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
