@@ -28,28 +28,22 @@ const AdminReports: React.FC = () => {
     window.print();
   };
 
-  /* ================= FETCH REPORTS ================= */
   useEffect(() => {
     const fetch = async () => {
       setLoading(true);
-
       const from = fromDate ? new Date(fromDate) : undefined;
       const to = toDate ? new Date(toDate) : undefined;
-
       const data = await dataService.getMonthlyReports(from, to);
       setReports(data);
       setLoading(false);
     };
-
     fetch();
   }, [fromDate, toDate]);
 
-  /* ================= VIEW EMPLOYEE ================= */
   const handleViewEmployee = async (employeeName: string) => {
     const allUsers = await dataService.getUsers();
     const user = allUsers.find(u => u.name === employeeName);
     if (!user) return;
-
     const history = await dataService.getAttendanceHistory(user.id);
     setSelectedEmployee({ user, records: history });
   };
@@ -80,7 +74,6 @@ const AdminReports: React.FC = () => {
 
   return (
     <div className="space-y-8 pb-12 animate-fadeIn">
-      {/* HEADER SECTION */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Payroll & Reports</h1>
@@ -99,30 +92,15 @@ const AdminReports: React.FC = () => {
               className="px-4 py-2 w-24 bg-indigo-50 border border-indigo-100 rounded-xl text-sm font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
             />
           </div>
-
           <div className="flex flex-col">
             <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">From</span>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-            />
+            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
           </div>
           <div className="flex flex-col">
             <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">To</span>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-            />
+            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
           </div>
-          
-          <button 
-            onClick={handlePrint}
-            className="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2 active:scale-95 transition-all"
-          >
+          <button onClick={handlePrint} className="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2 active:scale-95 transition-all">
             <i className="fa-solid fa-print"></i>
             <span>Print Report</span>
           </button>
@@ -145,48 +123,33 @@ const AdminReports: React.FC = () => {
             const diff = e.totalHours - globalRequiredHours;
             const gross = grossRates[e.name] || 0;
             const ot = overtimeRates[e.name] || 0;
-            
             const deduction = diff < 0 ? Math.abs(diff) * gross : 0;
             const otPay = diff > 0 ? diff * ot : 0;
-
             return {
               shifts: acc.shifts + e.shiftCount,
               hours: acc.hours + e.totalHours,
+              diff: acc.diff + diff,
               deductions: acc.deductions + deduction,
               overtime: acc.overtime + otPay
             };
-          }, { shifts: 0, hours: 0, deductions: 0, overtime: 0 });
+          }, { shifts: 0, hours: 0, diff: 0, deductions: 0, overtime: 0 });
 
           return (
-            <div
-              key={`${report.year}-${report.month}`}
-              className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-12 card"
-            >
+            <div key={`${report.year}-${report.month}`} className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-12 card">
               <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-6 items-center justify-between">
                 <div className="flex items-center space-x-4">
                   <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
                     <i className="fa-solid fa-calendar-check text-xl"></i>
                   </div>
                   <div>
-                    <h3 className="text-xl font-black text-slate-900 leading-none mb-1">
-                      {report.month} {report.year}
-                    </h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                      Standard: {globalRequiredHours} Hrs
-                    </p>
+                    <h3 className="text-xl font-black text-slate-900 leading-none mb-1">{report.month} {report.year}</h3>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Standard: {globalRequiredHours} Hrs</p>
                   </div>
                 </div>
-
                 <div className="no-print">
-                  <select
-                    value={selectedEmployeeFilter}
-                    onChange={(e) => setSelectedEmployeeFilter(e.target.value)}
-                    className="pl-4 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer"
-                  >
+                  <select value={selectedEmployeeFilter} onChange={(e) => setSelectedEmployeeFilter(e.target.value)} className="pl-4 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer">
                     <option value="all">All Employees</option>
-                    {report.employees.map(emp => (
-                      <option key={emp.name} value={emp.name}>{emp.name}</option>
-                    ))}
+                    {report.employees.map(emp => <option key={emp.name} value={emp.name}>{emp.name}</option>)}
                   </select>
                 </div>
               </div>
@@ -206,93 +169,54 @@ const AdminReports: React.FC = () => {
                       <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest no-print">Actions</th>
                     </tr>
                   </thead>
-
                   <tbody className="divide-y divide-slate-100">
                     {filteredEmployees.map((emp) => {
                       const diff = emp.totalHours - globalRequiredHours;
-                      const gross = grossRates[emp.name] || 0;
-                      const ot = overtimeRates[emp.name] || 0;
-                      
-                      const deductionAmount = diff < 0 ? Math.abs(diff) * gross : 0;
-                      const overtimePay = diff > 0 ? diff * ot : 0;
-
+                      const deductionAmount = diff < 0 ? Math.abs(diff) * (grossRates[emp.name] || 0) : 0;
+                      const overtimePay = diff > 0 ? diff * (overtimeRates[emp.name] || 0) : 0;
                       return (
                         <tr key={emp.name} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4">
-                            <span className="font-bold text-slate-900">{emp.name}</span>
-                          </td>
-
-                          <td className="px-4 py-4 text-center">
-                            <span className="px-2 py-1 bg-slate-100 rounded text-xs font-black text-slate-500">
-                              {emp.shiftCount}
-                            </span>
-                          </td>
-
-                          <td className="px-4 py-4 text-right font-mono font-bold text-slate-700">
-                            {emp.totalHours.toFixed(2)}
-                          </td>
-
-                          <td className={`px-4 py-4 text-right font-mono font-bold ${
-                            diff < 0 ? 'text-rose-500' : diff > 0 ? 'text-emerald-500' : 'text-slate-400'
-                          }`}>
+                          <td className="px-6 py-4"><span className="font-bold text-slate-900">{emp.name}</span></td>
+                          <td className="px-4 py-4 text-center"><span className="px-2 py-1 bg-slate-100 rounded text-xs font-black text-slate-500">{emp.shiftCount}</span></td>
+                          <td className="px-4 py-4 text-right font-mono font-bold text-slate-700">{emp.totalHours.toFixed(2)}</td>
+                          <td className={`px-4 py-4 text-right font-mono font-bold ${diff < 0 ? 'text-rose-500' : diff > 0 ? 'text-emerald-500' : 'text-slate-400'}`}>
                             {diff > 0 ? '+' : ''}{diff.toFixed(2)}
                           </td>
-
                           <td className="px-4 py-4 text-right no-print">
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={grossRates[emp.name] ?? ''}
-                              onChange={(e) => handleRateChange(setGrossRates, emp.name, parseFloat(e.target.value) || 0)}
-                              className="w-16 text-right px-1 py-1 bg-white border border-indigo-100 rounded font-mono text-[10px] outline-none text-indigo-600 font-bold"
-                              placeholder="0.0"
-                            />
+                            <input type="number" step="0.1" value={grossRates[emp.name] ?? ''} onChange={(e) => handleRateChange(setGrossRates, emp.name, parseFloat(e.target.value) || 0)} className="w-16 text-right px-1 py-1 bg-white border border-indigo-100 rounded font-mono text-[10px] outline-none text-indigo-600 font-bold" />
                           </td>
-
                           <td className="px-4 py-4 text-right no-print">
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={overtimeRates[emp.name] ?? ''}
-                              onChange={(e) => handleRateChange(setOvertimeRates, emp.name, parseFloat(e.target.value) || 0)}
-                              className="w-16 text-right px-1 py-1 bg-white border border-indigo-100 rounded font-mono text-[10px] outline-none text-indigo-600 font-bold"
-                              placeholder="0.0"
-                            />
+                            <input type="number" step="0.1" value={overtimeRates[emp.name] ?? ''} onChange={(e) => handleRateChange(setOvertimeRates, emp.name, parseFloat(e.target.value) || 0)} className="w-16 text-right px-1 py-1 bg-white border border-indigo-100 rounded font-mono text-[10px] outline-none text-indigo-600 font-bold" />
                           </td>
-
                           <td className={`px-4 py-4 text-right font-mono font-black ${deductionAmount > 0 ? 'text-rose-600' : 'text-slate-200'}`}>
                             {deductionAmount > 0 ? `-SR ${deductionAmount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : '-'}
                           </td>
-
                           <td className={`px-4 py-4 text-right font-mono font-black ${overtimePay > 0 ? 'text-emerald-600' : 'text-slate-200'}`}>
                             {overtimePay > 0 ? `+SR ${overtimePay.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : '-'}
                           </td>
-
                           <td className="px-6 py-4 text-right no-print">
-                            <button
-                              onClick={() => handleViewEmployee(emp.name)}
-                              className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 tracking-wider"
-                            >
-                              Logs
-                            </button>
+                            <button onClick={() => handleViewEmployee(emp.name)} className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 tracking-wider">Logs</button>
                           </td>
                         </tr>
                       );
                     })}
-
+                    {/* TOTALS FOOTER ROW - Fixed Alignment */}
                     <tr className="bg-slate-900 text-white font-black">
-                      <td className="px-6 py-5 rounded-bl-3xl">TOTALS</td>
+                      <td className="px-6 py-5">TOTALS</td>
                       <td className="px-4 py-5 text-center">{totals.shifts}</td>
                       <td className="px-4 py-5 text-right font-mono">{totals.hours.toFixed(2)}</td>
-                      <td colSpan={1} className="no-print md:table-cell hidden"></td>
-                      <td colSpan={2} className="no-print"></td>
+                      <td className={`px-4 py-5 text-right font-mono ${totals.diff < 0 ? 'text-rose-400' : totals.diff > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                        {totals.diff > 0 ? '+' : ''}{totals.diff.toFixed(2)}
+                      </td>
+                      <td className="no-print"></td>
+                      <td className="no-print"></td>
                       <td className="px-4 py-5 text-right font-mono text-rose-400">
-                        -SR {totals.deductions.toLocaleString()}
+                        -SR {totals.deductions.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>
                       <td className="px-4 py-5 text-right font-mono text-emerald-400">
-                        +SR {totals.overtime.toLocaleString()}
+                        +SR {totals.overtime.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>
-                      <td className="px-6 py-5 rounded-br-3xl no-print"></td>
+                      <td className="no-print"></td>
                     </tr>
                   </tbody>
                 </table>

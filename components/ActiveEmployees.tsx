@@ -18,43 +18,44 @@ const ActiveEmployees: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const [users, allAttendance] = await Promise.all([
-          dataService.getUsers(),
-          dataService.getAllAttendance()
-        ]);
-        
-        // Filter strictly for records with a valid checkIn AND no checkOut
-        // Also ensure checkIn is NOT the fallback 1970 date
-        const currentActiveRecords = allAttendance.filter(r => 
-          r.checkIn && 
-          r.checkIn.getTime() > 0 && 
-          !r.checkOut
-        );
-        
-        const activeShifts: ActiveShift[] = [];
-        const processedUserIds = new Set<string>();
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [users, allAttendance] = await Promise.all([
+        dataService.getUsers(),
+        dataService.getAllAttendance()
+      ]);
+      
+      // STRICT FILTER: Only records with a real timestamp and NO checkOut field.
+      // Firestore sometimes stores null or defaults which convertToDate must handle.
+      const currentActiveRecords = allAttendance.filter(r => 
+        r.checkIn && 
+        r.checkIn.getTime() > 1000000 && // Ignore 1970/Epoch fallbacks
+        !r.checkOut
+      );
+      
+      const activeShifts: ActiveShift[] = [];
+      const processedUserIds = new Set<string>();
 
-        currentActiveRecords.sort((a, b) => b.checkIn.getTime() - a.checkIn.getTime()).forEach(record => {
-          if (!processedUserIds.has(record.userId)) {
-            const user = users.find(u => u.id === record.userId);
-            if (user) {
-              activeShifts.push({ user, record });
-              processedUserIds.add(record.userId);
-            }
+      currentActiveRecords.sort((a, b) => b.checkIn.getTime() - a.checkIn.getTime()).forEach(record => {
+        if (!processedUserIds.has(record.userId)) {
+          const user = users.find(u => u.id === record.userId);
+          if (user) {
+            activeShifts.push({ user, record });
+            processedUserIds.add(record.userId);
           }
-        });
+        }
+      });
 
-        setActive(activeShifts);
-      } catch (err) {
-        console.error("Failed to load active employees", err);
-      } finally {
-        setLoading(false);
-      }
-    };
+      setActive(activeShifts);
+    } catch (err) {
+      console.error("Failed to load active employees", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     load();
   }, []);
 
@@ -79,8 +80,13 @@ const ActiveEmployees: React.FC = () => {
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Active Operations</h1>
           <p className="text-slate-500">Real-time status of staff currently on shift</p>
         </div>
-        <div className="bg-indigo-600 text-white px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100">
-          {active.length} Live {active.length === 1 ? 'User' : 'Users'}
+        <div className="flex gap-4">
+          <button onClick={load} className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 rounded-xl transition-all shadow-sm">
+            <i className="fa-solid fa-rotate"></i>
+          </button>
+          <div className="bg-indigo-600 text-white px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 flex items-center">
+            {active.length} Live {active.length === 1 ? 'User' : 'Users'}
+          </div>
         </div>
       </div>
 
@@ -114,14 +120,11 @@ const ActiveEmployees: React.FC = () => {
                     <tr key={a.user.id} className="hover:bg-slate-50/50 transition-colors group">
                       <td className="px-8 py-5">
                         <div className="flex items-center space-x-4">
-                          <div className="relative">
-                            <img 
-                              src={a.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.user.name)}&background=random`} 
-                              className="w-11 h-11 rounded-2xl border border-slate-100 shadow-sm" 
-                              alt="" 
-                            />
-                            <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${isInside ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></div>
-                          </div>
+                          <img 
+                            src={a.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.user.name)}&background=random`} 
+                            className="w-11 h-11 rounded-2xl border border-slate-100 shadow-sm" 
+                            alt="" 
+                          />
                           <div>
                             <p className="font-bold text-slate-900 leading-tight">{a.user.name}</p>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{a.user.department}</p>
