@@ -5,7 +5,6 @@ import { dataService } from './services/dataService';
 import { AttendanceRecord, User } from './types';
 import Dashboard from './components/Dashboard';
 import History from './components/History';
-import AIInsights from './components/AIInsights';
 import AdminReports from './components/AdminReports';
 import Login from './components/Login';
 import ActiveEmployees from './components/ActiveEmployees';
@@ -19,7 +18,6 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
   const links = [
     { path: '/', label: 'Home', icon: 'fa-house' },
     { path: '/history', label: 'My Logs', icon: 'fa-list' },
-    { path: '/ai', label: 'AI Coach', icon: 'fa-brain' },
   ];
 
   if (user.role === 'admin') {
@@ -30,7 +28,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-2 flex justify-around md:top-0 md:bottom-auto md:flex-col md:w-64 md:h-screen md:border-r md:border-t-0 md:justify-start md:space-y-2 md:py-8 md:z-50 print:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex overflow-x-auto md:overflow-visible no-scrollbar md:top-0 md:bottom-auto md:flex-col md:w-64 md:h-screen md:border-r md:border-t-0 md:justify-start md:space-y-2 md:py-8 md:z-50 print:hidden shadow-lg md:shadow-none">
       <div className="hidden md:flex flex-col px-4 mb-8">
         <div className="flex items-center space-x-3 mb-6">
           <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
@@ -47,29 +45,38 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
         </div>
       </div>
 
-      <div className="flex flex-1 justify-around md:flex-col md:justify-start md:space-y-1">
+      <div className="flex flex-1 md:flex-col md:justify-start md:space-y-1 px-2 py-2 md:px-0 md:py-0 min-w-max md:min-w-0">
         {links.map((link) => (
           <Link
             key={link.path}
             to={link.path}
-            className={`flex flex-col md:flex-row items-center space-y-1 md:space-y-0 md:space-x-4 px-4 py-2 rounded-xl transition-all duration-200 ${
+            className={`flex flex-col md:flex-row items-center justify-center space-y-1 md:space-y-0 md:space-x-4 px-4 py-2 md:px-4 md:py-2 rounded-xl transition-all duration-200 min-w-[72px] md:min-w-0 ${
               location.pathname === link.path
                 ? 'text-indigo-600 md:bg-indigo-50 font-semibold'
                 : 'text-slate-500 hover:text-indigo-600 hover:bg-slate-50'
             }`}
           >
             <i className={`fa-solid ${link.icon} text-lg md:text-xl`}></i>
-            <span className="text-[10px] md:text-base font-medium">{link.label}</span>
+            <span className="text-[9px] md:text-base font-medium whitespace-nowrap">{link.label}</span>
           </Link>
         ))}
+        
+        {/* Logout button on mobile positioned at end of scrollable list */}
+        <button
+          onClick={onLogout}
+          className="flex flex-col md:hidden items-center justify-center space-y-1 px-4 py-2 rounded-xl text-rose-500 min-w-[72px]"
+        >
+          <i className="fa-solid fa-right-from-bracket text-lg"></i>
+          <span className="text-[9px] font-medium whitespace-nowrap">Logout</span>
+        </button>
       </div>
 
       <button
         onClick={onLogout}
-        className="flex flex-col md:flex-row items-center space-y-1 md:space-y-0 md:space-x-4 px-4 py-2 rounded-xl text-rose-500 hover:bg-rose-50 transition-all md:mt-auto"
+        className="hidden md:flex flex-row items-center space-x-4 px-4 py-2 rounded-xl text-rose-500 hover:bg-rose-50 transition-all md:mt-auto mx-4"
       >
-        <i className="fa-solid fa-right-from-bracket text-lg md:text-xl"></i>
-        <span className="text-[10px] md:text-base font-medium">Logout</span>
+        <i className="fa-solid fa-right-from-bracket text-xl"></i>
+        <span className="text-base font-medium">Logout</span>
       </button>
     </nav>
   );
@@ -126,10 +133,13 @@ const App: React.FC = () => {
         <Navigation user={user} onLogout={handleLogout} />
         <main className="flex-1 pb-24 md:pb-8 md:pl-64">
           <div className="max-w-5xl mx-auto px-4 pt-6 md:pt-12">
+            <style>{`
+              .no-scrollbar::-webkit-scrollbar { display: none; }
+              .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+            `}</style>
             <Routes>
               <Route path="/" element={<Dashboard user={user} history={history} onAction={refreshData} />} />
               <Route path="/history" element={<History history={history} user={user} />} />
-              <Route path="/ai" element={<AIInsights history={history} />} />
               {user.role === 'admin' && (
                 <>
                   <Route path="/admin" element={<AdminReports />} />
