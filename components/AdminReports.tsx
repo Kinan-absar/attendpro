@@ -6,18 +6,19 @@ import History from './History';
 
 const AdminReports: React.FC = () => {
   const [reports, setReports] = useState<MonthlyReport[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState<string>('all');
   const [selectedEmployee, setSelectedEmployee] = useState<{ user: User; records: AttendanceRecord[] } | null>(null);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   
-  // Financial Configuration
+  // Financial Adjustment State (Manual Columns)
   const [globalRequiredHours, setGlobalRequiredHours] = useState<number>(160); // Default to 160
-  const [grossRates, setGrossRates] = useState<Record<string, number>>({});
-  const [overtimeRates, setOvertimeRates] = useState<Record<string, number>>({});
+  const [otherDeductions, setOtherDeductions] = useState<Record<string, number>>({});
+  const [reimbursements, setReimbursements] = useState<Record<string, number>>({});
 
-  const handleRateChange = (setter: React.Dispatch<React.SetStateAction<Record<string, number>>>, name: string, value: number) => {
+  const handleValueChange = (setter: React.Dispatch<React.SetStateAction<Record<string, number>>>, name: string, value: number) => {
     setter(prev => ({
       ...prev,
       [name]: value
@@ -33,16 +34,19 @@ const AdminReports: React.FC = () => {
       setLoading(true);
       const from = fromDate ? new Date(fromDate) : undefined;
       const to = toDate ? new Date(toDate) : undefined;
-      const data = await dataService.getMonthlyReports(from, to);
-      setReports(data);
+      const [reportData, userData] = await Promise.all([
+        dataService.getMonthlyReports(from, to),
+        dataService.getUsers()
+      ]);
+      setReports(reportData);
+      setUsers(userData);
       setLoading(false);
     };
     fetch();
   }, [fromDate, toDate]);
 
   const handleViewEmployee = async (employeeName: string) => {
-    const allUsers = await dataService.getUsers();
-    const user = allUsers.find(u => u.name === employeeName);
+    const user = users.find(u => u.name === employeeName);
     if (!user) return;
     const history = await dataService.getAttendanceHistory(user.id);
     setSelectedEmployee({ user, records: history });
@@ -120,19 +124,32 @@ const AdminReports: React.FC = () => {
               : report.employees.filter(e => e.name === selectedEmployeeFilter);
 
           const totals = filteredEmployees.reduce((acc, e) => {
+            const user = users.find(u => u.name === e.name);
+            const grossSalary = user?.grossSalary || 0;
+            const basicSalary = grossSalary / 1.35;
+            const basicHourlyRate = basicSalary / 208;
+            const grossHourlyRate = grossSalary / 208;
+            const overtimeHourlyRate = grossHourlyRate + (0.5 * basicHourlyRate);
+
             const diff = e.totalHours - globalRequiredHours;
-            const gross = grossRates[e.name] || 0;
-            const ot = overtimeRates[e.name] || 0;
-            const deduction = diff < 0 ? Math.abs(diff) * gross : 0;
-            const otPay = diff > 0 ? diff * ot : 0;
+            const deduction = diff < 0 ? Math.abs(diff) * grossHourlyRate : 0;
+            const otPay = diff > 0 ? diff * overtimeHourlyRate : 0;
+            
+            const otherDed = otherDeductions[e.name] || 0;
+            const reimb = reimbursements[e.name] || 0;
+            const netSalary = grossSalary - deduction + otPay - otherDed + reimb;
+
             return {
               shifts: acc.shifts + e.shiftCount,
               hours: acc.hours + e.totalHours,
               diff: acc.diff + diff,
               deductions: acc.deductions + deduction,
-              overtime: acc.overtime + otPay
+              overtime: acc.overtime + otPay,
+              otherDeductions: acc.otherDeductions + otherDed,
+              reimbursements: acc.reimbursements + reimb,
+              netSalary: acc.netSalary + netSalary
             };
-          }, { shifts: 0, hours: 0, diff: 0, deductions: 0, overtime: 0 });
+          }, { shifts: 0, hours: 0, diff: 0, deductions: 0, overtime: 0, otherDeductions: 0, reimbursements: 0, netSalary: 0 });
 
           return (
             <div key={`${report.year}-${report.month}`} className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-12 card">
@@ -162,18 +179,34 @@ const AdminReports: React.FC = () => {
                       <th className="px-4 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Shifts</th>
                       <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Total Hrs</th>
                       <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Diff</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest no-print">Gross Rate</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest no-print">OT Rate</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross Salary</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross Rate</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">OT Rate</th>
                       <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest">Deduction</th>
                       <th className="px-4 py-4 text-right font-black text-emerald-400 uppercase text-[10px] tracking-widest">OT Pay</th>
+                      <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest no-print">Other Ded.</th>
+                      <th className="px-4 py-4 text-right font-black text-emerald-400 uppercase text-[10px] tracking-widest no-print">Reimb.</th>
+                      <th className="px-6 py-4 text-right font-black text-slate-900 uppercase text-[10px] tracking-widest">Net Salary</th>
                       <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest no-print">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredEmployees.map((emp) => {
+                      const user = users.find(u => u.name === emp.name);
+                      const grossSalary = user?.grossSalary || 0;
+                      const basicSalary = grossSalary / 1.35;
+                      const basicHourlyRate = basicSalary / 208;
+                      const grossHourlyRate = grossSalary / 208;
+                      const overtimeHourlyRate = grossHourlyRate + (0.5 * basicHourlyRate);
+
                       const diff = emp.totalHours - globalRequiredHours;
-                      const deductionAmount = diff < 0 ? Math.abs(diff) * (grossRates[emp.name] || 0) : 0;
-                      const overtimePay = diff > 0 ? diff * (overtimeRates[emp.name] || 0) : 0;
+                      const deductionAmount = diff < 0 ? Math.abs(diff) * grossHourlyRate : 0;
+                      const overtimePay = diff > 0 ? diff * overtimeHourlyRate : 0;
+                      
+                      const otherDed = otherDeductions[emp.name] || 0;
+                      const reimb = reimbursements[emp.name] || 0;
+                      const netSalary = grossSalary - deductionAmount + overtimePay - otherDed + reimb;
+
                       return (
                         <tr key={emp.name} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4"><span className="font-bold text-slate-900">{emp.name}</span></td>
@@ -182,17 +215,31 @@ const AdminReports: React.FC = () => {
                           <td className={`px-4 py-4 text-right font-mono font-bold ${diff < 0 ? 'text-rose-500' : diff > 0 ? 'text-emerald-500' : 'text-slate-400'}`}>
                             {diff > 0 ? '+' : ''}{diff.toFixed(2)}
                           </td>
-                          <td className="px-4 py-4 text-right no-print">
-                            <input type="number" step="0.1" value={grossRates[emp.name] ?? ''} onChange={(e) => handleRateChange(setGrossRates, emp.name, parseFloat(e.target.value) || 0)} className="w-16 text-right px-1 py-1 bg-white border border-indigo-100 rounded font-mono text-[10px] outline-none text-indigo-600 font-bold" />
+                          <td className="px-4 py-4 text-right font-mono font-bold text-indigo-600">
+                            {grossSalary.toLocaleString()}
                           </td>
-                          <td className="px-4 py-4 text-right no-print">
-                            <input type="number" step="0.1" value={overtimeRates[emp.name] ?? ''} onChange={(e) => handleRateChange(setOvertimeRates, emp.name, parseFloat(e.target.value) || 0)} className="w-16 text-right px-1 py-1 bg-white border border-indigo-100 rounded font-mono text-[10px] outline-none text-indigo-600 font-bold" />
+                          <td className="px-4 py-4 text-right font-mono text-[10px] text-slate-400">
+                            {grossHourlyRate.toFixed(2)}
+                          </td>
+                          <td className="px-4 py-4 text-right font-mono text-[10px] text-slate-400">
+                            {overtimeHourlyRate.toFixed(2)}
                           </td>
                           <td className={`px-4 py-4 text-right font-mono font-black ${deductionAmount > 0 ? 'text-rose-600' : 'text-slate-200'}`}>
                             {deductionAmount > 0 ? `-SR ${deductionAmount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : '-'}
                           </td>
                           <td className={`px-4 py-4 text-right font-mono font-black ${overtimePay > 0 ? 'text-emerald-600' : 'text-slate-200'}`}>
                             {overtimePay > 0 ? `+SR ${overtimePay.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : '-'}
+                          </td>
+                          <td className="px-4 py-4 text-right no-print">
+                            <input type="number" step="1" value={otherDeductions[emp.name] ?? ''} onChange={(e) => handleValueChange(setOtherDeductions, emp.name, parseFloat(e.target.value) || 0)} className="w-16 text-right px-1 py-1 bg-white border border-rose-100 rounded font-mono text-[10px] outline-none text-rose-600 font-bold" placeholder="0" />
+                          </td>
+                          <td className="px-4 py-4 text-right no-print">
+                            <input type="number" step="1" value={reimbursements[emp.name] ?? ''} onChange={(e) => handleValueChange(setReimbursements, emp.name, parseFloat(e.target.value) || 0)} className="w-16 text-right px-1 py-1 bg-white border border-emerald-100 rounded font-mono text-[10px] outline-none text-emerald-600 font-bold" placeholder="0" />
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                             <span className="font-mono font-black text-slate-900 bg-slate-100 px-3 py-1.5 rounded-xl">
+                               SR {netSalary.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                             </span>
                           </td>
                           <td className="px-6 py-4 text-right no-print">
                             <button onClick={() => handleViewEmployee(emp.name)} className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 tracking-wider">Logs</button>
@@ -208,13 +255,19 @@ const AdminReports: React.FC = () => {
                       <td className={`px-4 py-5 text-right font-mono ${totals.diff < 0 ? 'text-rose-400' : totals.diff > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
                         {totals.diff > 0 ? '+' : ''}{totals.diff.toFixed(2)}
                       </td>
-                      <td className="no-print"></td>
-                      <td className="no-print"></td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
                       <td className="px-4 py-5 text-right font-mono text-rose-400">
                         -SR {totals.deductions.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>
                       <td className="px-4 py-5 text-right font-mono text-emerald-400">
                         +SR {totals.overtime.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                      </td>
+                      <td className="no-print"></td>
+                      <td className="no-print"></td>
+                      <td className="px-6 py-5 text-right font-mono text-white">
+                        SR {totals.netSalary.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>
                       <td className="no-print"></td>
                     </tr>

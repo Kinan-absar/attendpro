@@ -9,6 +9,7 @@ export interface User {
   department: string;
   role: UserRole;
   avatar?: string;
+  grossSalary?: number;
 }
 
 export interface MobilityLog {

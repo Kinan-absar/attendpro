@@ -52,7 +52,8 @@ class DataService {
         employeeId: data.employeeId || 'N/A',
         department: data.department || 'General',
         role: data.role || 'employee',
-        avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`
+        avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
+        grossSalary: data.grossSalary || 0
       };
       this.currentUser = user;
       return user;
@@ -78,6 +79,7 @@ class DataService {
         employeeId: employeeId || '',
         department: department || '',
         role: 'employee',
+        grossSalary: 0,
         avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=random`
       };
 
@@ -113,7 +115,8 @@ class DataService {
           employeeId: data.employeeId || 'N/A',
           department: data.department || 'General',
           role: data.role || 'employee',
-          avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`
+          avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
+          grossSalary: data.grossSalary || 0
         };
         this.currentUser = user;
         onUser(user);
@@ -181,7 +184,7 @@ class DataService {
     if (val?.seconds) return new Date(val.seconds * 1000);
     if (val instanceof Date) return val;
     if (typeof val === 'string' || typeof val === 'number') return new Date(val);
-    return undefined; // Strictly return undefined if missing
+    return undefined;
   }
 
   async getAttendanceHistory(userId: string): Promise<AttendanceRecord[]> {
@@ -199,7 +202,7 @@ class DataService {
         id: d.id,
         userId: r.userId || '',
         userName: r.userName || 'Unknown',
-        checkIn: checkIn || new Date(0), // Provide safe fallback for UI but filter handled elsewhere
+        checkIn: checkIn || new Date(0),
         checkOut,
         location: r.location,
         mobilityLogs: (r.mobilityLogs || []).map((l: any) => ({
@@ -247,7 +250,8 @@ class DataService {
         employeeId: data.employeeId || '',
         department: data.department || '',
         role: data.role || 'employee',
-        avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`
+        avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
+        grossSalary: data.grossSalary || 0
       };
     });
   }
@@ -261,6 +265,7 @@ class DataService {
       employeeId: user.employeeId?.trim(),
       department: (user.department || '').trim(),
       role: user.role || 'employee',
+      grossSalary: user.grossSalary || 0,
       avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name?.trim() || 'U')}&background=random`
     };
     await setDoc(doc(db, USERS, userId), data, { merge: true });

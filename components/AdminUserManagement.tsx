@@ -132,7 +132,7 @@ const AdminUserManagement: React.FC = () => {
             <i className="fa-solid fa-shield-halved"></i>
           </button>
           <button 
-            onClick={() => setEditingUser({ name: '', email: '', employeeId: '', department: '', role: 'employee' })}
+            onClick={() => setEditingUser({ name: '', email: '', employeeId: '', department: '', role: 'employee', grossSalary: 0 })}
             className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center space-x-2"
           >
             <i className="fa-solid fa-user-plus"></i>
@@ -156,7 +156,7 @@ const AdminUserManagement: React.FC = () => {
       {/* MODAL / FORM */}
       {editingUser && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-lg overflow-hidden animate-fadeIn">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-fadeIn">
             <div className="bg-indigo-600 p-8 text-white">
               <div className="flex justify-between items-center mb-2">
                 <h2 className="text-2xl font-black">{editingUser.id ? 'Edit Profile' : 'Add New Staff'}</h2>
@@ -169,7 +169,7 @@ const AdminUserManagement: React.FC = () => {
               </p>
             </div>
 
-            <div className="p-8 space-y-6">
+            <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
@@ -221,6 +221,19 @@ const AdminUserManagement: React.FC = () => {
                   />
                 </div>
                 <div className="col-span-2">
+                  <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-2 ml-1">Gross Salary (Monthly)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">SR</span>
+                    <input 
+                      type="number"
+                      value={editingUser.grossSalary || ''}
+                      onChange={(e) => setEditingUser({ ...editingUser, grossSalary: parseFloat(e.target.value) || 0 })}
+                      className="w-full pl-12 pr-4 py-3 bg-indigo-50 border border-indigo-100 rounded-xl font-black text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <div className="col-span-2">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">System Role</label>
                   <div className="grid grid-cols-2 gap-2">
                     <button 
@@ -268,6 +281,7 @@ const AdminUserManagement: React.FC = () => {
                 <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee</th>
                 <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Contact</th>
                 <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Department</th>
+                <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Gross Salary</th>
                 <th className="px-6 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Role</th>
                 <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Actions</th>
               </tr>
@@ -294,6 +308,11 @@ const AdminUserManagement: React.FC = () => {
                   <td className="px-6 py-4">
                     <span className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">
                       {u.department || 'Unassigned'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <span className="font-mono font-bold text-indigo-600">
+                      SR {(u.grossSalary || 0).toLocaleString()}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
