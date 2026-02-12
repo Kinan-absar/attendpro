@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'attendance-pro-v11'; // Incremented version
+const CACHE_NAME = 'attendance-pro-v12'; // Incremented version
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -11,7 +11,6 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
-  // Force the waiting service worker to become the active service worker.
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -32,13 +31,11 @@ self.addEventListener('activate', (event) => {
         })
       );
     }).then(() => {
-      // Claim clients so the new SW takes over immediately
       return self.clients.claim();
     })
   );
 });
 
-// Handle messages from the UI (like SKIP_WAITING)
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
@@ -46,29 +43,23 @@ self.addEventListener('message', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Skip cross-origin requests
   if (!event.request.url.startsWith(self.location.origin) && !event.request.url.includes('google') && !event.request.url.includes('firebase')) {
     return;
   }
 
   event.respondWith(
     caches.match(event.request).then((response) => {
-      // Cache hit - return response
       if (response) {
         return response;
       }
 
       return fetch(event.request).then((networkResponse) => {
-        // Check if we received a valid response
         if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
           return networkResponse;
         }
 
-        // Clone the response
         const responseToCache = networkResponse.clone();
-
         caches.open(CACHE_NAME).then((cache) => {
-          // We don't cache firebase or external dynamic requests
           if (!event.request.url.includes('firebase') && !event.request.url.includes('googleapis')) {
             cache.put(event.request, responseToCache);
           }

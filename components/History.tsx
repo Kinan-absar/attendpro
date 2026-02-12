@@ -14,7 +14,9 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    window.print();
+  };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,14 +45,32 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
+      {/* PROFESSIONAL PRINT HEADER (HIDDEN IN UI) */}
+      <div className="print-header">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Timesheet Report</h1>
+            <p className="text-indigo-600 font-bold uppercase tracking-widest text-xs mt-1">Absar Alomran Construction Co.</p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm font-black text-slate-900">{user.name}</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Employee ID: {user.employeeId}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dept: {user.department}</p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
         <div>
           <h1 className="text-2xl font-black text-slate-900">Attendance Log</h1>
           <p className="text-slate-500">Historical records and mobility audit</p>
         </div>
-        <button onClick={handlePrint} className="px-5 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 flex items-center space-x-2">
+        <button 
+          onClick={handlePrint} 
+          className="px-5 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 flex items-center space-x-2 active:scale-95 transition-all"
+        >
           <i className="fa-solid fa-print"></i>
-          <span>Print Summary</span>
+          <span>Print Timesheet</span>
         </button>
       </div>
 
@@ -90,16 +110,22 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
                       <td className="px-6 py-4">
                          <button 
                            onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}
-                           className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 ${
+                           className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 no-print ${
                              record.checkOut ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'
                            }`}
                          >
                            {record.checkOut ? 'Complete' : 'In Progress'}
                            <i className={`fa-solid fa-chevron-${expandedId === record.id ? 'up' : 'down'}`}></i>
                          </button>
+                         {/* PRINT ONLY STATUS */}
+                         <span className={`hidden print:inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                             record.checkOut ? 'text-emerald-600' : 'text-indigo-600'
+                           }`}>
+                           {record.checkOut ? 'Complete' : 'Ongoing'}
+                         </span>
                       </td>
                       <td className="px-6 py-4 text-right no-print">
-                        {user.role === 'admin' && (
+                        {dataService.getCurrentUser()?.role === 'admin' && (
                           <button 
                             onClick={() => setEditingRecord(record)}
                             className="w-9 h-9 rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all shadow-sm"
@@ -110,7 +136,7 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
                       </td>
                     </tr>
                     {expandedId === record.id && (
-                      <tr className="bg-slate-50/30">
+                      <tr className="bg-slate-50/30 no-print">
                         <td colSpan={4} className="px-12 py-6">
                            <div className="border-l-2 border-indigo-200 pl-6 space-y-4">
                               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Site Presence Timeline</h4>
@@ -141,7 +167,7 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
 
       {/* ADMIN EDIT MODAL */}
       {editingRecord && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[200] flex items-center justify-center p-4 no-print">
           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-fadeIn">
             <div className="bg-indigo-600 p-8 text-white flex justify-between items-center">
               <div>
