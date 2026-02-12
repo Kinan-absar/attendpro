@@ -53,7 +53,8 @@ class DataService {
         department: data.department || 'General',
         role: data.role || 'employee',
         avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
-        grossSalary: data.grossSalary || 0
+        grossSalary: data.grossSalary || 0,
+        company: data.company || 'Absar Alomran'
       };
       this.currentUser = user;
       return user;
@@ -80,6 +81,7 @@ class DataService {
         department: department || '',
         role: 'employee',
         grossSalary: 0,
+        company: 'Absar Alomran',
         avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=random`
       };
 
@@ -116,7 +118,8 @@ class DataService {
           department: data.department || 'General',
           role: data.role || 'employee',
           avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
-          grossSalary: data.grossSalary || 0
+          grossSalary: data.grossSalary || 0,
+          company: data.company || 'Absar Alomran'
         };
         this.currentUser = user;
         onUser(user);
@@ -132,11 +135,12 @@ class DataService {
   }
 
   /* ⏱️ ATTENDANCE ACTIONS */
-  async checkIn(user: User, location?: { lat: number, lng: number, accuracy?: number }) {
+  async checkIn(user: User, location?: { lat: number, lng: number, accuracy?: number }, projectId?: string) {
     await addDoc(collection(db, ATTENDANCE), {
       userId: user.id,
       userName: user.name,
       checkIn: serverTimestamp(),
+      projectId: projectId || null,
       location: location || null,
       mobilityLogs: [{
         timestamp: new Date(),
@@ -204,6 +208,7 @@ class DataService {
         userName: r.userName || 'Unknown',
         checkIn: checkIn || new Date(0),
         checkOut,
+        projectId: r.projectId,
         location: r.location,
         mobilityLogs: (r.mobilityLogs || []).map((l: any) => ({
           ...l,
@@ -251,7 +256,8 @@ class DataService {
         department: data.department || '',
         role: data.role || 'employee',
         avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
-        grossSalary: data.grossSalary || 0
+        grossSalary: data.grossSalary || 0,
+        company: data.company || 'Absar Alomran'
       };
     });
   }
@@ -266,6 +272,7 @@ class DataService {
       department: (user.department || '').trim(),
       role: user.role || 'employee',
       grossSalary: user.grossSalary || 0,
+      company: user.company || 'Absar Alomran',
       avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name?.trim() || 'U')}&background=random`
     };
     await setDoc(doc(db, USERS, userId), data, { merge: true });
@@ -307,9 +314,14 @@ class DataService {
 
       const user = users.find(u => u.id === r.userId);
       if (!user) return;
-      let emp = grouped[key].employees.find(e => e.name === user.name);
+      
+      const pId = r.projectId || 'none';
+      
+      // We group by employee name and projectId. 
+      // If we aggregate later in the UI, we still have the site detail here.
+      let emp = grouped[key].employees.find(e => e.name === user.name && e.projectId === pId);
       if (!emp) {
-        emp = { name: user.name, shiftCount: 0, totalHours: 0 };
+        emp = { name: user.name, shiftCount: 0, totalHours: 0, projectId: pId };
         grouped[key].employees.push(emp);
       }
       emp.shiftCount++;
@@ -331,6 +343,7 @@ class DataService {
         userName: r.userName || 'Unknown',
         checkIn: checkIn || new Date(0),
         checkOut,
+        projectId: r.projectId,
         duration: r.duration || (checkIn && checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60000 : undefined),
         mobilityLogs: (r.mobilityLogs || []).map((l: any) => ({
           ...l,

@@ -132,7 +132,7 @@ const AdminUserManagement: React.FC = () => {
             <i className="fa-solid fa-shield-halved"></i>
           </button>
           <button 
-            onClick={() => setEditingUser({ name: '', email: '', employeeId: '', department: '', role: 'employee', grossSalary: 0 })}
+            onClick={() => setEditingUser({ name: '', email: '', employeeId: '', department: '', role: 'employee', grossSalary: 0, company: 'Absar Alomran' })}
             className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center space-x-2"
           >
             <i className="fa-solid fa-user-plus"></i>
@@ -221,6 +221,16 @@ const AdminUserManagement: React.FC = () => {
                   />
                 </div>
                 <div className="col-span-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Company / Branch</label>
+                  <input 
+                    type="text"
+                    value={editingUser.company || ''}
+                    onChange={(e) => setEditingUser({ ...editingUser, company: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    placeholder="e.g. Absar Alomran Construction"
+                  />
+                </div>
+                <div className="col-span-2">
                   <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-2 ml-1">Gross Salary (Monthly)</label>
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">SR</span>
@@ -279,7 +289,7 @@ const AdminUserManagement: React.FC = () => {
             <thead className="bg-slate-50/50">
               <tr>
                 <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee</th>
-                <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Contact</th>
+                <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Company</th>
                 <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Department</th>
                 <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Gross Salary</th>
                 <th className="px-6 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Role</th>
@@ -303,7 +313,8 @@ const AdminUserManagement: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm font-medium text-slate-600">{u.email || 'No email'}</p>
+                    <p className="text-xs font-black text-slate-500 uppercase tracking-wider">{u.company || 'Absar Alomran'}</p>
+                    <p className="text-[10px] text-slate-400">{u.email}</p>
                   </td>
                   <td className="px-6 py-4">
                     <span className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">

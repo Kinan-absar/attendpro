@@ -1,14 +1,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { dataService } from '../services/dataService';
-import { MonthlyReport, AttendanceRecord, User } from '../types';
+import { MonthlyReport, AttendanceRecord, User, Project } from '../types';
 import History from './History';
 
 const AdminReports: React.FC = () => {
   const [reports, setReports] = useState<MonthlyReport[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Filtering state
   const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState<string>('all');
+  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState<string>('all');
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>('all');
+  
   const [selectedEmployee, setSelectedEmployee] = useState<{ user: User; records: AttendanceRecord[] } | null>(null);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -34,12 +40,14 @@ const AdminReports: React.FC = () => {
       setLoading(true);
       const from = fromDate ? new Date(fromDate) : undefined;
       const to = toDate ? new Date(toDate) : undefined;
-      const [reportData, userData] = await Promise.all([
+      const [reportData, userData, projectData] = await Promise.all([
         dataService.getMonthlyReports(from, to),
-        dataService.getUsers()
+        dataService.getUsers(),
+        dataService.getProjects()
       ]);
       setReports(reportData);
       setUsers(userData);
+      setProjects(projectData);
       setLoading(false);
     };
     fetch();
@@ -81,7 +89,7 @@ const AdminReports: React.FC = () => {
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Payroll & Reports</h1>
-          <p className="text-slate-500">Manage hours, rates, and financial adjustments</p>
+          <p className="text-slate-500">Manage hours, rates, and corporate filtering</p>
         </div>
         
         <div className="flex flex-wrap items-end gap-4 no-print bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
@@ -111,6 +119,38 @@ const AdminReports: React.FC = () => {
         </div>
       </div>
 
+      {/* FILTERS PANEL */}
+      <div className="flex flex-wrap gap-4 no-print p-6 bg-slate-50 rounded-[1.5rem] border border-slate-200">
+         <div className="flex flex-col min-w-[150px]">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Filter by Company</label>
+            <select value={selectedCompanyFilter} onChange={(e) => setSelectedCompanyFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+              <option value="all">All Companies</option>
+              {[...new Set(users.map(u => u.company || 'Absar Alomran'))].sort().map(company => (
+                <option key={company} value={company}>{company}</option>
+              ))}
+            </select>
+         </div>
+         <div className="flex flex-col min-w-[150px]">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Filter by Project/Site</label>
+            <select value={selectedProjectFilter} onChange={(e) => setSelectedProjectFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+              <option value="all">All Projects</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+              <option value="none">Unassigned Site Only</option>
+            </select>
+         </div>
+         <div className="flex flex-col min-w-[150px]">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Filter by Employee</label>
+            <select value={selectedEmployeeFilter} onChange={(e) => setSelectedEmployeeFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+              <option value="all">All Employees</option>
+              {[...new Set(users.map(u => u.name))].sort().map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+         </div>
+      </div>
+
       {reports.length === 0 ? (
         <div className="bg-white p-20 rounded-3xl border border-dashed border-slate-300 text-center">
           <i className="fa-solid fa-file-invoice-dollar text-4xl text-slate-200 mb-4"></i>
@@ -118,13 +158,47 @@ const AdminReports: React.FC = () => {
         </div>
       ) : (
         reports.map((report) => {
-          const filteredEmployees =
-            selectedEmployeeFilter === 'all'
-              ? report.employees
-              : report.employees.filter(e => e.name === selectedEmployeeFilter);
+          // Flatten and aggregate by employee name after filtering
+          const employeeAggregator: Record<string, { totalHours: number, shiftCount: number }> = {};
+          
+          report.employees.forEach(emp => {
+            const user = users.find(u => u.name === emp.name);
+            if (!user) return;
 
-          const totals = filteredEmployees.reduce((acc, e) => {
-            const user = users.find(u => u.name === e.name);
+            const matchesEmployee = selectedEmployeeFilter === 'all' || emp.name === selectedEmployeeFilter;
+            const matchesCompany = selectedCompanyFilter === 'all' || (user?.company || 'Absar Alomran') === selectedCompanyFilter;
+            
+            // IMPROVED PROJECT FILTER LOGIC:
+            let matchesProject = false;
+            const userAssignedProjectIds = projects.filter(p => p.assignedUserIds.includes(user.id)).map(p => p.id);
+
+            if (selectedProjectFilter === 'all') {
+              matchesProject = true;
+            } else if (selectedProjectFilter === 'none') {
+              // Only show if the shift itself is 'none' AND the user is NOT assigned to any project in the database
+              matchesProject = (emp.projectId === 'none') && (userAssignedProjectIds.length === 0);
+            } else {
+              // Show if:
+              // 1. The shift was explicitly tagged with this project
+              // 2. The shift was untagged ('none') but the user is assigned to THIS specific project
+              matchesProject = (emp.projectId === selectedProjectFilter) || (emp.projectId === 'none' && userAssignedProjectIds.includes(selectedProjectFilter));
+            }
+
+            if (matchesEmployee && matchesCompany && matchesProject) {
+              if (!employeeAggregator[emp.name]) {
+                employeeAggregator[emp.name] = { totalHours: 0, shiftCount: 0 };
+              }
+              employeeAggregator[emp.name].totalHours += emp.totalHours;
+              employeeAggregator[emp.name].shiftCount += emp.shiftCount;
+            }
+          });
+
+          const filteredEmployeeNames = Object.keys(employeeAggregator).sort();
+          if (filteredEmployeeNames.length === 0) return null;
+
+          const totals = filteredEmployeeNames.reduce((acc, name) => {
+            const e = employeeAggregator[name];
+            const user = users.find(u => u.name === name);
             const grossSalary = user?.grossSalary || 0;
             const basicSalary = grossSalary / 1.35;
             const basicHourlyRate = basicSalary / 208;
@@ -135,8 +209,8 @@ const AdminReports: React.FC = () => {
             const deduction = diff < 0 ? Math.abs(diff) * grossHourlyRate : 0;
             const otPay = diff > 0 ? diff * overtimeHourlyRate : 0;
             
-            const otherDed = otherDeductions[e.name] || 0;
-            const reimb = reimbursements[e.name] || 0;
+            const otherDed = otherDeductions[name] || 0;
+            const reimb = reimbursements[name] || 0;
             const netSalary = grossSalary - deduction + otPay - otherDed + reimb;
 
             return {
@@ -160,14 +234,14 @@ const AdminReports: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-xl font-black text-slate-900 leading-none mb-1">{report.month} {report.year}</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Standard: {globalRequiredHours} Hrs</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                      {selectedCompanyFilter !== 'all' ? selectedCompanyFilter : 'Corporate Payroll Summary'}
+                      {selectedProjectFilter !== 'all' && selectedProjectFilter !== 'none' ? ` | Site: ${projects.find(p => p.id === selectedProjectFilter)?.name}` : selectedProjectFilter === 'none' ? ' | Unassigned Sites' : ''}
+                    </p>
                   </div>
                 </div>
-                <div className="no-print">
-                  <select value={selectedEmployeeFilter} onChange={(e) => setSelectedEmployeeFilter(e.target.value)} className="pl-4 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer">
-                    <option value="all">All Employees</option>
-                    {report.employees.map(emp => <option key={emp.name} value={emp.name}>{emp.name}</option>)}
-                  </select>
+                <div className="text-right">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Std. Monthly Target: {globalRequiredHours} Hrs</p>
                 </div>
               </div>
 
@@ -175,24 +249,25 @@ const AdminReports: React.FC = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-slate-50/50">
-                      <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee</th>
+                      <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee Name</th>
                       <th className="px-4 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Shifts</th>
-                      <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Total Hrs</th>
+                      <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Work Hrs</th>
                       <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Diff</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross Salary</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross Rate</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">OT Rate</th>
-                      <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest">Deduction</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross Sal.</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest no-print">Rate</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest no-print">OT Rate</th>
+                      <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest">Ded.</th>
                       <th className="px-4 py-4 text-right font-black text-emerald-400 uppercase text-[10px] tracking-widest">OT Pay</th>
-                      <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest no-print">Other Ded.</th>
-                      <th className="px-4 py-4 text-right font-black text-emerald-400 uppercase text-[10px] tracking-widest no-print">Reimb.</th>
-                      <th className="px-6 py-4 text-right font-black text-slate-900 uppercase text-[10px] tracking-widest">Net Salary</th>
+                      <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest">Other Ded.</th>
+                      <th className="px-4 py-4 text-right font-black text-emerald-400 uppercase text-[10px] tracking-widest">Reimb.</th>
+                      <th className="px-6 py-4 text-right font-black text-slate-900 uppercase text-[10px] tracking-widest">Net Payable</th>
                       <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest no-print">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredEmployees.map((emp) => {
-                      const user = users.find(u => u.name === emp.name);
+                    {filteredEmployeeNames.map((name) => {
+                      const emp = employeeAggregator[name];
+                      const user = users.find(u => u.name === name);
                       const grossSalary = user?.grossSalary || 0;
                       const basicSalary = grossSalary / 1.35;
                       const basicHourlyRate = basicSalary / 208;
@@ -203,13 +278,15 @@ const AdminReports: React.FC = () => {
                       const deductionAmount = diff < 0 ? Math.abs(diff) * grossHourlyRate : 0;
                       const overtimePay = diff > 0 ? diff * overtimeHourlyRate : 0;
                       
-                      const otherDed = otherDeductions[emp.name] || 0;
-                      const reimb = reimbursements[emp.name] || 0;
+                      const otherDed = otherDeductions[name] || 0;
+                      const reimb = reimbursements[name] || 0;
                       const netSalary = grossSalary - deductionAmount + overtimePay - otherDed + reimb;
 
                       return (
-                        <tr key={emp.name} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4"><span className="font-bold text-slate-900">{emp.name}</span></td>
+                        <tr key={name} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <span className="font-bold text-slate-900">{name}</span>
+                          </td>
                           <td className="px-4 py-4 text-center"><span className="px-2 py-1 bg-slate-100 rounded text-xs font-black text-slate-500">{emp.shiftCount}</span></td>
                           <td className="px-4 py-4 text-right font-mono font-bold text-slate-700">{emp.totalHours.toFixed(2)}</td>
                           <td className={`px-4 py-4 text-right font-mono font-bold ${diff < 0 ? 'text-rose-500' : diff > 0 ? 'text-emerald-500' : 'text-slate-400'}`}>
@@ -218,10 +295,10 @@ const AdminReports: React.FC = () => {
                           <td className="px-4 py-4 text-right font-mono font-bold text-indigo-600">
                             {grossSalary.toLocaleString()}
                           </td>
-                          <td className="px-4 py-4 text-right font-mono text-[10px] text-slate-400">
+                          <td className="px-4 py-4 text-right font-mono text-[10px] text-slate-400 no-print">
                             {grossHourlyRate.toFixed(2)}
                           </td>
-                          <td className="px-4 py-4 text-right font-mono text-[10px] text-slate-400">
+                          <td className="px-4 py-4 text-right font-mono text-[10px] text-slate-400 no-print">
                             {overtimeHourlyRate.toFixed(2)}
                           </td>
                           <td className={`px-4 py-4 text-right font-mono font-black ${deductionAmount > 0 ? 'text-rose-600' : 'text-slate-200'}`}>
@@ -230,11 +307,21 @@ const AdminReports: React.FC = () => {
                           <td className={`px-4 py-4 text-right font-mono font-black ${overtimePay > 0 ? 'text-emerald-600' : 'text-slate-200'}`}>
                             {overtimePay > 0 ? `+SR ${overtimePay.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : '-'}
                           </td>
-                          <td className="px-4 py-4 text-right no-print">
-                            <input type="number" step="1" value={otherDeductions[emp.name] ?? ''} onChange={(e) => handleValueChange(setOtherDeductions, emp.name, parseFloat(e.target.value) || 0)} className="w-16 text-right px-1 py-1 bg-white border border-rose-100 rounded font-mono text-[10px] outline-none text-rose-600 font-bold" placeholder="0" />
+                          <td className="px-4 py-4 text-right min-w-[100px]">
+                            <div className="no-print">
+                              <input type="number" step="1" value={otherDeductions[name] ?? ''} onChange={(e) => handleValueChange(setOtherDeductions, name, parseFloat(e.target.value) || 0)} className="w-full text-right px-1 py-1 bg-white border border-rose-100 rounded font-mono text-[10px] outline-none text-rose-600 font-bold" placeholder="0" />
+                            </div>
+                            <span className="hidden print:inline font-mono font-bold text-rose-600">
+                              {otherDed > 0 ? `SR ${otherDed.toLocaleString()}` : '-'}
+                            </span>
                           </td>
-                          <td className="px-4 py-4 text-right no-print">
-                            <input type="number" step="1" value={reimbursements[emp.name] ?? ''} onChange={(e) => handleValueChange(setReimbursements, emp.name, parseFloat(e.target.value) || 0)} className="w-16 text-right px-1 py-1 bg-white border border-emerald-100 rounded font-mono text-[10px] outline-none text-emerald-600 font-bold" placeholder="0" />
+                          <td className="px-4 py-4 text-right min-w-[100px]">
+                            <div className="no-print">
+                              <input type="number" step="1" value={reimbursements[name] ?? ''} onChange={(e) => handleValueChange(setReimbursements, name, parseFloat(e.target.value) || 0)} className="w-full text-right px-1 py-1 bg-white border border-emerald-100 rounded font-mono text-[10px] outline-none text-emerald-600 font-bold" placeholder="0" />
+                            </div>
+                            <span className="hidden print:inline font-mono font-bold text-emerald-600">
+                              {reimb > 0 ? `SR ${reimb.toLocaleString()}` : '-'}
+                            </span>
                           </td>
                           <td className="px-6 py-4 text-right">
                              <span className="font-mono font-black text-slate-900 bg-slate-100 px-3 py-1.5 rounded-xl">
@@ -242,30 +329,34 @@ const AdminReports: React.FC = () => {
                              </span>
                           </td>
                           <td className="px-6 py-4 text-right no-print">
-                            <button onClick={() => handleViewEmployee(emp.name)} className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 tracking-wider">Logs</button>
+                            <button onClick={() => handleViewEmployee(name)} className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 tracking-wider">Logs</button>
                           </td>
                         </tr>
                       );
                     })}
-                    {/* TOTALS FOOTER ROW - Fixed Alignment */}
+                    {/* TOTALS FOOTER ROW */}
                     <tr className="bg-slate-900 text-white font-black">
-                      <td className="px-6 py-5">TOTALS</td>
+                      <td className="px-6 py-5">GRAND TOTALS</td>
                       <td className="px-4 py-5 text-center">{totals.shifts}</td>
                       <td className="px-4 py-5 text-right font-mono">{totals.hours.toFixed(2)}</td>
                       <td className={`px-4 py-5 text-right font-mono ${totals.diff < 0 ? 'text-rose-400' : totals.diff > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
                         {totals.diff > 0 ? '+' : ''}{totals.diff.toFixed(2)}
                       </td>
                       <td></td>
-                      <td></td>
-                      <td></td>
+                      <td className="no-print"></td>
+                      <td className="no-print"></td>
                       <td className="px-4 py-5 text-right font-mono text-rose-400">
                         -SR {totals.deductions.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>
                       <td className="px-4 py-5 text-right font-mono text-emerald-400">
                         +SR {totals.overtime.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>
-                      <td className="no-print"></td>
-                      <td className="no-print"></td>
+                      <td className="px-4 py-5 text-right font-mono text-rose-400">
+                        -SR {totals.otherDeductions.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-5 text-right font-mono text-emerald-400">
+                        +SR {totals.reimbursements.toLocaleString()}
+                      </td>
                       <td className="px-6 py-5 text-right font-mono text-white">
                         SR {totals.netSalary.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>

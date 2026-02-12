@@ -10,6 +10,7 @@ export interface User {
   role: UserRole;
   avatar?: string;
   grossSalary?: number;
+  company?: string;
 }
 
 export interface MobilityLog {
@@ -24,6 +25,7 @@ export interface AttendanceRecord {
   checkIn: Date;
   checkOut?: Date;
   duration?: number;
+  projectId?: string;
   location?: {
     lat: number;
     lng: number;
@@ -54,6 +56,7 @@ export interface MonthlyReport {
     name: string;
     totalHours: number;
     shiftCount: number;
+    projectId?: string;
   }[];
 }
 

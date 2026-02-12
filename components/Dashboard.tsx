@@ -128,7 +128,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
         await dataService.checkOut(String(activeRecord.id), loc);
         lastMobilityStatus.current = null; // Clear tracking state on checkout
       } else {
-        await dataService.checkIn(user, loc);
+        await dataService.checkIn(user, loc, userProject?.id);
         lastMobilityStatus.current = 'inside'; // Assume starting inside
       }
       await onAction();
