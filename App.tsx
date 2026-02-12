@@ -30,7 +30,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-[100] md:top-0 md:bottom-auto md:flex-col md:w-64 md:h-screen md:border-r md:border-t-0 md:justify-start md:py-8 md:z-50 print:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.05)] md:shadow-none pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-[100] md:top-0 md:bottom-auto md:flex-col md:w-64 md:h-screen md:border-r md:border-t-0 md:justify-start md:py-8 md:z-50 print:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.05)] md:shadow-none pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
       {/* Sidebar Header (Desktop Only) */}
       <div className="hidden md:flex flex-col px-6 mb-10">
         <div className="flex items-center space-x-3 mb-8">
@@ -51,15 +51,16 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
       {/* Navigation Links Container */}
       <div 
         ref={navRef}
+        style={{ touchAction: 'pan-x' }}
         className="flex flex-row md:flex-col overflow-x-auto overflow-y-hidden md:overflow-visible no-scrollbar flex-nowrap items-center md:items-stretch px-2 md:px-3 py-1 md:py-0 w-full"
       >
         {links.map((link) => (
           <Link
             key={link.path}
             to={link.path}
-            className={`flex flex-col md:flex-row items-center justify-center space-y-1 md:space-y-0 md:space-x-4 px-5 py-2.5 md:px-5 md:py-3.5 rounded-2xl transition-all duration-300 flex-shrink-0 md:flex-shrink-1 ${
+            className={`flex flex-col md:flex-row items-center justify-center space-y-1 md:space-y-0 md:space-x-4 px-5 py-2.5 md:px-5 md:py-3.5 rounded-2xl transition-all duration-300 flex-shrink-0 md:flex-shrink-1 min-w-[85px] md:min-w-0 ${
               location.pathname === link.path
-                ? 'text-indigo-600 md:bg-indigo-50/80 font-bold scale-105 md:scale-100 shadow-sm md:shadow-none'
+                ? 'text-indigo-600 md:bg-indigo-50/80 font-bold scale-105 md:scale-100'
                 : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
             }`}
           >
@@ -71,7 +72,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
         {/* Mobile Logout (End of Scroll) */}
         <button
           onClick={onLogout}
-          className="flex flex-col md:hidden items-center justify-center space-y-1 px-5 py-2.5 rounded-2xl text-rose-500 flex-shrink-0"
+          className="flex flex-col md:hidden items-center justify-center space-y-1 px-5 py-2.5 rounded-2xl text-rose-500 flex-shrink-0 min-w-[85px]"
         >
           <i className="fa-solid fa-right-from-bracket text-lg"></i>
           <span className="text-[10px] font-bold whitespace-nowrap tracking-tight">Logout</span>
@@ -116,15 +117,11 @@ const App: React.FC = () => {
       setLoading(false);
     });
 
-    // Handle Service Worker updates
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        // This fires when the service worker controlling this page changes, 
-        // e.g. a new worker has skipped waiting and become the new one.
         window.location.reload();
       });
 
-      // Show toast if update is available
       const handleUpdate = () => setShowUpdateToast(true);
       window.addEventListener('sw-update-available', handleUpdate);
       return () => window.removeEventListener('sw-update-available', handleUpdate);
@@ -174,27 +171,25 @@ const App: React.FC = () => {
               .no-scrollbar::-webkit-scrollbar { display: none; }
               .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
               body { overscroll-behavior-y: none; }
-              /* Safe area support for notched phones */
               @supports (padding-bottom: env(safe-area-inset-bottom)) {
                 nav { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
               }
             `}</style>
             
-            {/* Update Notification Toast */}
             {showUpdateToast && (
-              <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-sm animate-fadeIn">
+              <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-sm animate-fadeIn no-print">
                 <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between border border-white/10">
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center animate-pulse">
                       <i className="fa-solid fa-cloud-arrow-down text-xs"></i>
                     </div>
-                    <p className="text-xs font-bold tracking-tight">New update available</p>
+                    <p className="text-xs font-bold tracking-tight">Application updated</p>
                   </div>
                   <button 
                     onClick={handleUpdateApp}
                     className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
                   >
-                    Refresh Now
+                    Reload
                   </button>
                 </div>
               </div>

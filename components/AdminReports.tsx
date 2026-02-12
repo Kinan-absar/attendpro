@@ -24,6 +24,10 @@ const AdminReports: React.FC = () => {
     }));
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   /* ================= FETCH REPORTS ================= */
   useEffect(() => {
     const fetch = async () => {
@@ -64,7 +68,7 @@ const AdminReports: React.FC = () => {
       <div className="space-y-6">
         <button
           onClick={() => setSelectedEmployee(null)}
-          className="flex items-center text-indigo-600 font-bold hover:text-indigo-800 transition-colors"
+          className="flex items-center text-indigo-600 font-bold hover:text-indigo-800 transition-colors no-print"
         >
           <i className="fa-solid fa-arrow-left mr-2"></i>
           Back to Reports
@@ -80,27 +84,24 @@ const AdminReports: React.FC = () => {
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Payroll & Reports</h1>
-          <p className="text-slate-500">Manage hours, rates, and financial adjustments for all staff</p>
+          <p className="text-slate-500">Manage hours, rates, and financial adjustments</p>
         </div>
         
         <div className="flex flex-wrap items-end gap-4 no-print bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex flex-col">
             <span className="text-[10px] font-black text-indigo-600 uppercase mb-1 ml-1 flex items-center">
-              <i className="fa-solid fa-clock-rotate-left mr-1"></i> Global Required Hours
+              <i className="fa-solid fa-clock-rotate-left mr-1"></i> Std. Hours
             </span>
             <input
               type="number"
               value={globalRequiredHours}
               onChange={(e) => setGlobalRequiredHours(parseFloat(e.target.value) || 0)}
-              className="px-4 py-2 w-32 bg-indigo-50 border border-indigo-100 rounded-xl text-sm font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-              placeholder="e.g. 160"
+              className="px-4 py-2 w-24 bg-indigo-50 border border-indigo-100 rounded-xl text-sm font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
             />
           </div>
 
-          <div className="h-10 w-px bg-slate-200 hidden md:block"></div>
-
           <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">From Date</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">From</span>
             <input
               type="date"
               value={fromDate}
@@ -109,7 +110,7 @@ const AdminReports: React.FC = () => {
             />
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">To Date</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">To</span>
             <input
               type="date"
               value={toDate}
@@ -117,6 +118,14 @@ const AdminReports: React.FC = () => {
               className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
             />
           </div>
+          
+          <button 
+            onClick={handlePrint}
+            className="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2 active:scale-95 transition-all"
+          >
+            <i className="fa-solid fa-print"></i>
+            <span>Print Report</span>
+          </button>
         </div>
       </div>
 
@@ -151,7 +160,7 @@ const AdminReports: React.FC = () => {
           return (
             <div
               key={`${report.year}-${report.month}`}
-              className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-12"
+              className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-12 card"
             >
               <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-6 items-center justify-between">
                 <div className="flex items-center space-x-4">
@@ -189,10 +198,9 @@ const AdminReports: React.FC = () => {
                       <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee</th>
                       <th className="px-4 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Shifts</th>
                       <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Total Hrs</th>
-                      <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Req. Hrs</th>
                       <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Diff</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross Rate (SR)</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">OT Rate (SR)</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest no-print">Gross Rate</th>
+                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest no-print">OT Rate</th>
                       <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest">Deduction</th>
                       <th className="px-4 py-4 text-right font-black text-emerald-400 uppercase text-[10px] tracking-widest">OT Pay</th>
                       <th className="px-6 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest no-print">Actions</th>
@@ -224,46 +232,40 @@ const AdminReports: React.FC = () => {
                             {emp.totalHours.toFixed(2)}
                           </td>
 
-                          <td className="px-4 py-4 text-right">
-                            <span className="font-mono text-slate-400 text-xs">
-                              {globalRequiredHours}
-                            </span>
-                          </td>
-
                           <td className={`px-4 py-4 text-right font-mono font-bold ${
                             diff < 0 ? 'text-rose-500' : diff > 0 ? 'text-emerald-500' : 'text-slate-400'
                           }`}>
                             {diff > 0 ? '+' : ''}{diff.toFixed(2)}
                           </td>
 
-                          <td className="px-4 py-4 text-right">
+                          <td className="px-4 py-4 text-right no-print">
                             <input
                               type="number"
                               step="0.1"
                               value={grossRates[emp.name] ?? ''}
                               onChange={(e) => handleRateChange(setGrossRates, emp.name, parseFloat(e.target.value) || 0)}
-                              className="w-20 text-right px-2 py-1 bg-white border border-indigo-100 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-400 outline-none text-indigo-600 font-bold"
-                              placeholder="0.00"
+                              className="w-16 text-right px-1 py-1 bg-white border border-indigo-100 rounded font-mono text-[10px] outline-none text-indigo-600 font-bold"
+                              placeholder="0.0"
                             />
                           </td>
 
-                          <td className="px-4 py-4 text-right">
+                          <td className="px-4 py-4 text-right no-print">
                             <input
                               type="number"
                               step="0.1"
                               value={overtimeRates[emp.name] ?? ''}
                               onChange={(e) => handleRateChange(setOvertimeRates, emp.name, parseFloat(e.target.value) || 0)}
-                              className="w-20 text-right px-2 py-1 bg-white border border-indigo-100 rounded font-mono text-xs focus:ring-1 focus:ring-indigo-400 outline-none text-indigo-600 font-bold"
-                              placeholder="0.00"
+                              className="w-16 text-right px-1 py-1 bg-white border border-indigo-100 rounded font-mono text-[10px] outline-none text-indigo-600 font-bold"
+                              placeholder="0.0"
                             />
                           </td>
 
                           <td className={`px-4 py-4 text-right font-mono font-black ${deductionAmount > 0 ? 'text-rose-600' : 'text-slate-200'}`}>
-                            {deductionAmount > 0 ? `- SR ${deductionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                            {deductionAmount > 0 ? `-SR ${deductionAmount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : '-'}
                           </td>
 
                           <td className={`px-4 py-4 text-right font-mono font-black ${overtimePay > 0 ? 'text-emerald-600' : 'text-slate-200'}`}>
-                            {overtimePay > 0 ? `+ SR ${overtimePay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                            {overtimePay > 0 ? `+SR ${overtimePay.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : '-'}
                           </td>
 
                           <td className="px-6 py-4 text-right no-print">
@@ -271,7 +273,7 @@ const AdminReports: React.FC = () => {
                               onClick={() => handleViewEmployee(emp.name)}
                               className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 tracking-wider"
                             >
-                              Log Details
+                              Logs
                             </button>
                           </td>
                         </tr>
@@ -282,12 +284,13 @@ const AdminReports: React.FC = () => {
                       <td className="px-6 py-5 rounded-bl-3xl">TOTALS</td>
                       <td className="px-4 py-5 text-center">{totals.shifts}</td>
                       <td className="px-4 py-5 text-right font-mono">{totals.hours.toFixed(2)}</td>
-                      <td colSpan={4}></td>
+                      <td colSpan={1} className="no-print md:table-cell hidden"></td>
+                      <td colSpan={2} className="no-print"></td>
                       <td className="px-4 py-5 text-right font-mono text-rose-400">
-                        -SR {totals.deductions.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        -SR {totals.deductions.toLocaleString()}
                       </td>
                       <td className="px-4 py-5 text-right font-mono text-emerald-400">
-                        +SR {totals.overtime.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        +SR {totals.overtime.toLocaleString()}
                       </td>
                       <td className="px-6 py-5 rounded-br-3xl no-print"></td>
                     </tr>
