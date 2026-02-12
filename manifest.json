@@ -1,12 +1,13 @@
+
 {
-  "id": "com.attendancepro.app.v9",
+  "id": "attendance-pro-app-stable-v1",
   "name": "Attendance Pro Workforce",
-  "short_name": "Attended",
+  "short_name": "AttendancePro",
   "description": "Professional Workforce Attendance Tracking",
-  "start_url": "./",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#f8fafc",
   "theme_color": "#4f46e5",
   "icons": [
@@ -22,5 +23,7 @@
       "type": "image/svg+xml",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "categories": ["business", "productivity"],
+  "screenshots": []
 }

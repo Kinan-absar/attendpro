@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import { dataService } from './services/dataService';
 import { AttendanceRecord, User } from './types';
@@ -15,6 +15,8 @@ const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDO
 
 const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
   const location = useLocation();
+  const navRef = useRef<HTMLDivElement>(null);
+
   const links = [
     { path: '/', label: 'Home', icon: 'fa-house' },
     { path: '/history', label: 'My Logs', icon: 'fa-list' },
@@ -28,56 +30,64 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex overflow-x-auto md:overflow-visible no-scrollbar md:top-0 md:bottom-auto md:flex-col md:w-64 md:h-screen md:border-r md:border-t-0 md:justify-start md:space-y-2 md:py-8 md:z-50 print:hidden shadow-lg md:shadow-none">
-      <div className="hidden md:flex flex-col px-4 mb-8">
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
-            <i className="fa-solid fa-clock"></i>
+    <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-[100] md:top-0 md:bottom-auto md:flex-col md:w-64 md:h-screen md:border-r md:border-t-0 md:justify-start md:py-8 md:z-50 print:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.05)] md:shadow-none pb-[env(safe-area-inset-bottom)]">
+      {/* Sidebar Header (Desktop Only) */}
+      <div className="hidden md:flex flex-col px-6 mb-10">
+        <div className="flex items-center space-x-3 mb-8">
+          <div className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+            <i className="fa-solid fa-clock text-xl"></i>
           </div>
-          <span className="font-bold text-xl tracking-tight">AttendancePro</span>
+          <span className="font-black text-2xl tracking-tighter text-slate-900">AttendancePro</span>
         </div>
-        <div className="p-3 bg-slate-50 rounded-2xl flex items-center space-x-3">
-          <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}`} className="w-8 h-8 rounded-full border border-white shadow-sm" alt="U" />
+        <div className="p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 flex items-center space-x-3">
+          <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}`} className="w-9 h-9 rounded-full border-2 border-white shadow-sm" alt="U" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-900 truncate">{user.name || 'User'}</p>
-            <p className="text-[10px] text-slate-400 capitalize">{user.role || 'Employee'}</p>
+            <p className="text-xs font-black text-slate-900 truncate">{user.name || 'User'}</p>
+            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{user.role || 'Employee'}</p>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-1 md:flex-col md:justify-start md:space-y-1 px-2 py-2 md:px-0 md:py-0 min-w-max md:min-w-0">
+      {/* Navigation Links Container */}
+      <div 
+        ref={navRef}
+        className="flex flex-row md:flex-col overflow-x-auto overflow-y-hidden md:overflow-visible no-scrollbar flex-nowrap items-center md:items-stretch px-2 md:px-3 py-1 md:py-0 w-full"
+      >
         {links.map((link) => (
           <Link
             key={link.path}
             to={link.path}
-            className={`flex flex-col md:flex-row items-center justify-center space-y-1 md:space-y-0 md:space-x-4 px-4 py-2 md:px-4 md:py-2 rounded-xl transition-all duration-200 min-w-[72px] md:min-w-0 ${
+            className={`flex flex-col md:flex-row items-center justify-center space-y-1 md:space-y-0 md:space-x-4 px-5 py-2.5 md:px-5 md:py-3.5 rounded-2xl transition-all duration-300 flex-shrink-0 md:flex-shrink-1 ${
               location.pathname === link.path
-                ? 'text-indigo-600 md:bg-indigo-50 font-semibold'
-                : 'text-slate-500 hover:text-indigo-600 hover:bg-slate-50'
+                ? 'text-indigo-600 md:bg-indigo-50/80 font-bold scale-105 md:scale-100 shadow-sm md:shadow-none'
+                : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
             }`}
           >
             <i className={`fa-solid ${link.icon} text-lg md:text-xl`}></i>
-            <span className="text-[9px] md:text-base font-medium whitespace-nowrap">{link.label}</span>
+            <span className="text-[10px] md:text-[15px] font-bold md:font-semibold whitespace-nowrap tracking-tight">{link.label}</span>
           </Link>
         ))}
         
-        {/* Logout button on mobile positioned at end of scrollable list */}
+        {/* Mobile Logout (End of Scroll) */}
         <button
           onClick={onLogout}
-          className="flex flex-col md:hidden items-center justify-center space-y-1 px-4 py-2 rounded-xl text-rose-500 min-w-[72px]"
+          className="flex flex-col md:hidden items-center justify-center space-y-1 px-5 py-2.5 rounded-2xl text-rose-500 flex-shrink-0"
         >
           <i className="fa-solid fa-right-from-bracket text-lg"></i>
-          <span className="text-[9px] font-medium whitespace-nowrap">Logout</span>
+          <span className="text-[10px] font-bold whitespace-nowrap tracking-tight">Logout</span>
         </button>
       </div>
 
-      <button
-        onClick={onLogout}
-        className="hidden md:flex flex-row items-center space-x-4 px-4 py-2 rounded-xl text-rose-500 hover:bg-rose-50 transition-all md:mt-auto mx-4"
-      >
-        <i className="fa-solid fa-right-from-bracket text-xl"></i>
-        <span className="text-base font-medium">Logout</span>
-      </button>
+      {/* Desktop Logout (Bottom) */}
+      <div className="hidden md:block mt-auto px-6 pt-4 border-t border-slate-50">
+        <button
+          onClick={onLogout}
+          className="w-full flex items-center space-x-4 px-5 py-3.5 rounded-2xl text-rose-500 hover:bg-rose-50 transition-all font-bold"
+        >
+          <i className="fa-solid fa-right-from-bracket text-xl"></i>
+          <span className="text-[15px] tracking-tight">Sign Out</span>
+        </button>
+      </div>
     </nav>
   );
 };
@@ -86,6 +96,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [history, setHistory] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showUpdateToast, setShowUpdateToast] = useState(false);
 
   const refreshData = useCallback(async () => {
     if (!user) return;
@@ -104,6 +115,20 @@ const App: React.FC = () => {
       setUser(u);
       setLoading(false);
     });
+
+    // Handle Service Worker updates
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        // This fires when the service worker controlling this page changes, 
+        // e.g. a new worker has skipped waiting and become the new one.
+        window.location.reload();
+      });
+
+      // Show toast if update is available
+      const handleUpdate = () => setShowUpdateToast(true);
+      window.addEventListener('sw-update-available', handleUpdate);
+      return () => window.removeEventListener('sw-update-available', handleUpdate);
+    }
   }, []);
 
   useEffect(() => {
@@ -113,6 +138,18 @@ const App: React.FC = () => {
   const handleLogout = () => {
     dataService.logout();
     setUser(null);
+  };
+
+  const handleUpdateApp = () => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (reg && reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        } else {
+          window.location.reload();
+        }
+      });
+    }
   };
 
   if (loading) {
@@ -129,17 +166,43 @@ const App: React.FC = () => {
 
   return (
     <HashRouter>
-      <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
+      <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-x-hidden">
         <Navigation user={user} onLogout={handleLogout} />
-        <main className="flex-1 pb-24 md:pb-8 md:pl-64">
+        <main className="flex-1 pb-24 md:pb-8 md:pl-64 min-w-0">
           <div className="max-w-5xl mx-auto px-4 pt-6 md:pt-12">
             <style>{`
               .no-scrollbar::-webkit-scrollbar { display: none; }
               .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+              body { overscroll-behavior-y: none; }
+              /* Safe area support for notched phones */
+              @supports (padding-bottom: env(safe-area-inset-bottom)) {
+                nav { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
+              }
             `}</style>
+            
+            {/* Update Notification Toast */}
+            {showUpdateToast && (
+              <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-sm animate-fadeIn">
+                <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between border border-white/10">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center animate-pulse">
+                      <i className="fa-solid fa-cloud-arrow-down text-xs"></i>
+                    </div>
+                    <p className="text-xs font-bold tracking-tight">New update available</p>
+                  </div>
+                  <button 
+                    onClick={handleUpdateApp}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+                  >
+                    Refresh Now
+                  </button>
+                </div>
+              </div>
+            )}
+
             <Routes>
               <Route path="/" element={<Dashboard user={user} history={history} onAction={refreshData} />} />
-              <Route path="/history" element={<History history={history} user={user} />} />
+              <Route path="/history" element={<History history={history} user={user} onRefresh={refreshData} />} />
               {user.role === 'admin' && (
                 <>
                   <Route path="/admin" element={<AdminReports />} />
