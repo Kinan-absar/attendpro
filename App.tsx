@@ -10,6 +10,7 @@ import Login from './components/Login';
 import ActiveEmployees from './components/ActiveEmployees';
 import AdminLocationSettings from './components/AdminLocationSettings';
 import AdminUserManagement from './components/AdminUserManagement';
+import AdminShiftManagement from './components/AdminShiftManagement';
 
 const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDOM as any;
 
@@ -26,6 +27,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
     links.push({ path: '/admin', label: 'Reports', icon: 'fa-chart-pie' });
     links.push({ path: '/admin/active', label: 'Active', icon: 'fa-user-clock' });
     links.push({ path: '/admin/users', label: 'Staff', icon: 'fa-users-gear' });
+    links.push({ path: '/admin/shifts', label: 'Schedules', icon: 'fa-calendar-day' });
     links.push({ path: '/admin/location', label: 'Worksite', icon: 'fa-location-dot' });
   }
 
@@ -48,7 +50,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
         </div>
       </div>
 
-      {/* Navigation Links Container - iPhone Horizontal Scroll Fix */}
+      {/* Navigation Links Container */}
       <div 
         ref={navRef}
         className="flex flex-row md:flex-col overflow-x-auto overflow-y-hidden md:overflow-y-visible no-scrollbar flex-nowrap items-center md:items-stretch px-2 md:px-3 py-1 md:py-0 w-full"
@@ -72,7 +74,6 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
           </Link>
         ))}
         
-        {/* Mobile Logout (End of Scroll) */}
         <button
           onClick={onLogout}
           className="flex flex-col md:hidden items-center justify-center space-y-1 px-4 py-2.5 rounded-2xl text-rose-500 flex-shrink-0 min-w-[80px]"
@@ -121,10 +122,6 @@ const App: React.FC = () => {
     });
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        window.location.reload();
-      });
-
       const handleUpdate = () => setShowUpdateToast(true);
       window.addEventListener('sw-update-available', handleUpdate);
       return () => window.removeEventListener('sw-update-available', handleUpdate);
@@ -141,15 +138,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateApp = () => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration().then(reg => {
-        if (reg && reg.waiting) {
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        } else {
-          window.location.reload();
-        }
-      });
-    }
+    window.location.reload();
   };
 
   if (loading) {
@@ -170,17 +159,6 @@ const App: React.FC = () => {
         <Navigation user={user} onLogout={handleLogout} />
         <main className="flex-1 pb-24 md:pb-8 md:pl-64 min-w-0 md:min-h-screen">
           <div className="max-w-5xl mx-auto px-4 pt-6 md:pt-12">
-            <style>{`
-              .no-scrollbar::-webkit-scrollbar { display: none; }
-              .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-              @media (max-width: 768px) {
-                body { overscroll-behavior-y: none; }
-              }
-              @supports (padding-bottom: env(safe-area-inset-bottom)) {
-                nav { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
-              }
-            `}</style>
-            
             {showUpdateToast && (
               <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-sm animate-fadeIn no-print update-toast">
                 <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between border border-white/10">
@@ -190,12 +168,7 @@ const App: React.FC = () => {
                     </div>
                     <p className="text-xs font-bold tracking-tight">App Update Found</p>
                   </div>
-                  <button 
-                    onClick={handleUpdateApp}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
-                  >
-                    Reload
-                  </button>
+                  <button onClick={handleUpdateApp} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors">Reload</button>
                 </div>
               </div>
             )}
@@ -209,6 +182,7 @@ const App: React.FC = () => {
                   <Route path="/admin/active" element={<ActiveEmployees />} />
                   <Route path="/admin/location" element={<AdminLocationSettings />} />
                   <Route path="/admin/users" element={<AdminUserManagement />} />
+                  <Route path="/admin/shifts" element={<AdminShiftManagement />} />
                 </>
               )}
               <Route path="*" element={<Navigate to="/" replace />} />

@@ -12,9 +12,8 @@ import {
   updateDoc,
   setDoc,
   deleteDoc,
-  FirestoreError,
   Timestamp,
-  arrayUnion
+  writeBatch
 } from 'firebase/firestore';
 import {
   signInWithEmailAndPassword,
@@ -24,117 +23,66 @@ import {
   User as FirebaseUser
 } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { AttendanceRecord, User, MonthlyReport, Project, MobilityLog } from '../types';
+import { AttendanceRecord, User, MonthlyReport, Project, ShiftSchedule } from '../types';
 
 const USERS = 'users';
 const ATTENDANCE = 'attendance';
 const PROJECTS = 'projects';
+const SHIFTS = 'shifts';
+const SETTINGS = 'settings';
 
 class DataService {
   private currentUser: User | null = null;
-  private authInitialized: boolean = false;
 
   getCurrentUser() {
     return this.currentUser;
   }
 
+  private ensureAdmin() {
+    if (!this.currentUser || this.currentUser.role !== 'admin') {
+      throw new Error("PERMISSION_DENIED: Admin privileges required.");
+    }
+  }
+
+  private ensureAuth() {
+    if (!this.currentUser) {
+      throw new Error("UNAUTHORIZED: Please sign in.");
+    }
+  }
+
   /* 🔐 AUTHENTICATION */
   async login(email: string, password: string): Promise<User> {
-    try {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      const snap = await getDoc(doc(db, USERS, cred.user.uid));
-      if (!snap.exists()) throw new Error('User profile missing in database.');
-      const data = snap.data();
-      const user: User = {
-        id: cred.user.uid,
-        email: cred.user.email || '',
-        name: data.name || 'Unknown User',
-        employeeId: data.employeeId || 'N/A',
-        department: data.department || 'General',
-        role: data.role || 'employee',
-        avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
-        grossSalary: data.grossSalary || 0,
-        company: data.company || 'Absar Alomran',
-        standardHours: data.standardHours ?? 225, // Enforce default on login
-        disableOvertime: data.disableOvertime ?? true, // Enforce default on login
-        disableDeductions: data.disableDeductions ?? false
-      };
-      this.currentUser = user;
-      return user;
-    } catch (error) {
-      console.error("Login failed:", error);
-      throw error;
-    }
+    const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+    const snap = await getDoc(doc(db, USERS, cred.user.uid));
+    if (!snap.exists()) throw new Error('User profile missing.');
+    const data = snap.data();
+    const user: User = { id: cred.user.uid, email: cred.user.email || '', ...data } as User;
+    this.currentUser = user;
+    return user;
   }
 
   async signup(email: string, password: string, name: string, employeeId: string, department: string): Promise<User> {
-    let cred;
-    try {
-      cred = await createUserWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-      throw error;
-    }
-
-    try {
-      const userId = cred.user.uid;
-      const userData = {
-        name: name || '',
-        email: email || '',
-        employeeId: employeeId || '',
-        department: department || '',
-        role: 'employee',
-        grossSalary: 0,
-        company: 'Absar Alomran',
-        standardHours: 225,
-        disableOvertime: true,
-        disableDeductions: false,
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=random`
-      };
-
-      await setDoc(doc(db, USERS, userId), userData);
-      const user: User = { id: userId, ...userData } as User;
-      this.currentUser = user;
-      return user;
-    } catch (error) {
-      if (cred?.user) await signOut(auth);
-      throw error;
-    }
+    const cred = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+    const userData = {
+      name, email, employeeId, department,
+      role: 'employee', grossSalary: 0, company: 'Absar Alomran',
+      standardHours: 0, disableOvertime: true, disableDeductions: false,
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+    };
+    await setDoc(doc(db, USERS, cred.user.uid), userData);
+    const user = { id: cred.user.uid, ...userData } as User;
+    this.currentUser = user;
+    return user;
   }
 
   initAuth(onUser: (user: User | null) => void) {
-    onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      this.authInitialized = true;
-      if (!firebaseUser) {
-        this.currentUser = null;
-        onUser(null);
-        return;
-      }
-      try {
-        const snap = await getDoc(doc(db, USERS, firebaseUser.uid));
-        if (!snap.exists()) {
-          onUser(null);
-          return;
-        }
-        const data = snap.data();
-        const user: User = {
-          id: firebaseUser.uid,
-          email: firebaseUser.email || '',
-          name: data.name || 'Unknown User',
-          employeeId: data.employeeId || 'N/A',
-          department: data.department || 'General',
-          role: data.role || 'employee',
-          avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
-          grossSalary: data.grossSalary || 0,
-          company: data.company || 'Absar Alomran',
-          standardHours: data.standardHours ?? 225,
-          disableOvertime: data.disableOvertime ?? true,
-          disableDeductions: data.disableDeductions ?? false
-        };
-        this.currentUser = user;
-        onUser(user);
-      } catch (error) {
-        onUser(null);
-      }
+    onAuthStateChanged(auth, async (fbUser) => {
+      if (!fbUser) { this.currentUser = null; onUser(null); return; }
+      const snap = await getDoc(doc(db, USERS, fbUser.uid));
+      if (!snap.exists()) { onUser(null); return; }
+      this.currentUser = { id: fbUser.uid, email: fbUser.email || '', ...snap.data() } as User;
+      await this.processAutoClosures(fbUser.uid);
+      onUser(this.currentUser);
     });
   }
 
@@ -143,226 +91,252 @@ class DataService {
     this.currentUser = null;
   }
 
+  /* ⚙️ GLOBAL SETTINGS - RESOLVING PERSISTENCE & PERMISSION ERRORS */
+  async getGlobalSettings(): Promise<{ standardHours: number }> {
+    try {
+      const snap = await getDoc(doc(db, SETTINGS, 'global_config'));
+      if (snap.exists()) {
+        const data = snap.data();
+        return { standardHours: Number(data.standardHours) || 225 };
+      }
+    } catch (e) {
+      console.warn("Settings fetch failed, using default 225.");
+    }
+    return { standardHours: 225 };
+  }
+
+  async saveGlobalSettings(settings: { standardHours: number }) {
+    this.ensureAdmin();
+    const ref = doc(db, SETTINGS, 'global_config');
+    // We use setDoc with merge: true to ensure the document is created or updated reliably
+    await setDoc(ref, {
+      standardHours: Number(settings.standardHours),
+      updatedAt: serverTimestamp(),
+      updatedBy: this.currentUser?.id
+    }, { merge: true });
+  }
+
+  /* 🕒 AUTO-CLOSE ENGINE */
+  async processAutoClosures(userId: string) {
+    const q = query(collection(db, ATTENDANCE), where('userId', '==', userId), where('checkOut', '==', null));
+    const snap = await getDocs(q);
+    const now = new Date();
+    const batch = writeBatch(db);
+    let count = 0;
+    snap.docs.forEach(d => {
+      const data = d.data();
+      const checkIn = this.convertToDate(data.checkIn);
+      if (!checkIn) return;
+      if (checkIn.toDateString() !== now.toDateString() && checkIn < now) {
+        const autoCloseTime = new Date(checkIn);
+        autoCloseTime.setHours(23, 59, 59, 999);
+        const duration = (autoCloseTime.getTime() - checkIn.getTime()) / 60000;
+        batch.update(d.ref, {
+          checkOut: Timestamp.fromDate(autoCloseTime),
+          duration: duration > 0 ? duration : 0,
+          autoClosed: true,
+          needsReview: true
+        });
+        count++;
+      }
+    });
+    if (count > 0) await batch.commit();
+  }
+
   /* ⏱️ ATTENDANCE ACTIONS */
   async checkIn(user: User, location?: { lat: number, lng: number, accuracy?: number }, projectId?: string) {
+    this.ensureAuth();
     await addDoc(collection(db, ATTENDANCE), {
       userId: user.id,
       userName: user.name,
       checkIn: serverTimestamp(),
       projectId: projectId || null,
       location: location || null,
-      mobilityLogs: [{
-        timestamp: new Date(),
-        status: 'inside'
-      }]
+      needsReview: false
     });
   }
 
-  async checkOut(recordId: string, location?: { lat: number, lng: number, accuracy?: number }) {
+  async checkOut(recordId: string, location?: { lat: number, lng: number, accuracy?: number }, outsideGeofence: boolean = false) {
+    this.ensureAuth();
+    const snap = await getDoc(doc(db, ATTENDANCE, recordId));
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const checkIn = this.convertToDate(data.checkIn) || new Date();
+    const checkOut = new Date();
+    const duration = (checkOut.getTime() - checkIn.getTime()) / 60000;
     await updateDoc(doc(db, ATTENDANCE, recordId), {
       checkOut: serverTimestamp(),
-      checkOutLocation: location || null
-    });
-  }
-
-  /* 📍 TRACKER ACTIONS (AUTO-LOG ENTRY/EXIT) */
-  async logMobilityEvent(recordId: string, status: 'inside' | 'outside') {
-    try {
-      await updateDoc(doc(db, ATTENDANCE, recordId), {
-        mobilityLogs: arrayUnion({
-          timestamp: new Date(),
-          status
-        })
-      });
-    } catch (error) {
-      console.error("Mobility log failed:", error);
-    }
-  }
-
-  /* 🛠️ ADMIN CORRECTIONS */
-  async updateAttendanceRecord(recordId: string, updates: { checkIn: Date, checkOut?: Date }) {
-    const duration = updates.checkOut 
-      ? (updates.checkOut.getTime() - updates.checkIn.getTime()) / 60000 
-      : 0;
-
-    await updateDoc(doc(db, ATTENDANCE, recordId), {
-      checkIn: Timestamp.fromDate(updates.checkIn),
-      checkOut: updates.checkOut ? Timestamp.fromDate(updates.checkOut) : null,
-      duration: duration > 0 ? duration : 0
+      checkOutLocation: location || null,
+      duration: duration > 0 ? duration : 0,
+      needsReview: outsideGeofence 
     });
   }
 
   private convertToDate(val: any): Date | undefined {
     if (val instanceof Timestamp) return val.toDate();
     if (val?.seconds) return new Date(val.seconds * 1000);
-    if (val instanceof Date) return val;
-    if (typeof val === 'string' || typeof val === 'number') return new Date(val);
-    return undefined;
+    return val instanceof Date ? val : undefined;
   }
 
   async getAttendanceHistory(userId: string): Promise<AttendanceRecord[]> {
-    const q = query(
-      collection(db, ATTENDANCE),
-      where('userId', '==', userId),
-      orderBy('checkIn', 'desc')
-    );
+    this.ensureAuth();
+    const q = query(collection(db, ATTENDANCE), where('userId', '==', userId), orderBy('checkIn', 'desc'));
     const snap = await getDocs(q);
     return snap.docs.map(d => {
       const r = d.data();
-      const checkIn = this.convertToDate(r.checkIn);
-      const checkOut = r.checkOut ? this.convertToDate(r.checkOut) : undefined;
-      return {
-        id: d.id,
-        userId: r.userId || '',
-        userName: r.userName || 'Unknown',
-        checkIn: checkIn || new Date(0),
-        checkOut,
-        projectId: r.projectId,
-        location: r.location,
-        mobilityLogs: (r.mobilityLogs || []).map((l: any) => ({
-          ...l,
-          timestamp: this.convertToDate(l.timestamp) || new Date()
-        })),
-        duration: r.duration || (checkIn && checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60000 : undefined)
-      };
+      const checkIn = this.convertToDate(r.checkIn) || new Date(0);
+      const checkOut = this.convertToDate(r.checkOut);
+      
+      // FIX: Calculate duration if missing or invalid
+      let duration = Number(r.duration);
+      if ((!duration || isNaN(duration)) && checkOut) {
+        duration = (checkOut.getTime() - checkIn.getTime()) / 60000;
+      }
+
+      return { id: d.id, ...r, checkIn, checkOut, duration } as AttendanceRecord;
     });
   }
 
+  /* 🏗️ PROJECT ACTIONS */
   async getProjects(userId?: string): Promise<Project[]> {
+    this.ensureAuth();
     let q = userId 
       ? query(collection(db, PROJECTS), where('assignedUserIds', 'array-contains', userId))
       : query(collection(db, PROJECTS));
     const snap = await getDocs(q);
-    return snap.docs.map(d => ({
-      id: d.id,
-      ...(d.data() as Omit<Project, 'id'>)
-    }));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Project));
   }
 
   async saveProject(project: Partial<Project>) {
-    const data = { ...project, assignedUserIds: project.assignedUserIds || [] };
+    this.ensureAdmin();
     if (project.id) {
-      const { id, ...updateData } = data;
-      await updateDoc(doc(db, PROJECTS, id), updateData);
+      const { id, ...data } = project;
+      await updateDoc(doc(db, PROJECTS, id), data);
     } else {
-      await addDoc(collection(db, PROJECTS), data);
+      await addDoc(collection(db, PROJECTS), project);
     }
   }
 
-  async deleteProject(projectId: string) {
-    await deleteDoc(doc(db, PROJECTS, projectId));
+  async deleteProject(id: string) {
+    this.ensureAdmin();
+    await deleteDoc(doc(db, PROJECTS, id));
   }
 
+  /* 👥 ADMIN TOOLS */
   async getUsers(): Promise<User[]> {
+    this.ensureAdmin();
     const snap = await getDocs(collection(db, USERS));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
+  }
+
+  async getAllAttendance(): Promise<AttendanceRecord[]> {
+    this.ensureAdmin();
+    const snap = await getDocs(collection(db, ATTENDANCE));
     return snap.docs.map(d => {
-      const data = d.data();
-      return {
-        id: d.id,
-        email: data.email || '',
-        name: data.name || '',
-        employeeId: data.employeeId || '',
-        department: data.department || '',
-        role: data.role || 'employee',
-        avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}`,
-        grossSalary: data.grossSalary || 0,
-        company: data.company || 'Absar Alomran',
-        standardHours: data.standardHours ?? 225, // Fallback for Staff List UI
-        disableOvertime: data.disableOvertime ?? true, // Fallback for Staff List UI
-        disableDeductions: data.disableDeductions ?? false
-      };
+      const r = d.data();
+      const cin = this.convertToDate(r.checkIn);
+      const cout = this.convertToDate(r.checkOut);
+      let duration = Number(r.duration);
+      if ((!duration || isNaN(duration)) && cin && cout) {
+        duration = (cout.getTime() - cin.getTime()) / 60000;
+      }
+      return { id: d.id, ...r, checkIn: cin, checkOut: cout, duration } as AttendanceRecord;
     });
   }
 
-  async saveUser(user: Partial<User>) {
-    if (this.currentUser?.role !== 'admin') throw new Error("Unauthorized");
-    const userId = user.id || doc(collection(db, USERS)).id;
-    const data = {
-      name: user.name?.trim(),
-      email: user.email?.trim().toLowerCase(),
-      employeeId: user.employeeId?.trim(),
-      department: (user.department || '').trim(),
-      role: user.role || 'employee',
-      grossSalary: user.grossSalary || 0,
-      company: user.company || 'Absar Alomran',
-      standardHours: user.standardHours ?? 225, 
-      disableOvertime: user.disableOvertime ?? true, 
-      disableDeductions: user.disableDeductions ?? false,
-      avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name?.trim() || 'U')}&background=random`
-    };
-    await setDoc(doc(db, USERS, userId), data, { merge: true });
-    return { id: userId, ...data };
-  }
-
-  async deleteUser(userId: string) {
-    if (this.currentUser?.role !== 'admin') throw new Error("Unauthorized");
-    await deleteDoc(doc(db, USERS, userId));
-  }
-
   async getMonthlyReports(from?: Date, to?: Date): Promise<MonthlyReport[]> {
-    if (this.currentUser?.role !== 'admin') return [];
-    const attendance = await getDocs(collection(db, ATTENDANCE));
+    this.ensureAdmin();
+    const snap = await getDocs(collection(db, ATTENDANCE));
     const users = await this.getUsers();
     const grouped: Record<string, MonthlyReport> = {};
 
-    attendance.docs.forEach(docSnap => {
-      const r = docSnap.data();
-      const checkIn = this.convertToDate(r.checkIn);
-      const checkOut = this.convertToDate(r.checkOut);
-      if (!checkIn || !checkOut) return;
-      
-      if (from && checkIn < from) return;
-      if (to && checkIn > to) return;
-      
-      let year = checkIn.getFullYear();
-      let month = checkIn.getMonth();
-      if (checkIn.getDate() >= 26) {
-        month += 1;
-        if (month === 12) { month = 0; year += 1; }
-      }
-      const key = `${year}-${month}`;
-      grouped[key] ??= { 
-        month: new Date(year, month).toLocaleString('default', { month: 'long' }), 
-        year, 
-        employees: [] 
-      };
+    snap.docs.forEach(d => {
+      const r = d.data();
+      const cin = this.convertToDate(r.checkIn);
+      const cout = this.convertToDate(r.checkOut);
+      if (!cin || !cout) return;
+      if (from && cin < from) return;
+      if (to && cin > to) return;
 
+      let month = cin.getMonth();
+      let year = cin.getFullYear();
+      if (cin.getDate() >= 26) { month++; if (month === 12) { month = 0; year++; } }
+      const key = `${year}-${month}`;
+      grouped[key] ??= { month: new Date(year, month).toLocaleString('default', { month: 'long' }), year, employees: [] };
       const user = users.find(u => u.id === r.userId);
       if (!user) return;
-      
       const pId = r.projectId || 'none';
-      
       let emp = grouped[key].employees.find(e => e.name === user.name && e.projectId === pId);
       if (!emp) {
-        emp = { name: user.name, shiftCount: 0, totalHours: 0, projectId: pId };
+        emp = { name: user.name, totalHours: 0, shiftCount: 0, projectId: pId, flaggedCount: 0 };
         grouped[key].employees.push(emp);
       }
       emp.shiftCount++;
-      emp.totalHours += (checkOut.getTime() - checkIn.getTime()) / 3600000;
+      emp.totalHours += (cout.getTime() - cin.getTime()) / 3600000;
+      if (r.needsReview) emp.flaggedCount++;
     });
     return Object.values(grouped);
   }
 
-  async getAllAttendance(): Promise<AttendanceRecord[]> {
-    if (this.currentUser?.role !== 'admin') return [];
-    const snap = await getDocs(collection(db, ATTENDANCE));
-    return snap.docs.map(d => {
-      const r = d.data();
-      const checkIn = this.convertToDate(r.checkIn);
-      const checkOut = r.checkOut ? this.convertToDate(r.checkOut) : undefined;
-      return {
-        id: d.id,
-        userId: r.userId || '',
-        userName: r.userName || 'Unknown',
-        checkIn: checkIn || new Date(0),
-        checkOut,
-        projectId: r.projectId,
-        duration: r.duration || (checkIn && checkOut ? (checkOut.getTime() - checkIn.getTime()) / 60000 : undefined),
-        mobilityLogs: (r.mobilityLogs || []).map((l: any) => ({
-          ...l,
-          timestamp: this.convertToDate(l.timestamp) || new Date()
-        }))
-      };
+  async saveUser(user: Partial<User>) {
+    this.ensureAdmin();
+    const sanitizedUser = { 
+      ...user, 
+      grossSalary: Number(user.grossSalary || 0), 
+      standardHours: Number(user.standardHours || 0)
+    };
+    await setDoc(doc(db, USERS, user.id!), sanitizedUser, { merge: true });
+  }
+
+  async bulkUpdateDefaultRules() {
+    this.ensureAdmin();
+    const snap = await getDocs(collection(db, USERS));
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => {
+      const data = d.data();
+      batch.update(d.ref, {
+        disableOvertime: data.disableOvertime ?? true,
+        disableDeductions: data.disableDeductions ?? false,
+        standardHours: Number(data.standardHours || 0),
+        grossSalary: Number(data.grossSalary || 0),
+        company: data.company ?? 'Absar Alomran'
+      });
+    });
+    await batch.commit();
+  }
+
+  async deleteUser(id: string) {
+    this.ensureAdmin();
+    await deleteDoc(doc(db, USERS, id));
+  }
+
+  async getShiftSchedules(): Promise<ShiftSchedule[]> {
+    const snap = await getDocs(collection(db, SHIFTS));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as ShiftSchedule));
+  }
+
+  async saveShiftSchedule(shift: Partial<ShiftSchedule>) {
+    this.ensureAdmin();
+    if (shift.id) {
+      await updateDoc(doc(db, SHIFTS, shift.id), shift);
+    } else {
+      await addDoc(collection(db, SHIFTS), shift);
+    }
+  }
+
+  async deleteShiftSchedule(id: string) {
+    this.ensureAdmin();
+    await deleteDoc(doc(db, SHIFTS, id));
+  }
+
+  async updateAttendanceRecord(id: string, updates: { checkIn: Date, checkOut?: Date }) {
+    this.ensureAdmin();
+    const duration = updates.checkOut ? (updates.checkOut.getTime() - updates.checkIn.getTime()) / 60000 : 0;
+    await updateDoc(doc(db, ATTENDANCE, id), {
+      checkIn: Timestamp.fromDate(updates.checkIn),
+      checkOut: updates.checkOut ? Timestamp.fromDate(updates.checkOut) : null,
+      duration: duration > 0 ? duration : 0,
+      needsReview: false 
     });
   }
 
@@ -370,8 +344,39 @@ class DataService {
     return `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    // Determine if the request user is an admin
+    function isAdmin() {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /users/{id} {
+      allow read: if request.auth != null && (request.auth.uid == id || isAdmin());
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (request.auth.uid == id || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /attendance/{id} {
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /projects/{id} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    match /shifts/{id} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    match /settings/{id} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
     }
   }
 }`;

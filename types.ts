@@ -11,10 +11,9 @@ export interface User {
   avatar?: string;
   grossSalary?: number;
   company?: string;
-  standardHours?: number; // Per-employee standard hours override
-  fixedPayroll?: boolean; // Deprecated: use granular toggles instead
-  disableOvertime?: boolean; // If true, do not calculate overtime pay
-  disableDeductions?: boolean; // If true, do not calculate non-attendance deductions
+  standardHours?: number; 
+  disableOvertime?: boolean;
+  disableDeductions?: boolean;
 }
 
 export interface MobilityLog {
@@ -35,13 +34,20 @@ export interface AttendanceRecord {
     lng: number;
     accuracy?: number;
   };
+  checkOutLocation?: {
+    lat: number;
+    lng: number;
+    accuracy?: number;
+  };
+  autoClosed?: boolean;
+  needsReview?: boolean;
   mobilityLogs?: MobilityLog[];
 }
 
 export interface Geofence {
   lat: number;
   lng: number;
-  radius: number; // in meters
+  radius: number;
   enabled: boolean;
 }
 
@@ -49,6 +55,15 @@ export interface Project {
   id: string;
   name: string;
   geofence: Geofence;
+  assignedUserIds: string[];
+}
+
+export interface ShiftSchedule {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  workingDays: string[];
   assignedUserIds: string[];
 }
 
@@ -61,6 +76,7 @@ export interface MonthlyReport {
     totalHours: number;
     shiftCount: number;
     projectId?: string;
+    flaggedCount: number; // Track shifts needing review per employee
   }[];
 }
 

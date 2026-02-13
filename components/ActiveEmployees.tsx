@@ -12,6 +12,7 @@ const ActiveEmployees: React.FC = () => {
   const [active, setActive] = useState<ActiveShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000); 
@@ -20,17 +21,16 @@ const ActiveEmployees: React.FC = () => {
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     try {
       const [users, allAttendance] = await Promise.all([
         dataService.getUsers(),
         dataService.getAllAttendance()
       ]);
       
-      // STRICT FILTER: Only records with a real timestamp and NO checkOut field.
-      // Firestore sometimes stores null or defaults which convertToDate must handle.
       const currentActiveRecords = allAttendance.filter(r => 
         r.checkIn && 
-        r.checkIn.getTime() > 1000000 && // Ignore 1970/Epoch fallbacks
+        r.checkIn.getTime() > 1000000 && 
         !r.checkOut
       );
       
@@ -48,8 +48,13 @@ const ActiveEmployees: React.FC = () => {
       });
 
       setActive(activeShifts);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to load active employees", err);
+      if (err.message?.includes('PERMISSION_DENIED') || err.code === 'permission-denied') {
+        setError("DATABASE_RESTRICTED: You don't have permission to view staff logs. Ensure your user profile is set to 'admin' and Firestore Rules are published.");
+      } else {
+        setError("Failed to sync active operations.");
+      }
     } finally {
       setLoading(false);
     }
@@ -70,6 +75,15 @@ const ActiveEmployees: React.FC = () => {
     <div className="p-20 text-center">
       <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
       <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Scanning Active Workforce...</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="p-10 max-w-2xl mx-auto bg-rose-50 border border-rose-100 rounded-3xl text-center space-y-4">
+      <i className="fa-solid fa-shield-halved text-4xl text-rose-500"></i>
+      <h3 className="text-lg font-black text-rose-900 uppercase">Access Restricted</h3>
+      <p className="text-sm text-rose-700 font-medium leading-relaxed">{error}</p>
+      <button onClick={load} className="px-6 py-2 bg-rose-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest">Retry Sync</button>
     </div>
   );
 
