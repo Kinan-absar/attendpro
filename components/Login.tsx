@@ -10,10 +10,6 @@ interface Props {
 const Login: React.FC<Props> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
-  const [department, setDepartment] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showFixModal, setShowFixModal] = useState(false);
@@ -27,27 +23,14 @@ const Login: React.FC<Props> = ({ onLogin }) => {
     const normalizedEmail = email.trim().toLowerCase();
     
     try {
-      let user;
-      if (isSignUp) {
-        if (!name || !employeeId) {
-          setError('Name and Employee ID are required for sign up.');
-          setLoading(false);
-          return;
-        }
-        user = await dataService.signup(normalizedEmail, password, name.trim(), employeeId.trim(), department.trim());
-      } else {
-        user = await dataService.login(normalizedEmail, password);
-      }
-      
+      const user = await dataService.login(normalizedEmail, password);
       if (user) {
         onLogin(user);
       }
     } catch (err: any) {
       console.error("Login component error:", err);
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-        setError('Incorrect email or password. If you don\'t have an account, please use "Sign Up Now" below.');
-      } else if (err.code === 'auth/email-already-in-use') {
-        setError('This email is already registered. Please sign in instead.');
+        setError('Incorrect email or security key. Please contact your administrator if you cannot access your account.');
       } else if (err.code === 'permission-denied' || err.message?.includes('permission')) {
         setError('CRITICAL: Firestore Permission Denied. Rules must be updated in Firebase Console.');
       } else {
@@ -66,11 +49,11 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12"></div>
           
           <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-indigo-600 mx-auto mb-4 shadow-xl shadow-indigo-900/20 relative z-10">
-            <i className={`fa-solid ${isSignUp ? 'fa-user-plus' : 'fa-clock'} text-2xl`}></i>
+            <i className="fa-solid fa-clock text-2xl"></i>
           </div>
           <h1 className="text-2xl font-black text-white relative z-10 tracking-tight">Attendance Pro</h1>
           <p className="text-indigo-100 text-[10px] mt-1 font-bold uppercase tracking-[0.2em] opacity-80 relative z-10">
-            {isSignUp ? 'Join the workforce' : 'Workforce Identity'}
+            Workforce Identity
           </p>
         </div>
         
@@ -91,12 +74,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           )}
 
           <div className="space-y-5">
-            {isSignUp && (
-              <div className="animate-fadeIn">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Full Name</label>
-                <input type="text" required={isSignUp} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700" placeholder="e.g. Mitchell Admin" value={name} onChange={e => setName(e.target.value)} />
-              </div>
-            )}
             <div>
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Corporate Email</label>
               <div className="relative group">
@@ -104,18 +81,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 <input type="email" required className="w-full pl-12 pr-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700" placeholder="name@company.com" value={email} onChange={e => setEmail(e.target.value)} />
               </div>
             </div>
-            {isSignUp && (
-              <div className="grid grid-cols-2 gap-4 animate-fadeIn">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Staff ID</label>
-                  <input type="text" required={isSignUp} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700" placeholder="EMP-001" value={employeeId} onChange={e => setEmployeeId(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Dept.</label>
-                  <input type="text" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700" placeholder="Operations" value={department} onChange={e => setDepartment(e.target.value)} />
-                </div>
-              </div>
-            )}
             <div>
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Security Key</label>
               <div className="relative group">
@@ -126,14 +91,8 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           </div>
 
           <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 active:scale-[0.98] disabled:opacity-50 mt-4 text-sm tracking-tight">
-            {loading ? <i className="fa-solid fa-circle-notch fa-spin mr-2"></i> : (isSignUp ? 'Create Workforce Account' : 'Sign into Dashboard')}
+            {loading ? <i className="fa-solid fa-circle-notch fa-spin mr-2"></i> : 'Sign into Dashboard'}
           </button>
-
-          <div className="pt-2 text-center">
-            <button type="button" onClick={() => { setIsSignUp(!isSignUp); setError(''); }} className="text-[10px] font-black text-slate-400 hover:text-indigo-600 transition-colors uppercase tracking-[0.1em]">
-              {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up Now'}
-            </button>
-          </div>
 
           {/* CORPORATE BRANDING FOOTER */}
           <div className="pt-8 text-center border-t border-slate-50">

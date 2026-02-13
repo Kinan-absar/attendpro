@@ -1,8 +1,9 @@
+
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyCyfBxORQy_csaM8QF0XPLe6QULz_YMZu0",
   authDomain: "attendance-pro-a9257.firebaseapp.com",
   projectId: "attendance-pro-a9257",

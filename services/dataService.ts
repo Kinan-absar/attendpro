@@ -20,9 +20,13 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  getAuth,
+  setPersistence,
+  inMemoryPersistence,
   User as FirebaseUser
 } from 'firebase/auth';
-import { auth, db } from '../firebase';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { auth, db, firebaseConfig } from '../firebase';
 import { AttendanceRecord, User, MonthlyReport, Project, ShiftSchedule } from '../types';
 
 const USERS = 'users';
@@ -54,7 +58,7 @@ class DataService {
   async login(email: string, password: string): Promise<User> {
     const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
     const snap = await getDoc(doc(db, USERS, cred.user.uid));
-    if (!snap.exists()) throw new Error('User profile missing.');
+    if (!snap.exists()) throw new Error('User profile missing in Firestore.');
     const data = snap.data();
     const user: User = { id: cred.user.uid, email: cred.user.email || '', ...data } as User;
     this.currentUser = user;
@@ -62,17 +66,67 @@ class DataService {
   }
 
   async signup(email: string, password: string, name: string, employeeId: string, department: string): Promise<User> {
-    const cred = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+    const normalizedEmail = email.trim().toLowerCase();
+    const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
     const userData = {
-      name, email, employeeId, department,
-      role: 'employee', grossSalary: 0, company: 'Absar Alomran',
-      standardHours: 0, disableOvertime: true, disableDeductions: false,
+      name, 
+      email: normalizedEmail, 
+      employeeId, 
+      department,
+      role: 'employee', 
+      grossSalary: 0, 
+      company: 'Absar Alomran',
+      standardHours: 0, 
+      disableOvertime: true, 
+      disableDeductions: false,
       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
     };
+    // Create the profile doc
     await setDoc(doc(db, USERS, cred.user.uid), userData);
     const user = { id: cred.user.uid, ...userData } as User;
     this.currentUser = user;
     return user;
+  }
+
+  async adminCreateUser(userData: Partial<User>, password: string) {
+    this.ensureAdmin();
+    
+    const normalizedEmail = (userData.email || '').trim().toLowerCase();
+    if (!normalizedEmail) throw new Error("Email is required.");
+    if (password.length < 6) throw new Error("Security Key must be at least 6 characters.");
+
+    const appName = `AdminUserCreator-${Date.now()}`;
+    const secondaryApp = initializeApp(firebaseConfig, appName);
+    const secondaryAuth = getAuth(secondaryApp);
+
+    try {
+      await setPersistence(secondaryAuth, inMemoryPersistence);
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, normalizedEmail, password);
+      const uid = cred.user.uid;
+
+      const sanitized = {
+        name: userData.name || 'New Staff',
+        email: normalizedEmail,
+        employeeId: userData.employeeId || 'EMP-TEMP',
+        department: userData.department || 'Operations',
+        role: userData.role || 'employee',
+        grossSalary: Number(userData.grossSalary || 0),
+        standardHours: Number(userData.standardHours || 0),
+        company: userData.company || 'Absar Alomran',
+        disableOvertime: userData.disableOvertime ?? true,
+        disableDeductions: userData.disableDeductions ?? false,
+        avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}&background=random`
+      };
+
+      // CRITICAL: Write the Firestore doc using the ADMIN'S authenticated context on the main 'db'
+      await setDoc(doc(db, USERS, uid), sanitized);
+      return uid;
+    } catch (error: any) {
+      console.error("Admin user creation process failed:", error);
+      throw error;
+    } finally {
+      await deleteApp(secondaryApp);
+    }
   }
 
   initAuth(onUser: (user: User | null) => void) {
@@ -91,7 +145,7 @@ class DataService {
     this.currentUser = null;
   }
 
-  /* ⚙️ GLOBAL SETTINGS - RESOLVING PERSISTENCE & PERMISSION ERRORS */
+  /* ⚙️ GLOBAL SETTINGS */
   async getGlobalSettings(): Promise<{ standardHours: number }> {
     try {
       const snap = await getDoc(doc(db, SETTINGS, 'global_config'));
@@ -108,7 +162,6 @@ class DataService {
   async saveGlobalSettings(settings: { standardHours: number }) {
     this.ensureAdmin();
     const ref = doc(db, SETTINGS, 'global_config');
-    // We use setDoc with merge: true to ensure the document is created or updated reliably
     await setDoc(ref, {
       standardHours: Number(settings.standardHours),
       updatedAt: serverTimestamp(),
@@ -187,7 +240,6 @@ class DataService {
       const checkIn = this.convertToDate(r.checkIn) || new Date(0);
       const checkOut = this.convertToDate(r.checkOut);
       
-      // FIX: Calculate duration if missing or invalid
       let duration = Number(r.duration);
       if ((!duration || isNaN(duration)) && checkOut) {
         duration = (checkOut.getTime() - checkIn.getTime()) / 60000;
@@ -344,15 +396,17 @@ class DataService {
     return `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Determine if the request user is an admin
+    // 🛡️ Helper: Checks if the requester has the 'admin' role in their user document
     function isAdmin() {
       return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     match /users/{id} {
+      // Allow users to read/update their own profile, or Admins to do everything
       allow read: if request.auth != null && (request.auth.uid == id || isAdmin());
-      allow create: if request.auth != null;
+      allow create: if request.auth != null; // Allows initial signup AND Admin creations
       allow update: if request.auth != null && (request.auth.uid == id || isAdmin());
       allow delete: if isAdmin();
     }

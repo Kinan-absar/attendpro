@@ -9,10 +9,15 @@ const AdminUserManagement: React.FC = () => {
   const [shifts, setShifts] = useState<ShiftSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
+  const [password, setPassword] = useState('');
   const [viewingLogs, setViewingLogs] = useState<{ user: User; records: AttendanceRecord[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [fixing, setFixing] = useState(false);
+  
+  // Deletion State
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -38,15 +43,46 @@ const AdminUserManagement: React.FC = () => {
     if (!editingUser?.name || !editingUser?.email || !editingUser?.employeeId) {
       return alert('Mandatory Fields: Full Name, Email, and Staff ID are required.');
     }
+
+    if (!editingUser.id) {
+      if (!password) {
+        return alert('Please set an initial security key (password) for the new user account.');
+      }
+      if (password.length < 6) {
+        return alert('Security key must be at least 6 characters long.');
+      }
+    }
+
     setSaving(true);
     try {
-      await dataService.saveUser(editingUser);
+      if (editingUser.id) {
+        await dataService.saveUser(editingUser);
+      } else {
+        await dataService.adminCreateUser(editingUser, password);
+        setPassword('');
+      }
       await fetchData();
       setEditingUser(null);
     } catch (err: any) {
-      alert(err.message || 'Failed to save user.');
+      console.error("Staff update error:", err);
+      alert(err.message || 'Failed to process staff update. Ensure permissions are set.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingUser) return;
+    setIsDeleting(true);
+    try {
+      await dataService.deleteUser(deletingUser.id);
+      setUsers(prev => prev.filter(u => u.id !== deletingUser.id));
+      setDeletingUser(null);
+    } catch (err: any) {
+      console.error("Delete failed:", err);
+      alert(err.message || "Failed to delete staff profile. Check Firestore permissions.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -73,16 +109,6 @@ const AdminUserManagement: React.FC = () => {
       alert("Failed to fetch logs for this user.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Permanently remove staff profile?')) return;
-    try {
-      await dataService.deleteUser(id);
-      setUsers(users.filter(u => u.id !== id));
-    } catch (err) {
-      alert('Delete failed');
     }
   };
 
@@ -142,7 +168,7 @@ const AdminUserManagement: React.FC = () => {
             {fixing ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
             <span>Verify All Data</span>
           </button>
-          <button onClick={() => setEditingUser({ name: '', email: '', employeeId: '', department: '', role: 'employee', grossSalary: 0, company: 'Absar Alomran', disableOvertime: true, disableDeductions: false, standardHours: 0 })} className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center space-x-2">
+          <button onClick={() => { setEditingUser({ name: '', email: '', employeeId: '', department: '', role: 'employee', grossSalary: 0, company: 'Absar Alomran', disableOvertime: true, disableDeductions: false, standardHours: 0 }); setPassword(''); }} className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center space-x-2">
             <i className="fa-solid fa-user-plus"></i>
             <span>Add New Staff</span>
           </button>
@@ -153,6 +179,48 @@ const AdminUserManagement: React.FC = () => {
         <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
         <input type="text" placeholder="Search by name, ID, or email..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm" />
       </div>
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deletingUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full overflow-hidden animate-fadeIn">
+            <div className="bg-rose-500 p-8 text-white text-center">
+              <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white/30">
+                <i className="fa-solid fa-user-slash text-3xl"></i>
+              </div>
+              <h2 className="text-xl font-black">Remove Staff?</h2>
+              <p className="text-xs font-bold text-rose-100 uppercase tracking-widest mt-2">Permanent Firestore Action</p>
+            </div>
+            <div className="p-8 text-center space-y-6">
+              <p className="text-slate-500 text-sm font-medium leading-relaxed">
+                Are you sure you want to delete <span className="text-slate-900 font-black">{deletingUser.name}</span>? 
+                This will remove their profile, salary, and rules from the database.
+              </p>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest leading-tight">
+                  <i className="fa-solid fa-circle-info mr-1"></i> Note: To fully disable their login, you must also delete them from the Firebase Auth console.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setDeletingUser(null)}
+                  disabled={isDeleting}
+                  className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleConfirmDelete}
+                  disabled={isDeleting}
+                  className="flex-1 py-4 bg-rose-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-rose-100 hover:bg-rose-600 transition-all disabled:opacity-50"
+                >
+                  {isDeleting ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Confirm Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editingUser && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -168,7 +236,6 @@ const AdminUserManagement: React.FC = () => {
             
             <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto no-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
-                {/* Clean Symmetrical Grid */}
                 <div className="md:col-span-2">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Full Name</label>
                   <input type="text" value={editingUser.name || ''} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" />
@@ -178,6 +245,13 @@ const AdminUserManagement: React.FC = () => {
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Corporate Email</label>
                   <input type="email" value={editingUser.email || ''} onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" />
                 </div>
+
+                {!editingUser.id && (
+                  <div className="md:col-span-2 animate-fadeIn">
+                    <label className="block text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] mb-2 ml-1">Initial Security Key (Login Password)</label>
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 6 characters" className="w-full px-5 py-4 bg-rose-50 border border-rose-100 rounded-2xl font-bold focus:ring-2 focus:ring-rose-500 outline-none transition-all shadow-sm" />
+                  </div>
+                )}
                 
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Staff ID</label>
@@ -233,7 +307,7 @@ const AdminUserManagement: React.FC = () => {
               <div className="pt-6 flex gap-4">
                 <button type="button" onClick={() => setEditingUser(null)} className="flex-1 py-5 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>
                 <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50">
-                  {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Save Staff Profile'}
+                  {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : (editingUser.id ? 'Save Staff Profile' : 'Create Staff Account')}
                 </button>
               </div>
             </div>
@@ -289,7 +363,7 @@ const AdminUserManagement: React.FC = () => {
                       <div className="flex justify-end gap-2">
                         <button onClick={() => handleViewLogs(u)} className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all"><i className="fa-solid fa-list-check text-[10px]"></i></button>
                         <button onClick={() => setEditingUser(u)} className="w-9 h-9 rounded-xl bg-slate-50 text-slate-400 hover:text-indigo-600 transition-all shadow-sm"><i className="fa-solid fa-pen-to-square text-[10px]"></i></button>
-                        <button onClick={() => handleDelete(u.id)} className="w-9 h-9 rounded-xl bg-slate-50 text-slate-400 hover:text-rose-600 transition-all shadow-sm"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
+                        <button onClick={() => setDeletingUser(u)} className="w-9 h-9 rounded-xl bg-slate-50 text-slate-400 hover:text-rose-600 transition-all shadow-sm"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
                       </div>
                     </td>
                   </tr>
