@@ -27,7 +27,7 @@ import {
 } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { auth, db, firebaseConfig } from '../firebase';
-import { AttendanceRecord, User, MonthlyReport, Project, ShiftSchedule, Holiday } from '../types';
+import { AttendanceRecord, User, MonthlyReport, Project, ShiftSchedule, Holiday, Broadcast } from '../types';
 
 const USERS = 'users';
 const ATTENDANCE = 'attendance';
@@ -35,6 +35,7 @@ const PROJECTS = 'projects';
 const SHIFTS = 'shifts';
 const SETTINGS = 'settings';
 const HOLIDAYS = 'holidays';
+const BROADCASTS = 'broadcasts';
 
 class DataService {
   private currentUser: User | null = null;
@@ -122,6 +123,93 @@ class DataService {
     this.currentUser = null;
   }
 
+  /* 📢 COMMUNICATIONS (Broadcasts) */
+  async getActiveBroadcasts(): Promise<Broadcast[]> {
+    try {
+      this.ensureAuth();
+      const user = this.currentUser!;
+      
+      // Get all active broadcasts
+      const q = query(collection(db, BROADCASTS), where('active', '==', true));
+      const snap = await getDocs(q);
+      
+      // Get user's projects to verify membership
+      const userProjects = await this.getProjects(user.id);
+      const userProjectIds = userProjects.map(p => p.id);
+
+      const items = snap.docs.map(d => {
+        const data = d.data();
+        return { 
+          id: d.id, 
+          ...data, 
+          createdAt: this.convertToDate(data.createdAt) || new Date() 
+        } as Broadcast;
+      });
+
+      // Filter in-memory based on targeting
+      return items.filter(b => {
+        const hasProjectFilter = b.targetProjectIds && b.targetProjectIds.length > 0;
+        const hasUserFilter = b.targetUserIds && b.targetUserIds.length > 0;
+
+        // If no filters, it's global
+        if (!hasProjectFilter && !hasUserFilter) return true;
+
+        // Check if user is targeted directly
+        const userMatch = hasUserFilter && b.targetUserIds!.includes(user.id);
+        
+        // Check if user's project is targeted
+        const projectMatch = hasProjectFilter && b.targetProjectIds!.some(pid => userProjectIds.includes(pid));
+
+        return userMatch || projectMatch;
+      }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    } catch (err) {
+      console.error("Failed to fetch active broadcasts:", err);
+      return [];
+    }
+  }
+
+  async getAllBroadcasts(): Promise<Broadcast[]> {
+    this.ensureAdmin();
+    const q = query(collection(db, BROADCASTS), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => {
+      const data = d.data();
+      return { 
+        id: d.id, 
+        ...data, 
+        createdAt: this.convertToDate(data.createdAt) || new Date() 
+      } as Broadcast;
+    });
+  }
+
+  async saveBroadcast(broadcast: Partial<Broadcast>) {
+    this.ensureAdmin();
+    const dataToSave = {
+      ...broadcast,
+      targetProjectIds: broadcast.targetProjectIds || [],
+      targetUserIds: broadcast.targetUserIds || []
+    };
+
+    if (broadcast.id) {
+      const { id, ...data } = dataToSave;
+      await updateDoc(doc(db, BROADCASTS, id), {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+    } else {
+      await addDoc(collection(db, BROADCASTS), {
+        ...dataToSave,
+        createdAt: serverTimestamp(),
+        active: broadcast.active ?? true
+      });
+    }
+  }
+
+  async deleteBroadcast(id: string) {
+    this.ensureAdmin();
+    await deleteDoc(doc(db, BROADCASTS, id));
+  }
+
   /* ⚙️ GLOBAL SETTINGS & HOLIDAYS */
   async getGlobalSettings(): Promise<{ standardHours: number }> {
     try {
@@ -167,13 +255,10 @@ class DataService {
 
   /* 🕒 AUTO-CLOSE ENGINE */
   async processAutoClosures(userId: string) {
-    // 1. Get user's active shift to see if they have closure exception
     const shiftsSnap = await getDocs(query(collection(db, SHIFTS), where('assignedUserIds', 'array-contains', userId)));
     const activeShift = shiftsSnap.docs[0]?.data() as ShiftSchedule | undefined;
     
-    // If user's shift disables auto-close, we don't automatically terminate at midnight
     if (activeShift?.disableAutoClose) {
-      // However, we should still auto-close if the shift is older than, say, 24 hours to prevent "forgotten" check-ins
       const q = query(collection(db, ATTENDANCE), where('userId', '==', userId), where('checkOut', '==', null));
       const snap = await getDocs(q);
       const now = new Date();
@@ -184,7 +269,7 @@ class DataService {
         const checkIn = this.convertToDate(data.checkIn);
         if (!checkIn) return;
         const diffHours = (now.getTime() - checkIn.getTime()) / 3600000;
-        if (diffHours > 24) { // Absolute limit 24h for night shifts
+        if (diffHours > 24) { 
           batch.update(d.ref, {
             checkOut: Timestamp.fromDate(now),
             autoClosed: true,
@@ -197,7 +282,6 @@ class DataService {
       return;
     }
 
-    // Default Behavior: Close at midnight
     const q = query(collection(db, ATTENDANCE), where('userId', '==', userId), where('checkOut', '==', null));
     const snap = await getDocs(q);
     const now = new Date();
@@ -277,11 +361,16 @@ class DataService {
   /* 🏗️ PROJECT ACTIONS */
   async getProjects(userId?: string): Promise<Project[]> {
     this.ensureAuth();
-    let q = userId 
-      ? query(collection(db, PROJECTS), where('assignedUserIds', 'array-contains', userId))
-      : query(collection(db, PROJECTS));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Project));
+    try {
+      let q = userId 
+        ? query(collection(db, PROJECTS), where('assignedUserIds', 'array-contains', userId))
+        : query(collection(db, PROJECTS));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() } as Project));
+    } catch (err) {
+      console.error("Failed to fetch projects:", err);
+      return [];
+    }
   }
 
   async saveProject(project: Partial<Project>) {
@@ -459,6 +548,12 @@ service cloud.firestore {
     match /holidays/{id} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /broadcasts/{id} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isAdmin();
     }
   }
 }`;

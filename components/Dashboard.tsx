@@ -1,6 +1,6 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { AttendanceRecord, User, Project } from '../types';
+import { AttendanceRecord, User, Project, Broadcast } from '../types';
 import { dataService } from '../services/dataService';
 
 interface Props {
@@ -16,7 +16,8 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [userLocation, setUserLocation] = useState<GeolocationCoordinates | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [loadingProject, setLoadingProject] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -25,18 +26,31 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoadingProject(true);
+      setLoading(true);
+      
+      // Load Targeted Notices
+      dataService.getActiveBroadcasts().then(setBroadcasts).catch(e => console.error("Broadcasts load error:", e));
+
       try {
         const assigned = await dataService.getProjects(user.id);
+        
         if (user.role === 'admin') {
+          // Admins see a monitor selector. 
+          // Default to their personally assigned project if it exists.
+          // Otherwise, don't pre-select an unassigned site.
           const all = await dataService.getProjects();
           setAllProjects(all);
+          setUserProject(assigned[0] || null);
+        } else {
+          setUserProject(assigned[0] || null);
         }
-        setUserProject(assigned[0] || null);
-      } catch (err) {} finally {
-        setLoadingProject(false);
+      } catch (err) {
+        console.error("Projects load error:", err);
+      } finally {
+        setLoading(false);
       }
     };
+    
     fetchData();
   }, [user.id, user.role]);
 
@@ -79,7 +93,6 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   const handleToggle = async () => {
     if (processing) return;
 
-    // RULE 1: Clock-in MUST be inside geofence
     if (!activeRecord && !isInsideZone && userProject?.geofence?.enabled) {
       return alert("Geofence Restriction: You must be at the worksite to Clock In.");
     }
@@ -89,10 +102,10 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
       const loc = userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude, accuracy: userLocation.accuracy } : undefined;
       
       if (activeRecord) {
-        // RULE 2: Clock-out allowed anywhere, but flag if outside
         await dataService.checkOut(activeRecord.id, loc, !isInsideZone);
       } else {
-        await dataService.checkIn(user, loc, userProject?.id);
+        if (!userProject) return alert("Please select a worksite first.");
+        await dataService.checkIn(user, loc, userProject.id);
       }
       await onAction();
     } catch (err: any) {
@@ -123,7 +136,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
               onChange={(e) => setUserProject(allProjects.find(p => p.id === e.target.value) || null)}
               className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black uppercase tracking-wider text-slate-600 outline-none shadow-sm cursor-pointer"
             >
-              <option value="">Select Monitoring Site</option>
+              <option value="">Monitoring Site: Select...</option>
               {allProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
@@ -137,7 +150,31 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
         </div>
       </div>
 
-      {userProject && (
+      {broadcasts.length > 0 && (
+        <div className="space-y-3">
+          {broadcasts.map(b => (
+            <div key={b.id} className={`p-5 rounded-3xl border flex items-start gap-4 transition-all animate-fadeIn ${
+              b.type === 'urgent' ? 'bg-rose-50 border-rose-100 text-rose-800' :
+              b.type === 'warning' ? 'bg-amber-50 border-amber-100 text-amber-800' :
+              'bg-indigo-50 border-indigo-100 text-indigo-800'
+            }`}>
+              <div className={`mt-1 w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                b.type === 'urgent' ? 'bg-rose-500 text-white shadow-lg' :
+                b.type === 'warning' ? 'bg-amber-500 text-white shadow-lg' :
+                'bg-indigo-500 text-white shadow-lg'
+              }`}>
+                <i className={`fa-solid ${b.type === 'urgent' ? 'fa-triangle-exclamation' : b.type === 'warning' ? 'fa-circle-info' : 'fa-bullhorn'}`}></i>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-sm uppercase tracking-tight">{b.title}</p>
+                <p className="text-xs font-medium opacity-80 leading-relaxed mt-1">{b.message}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {userProject ? (
         <div className={`p-5 rounded-3xl border flex items-center justify-between ${
           !userProject.geofence.enabled ? 'bg-indigo-50 border-indigo-100 text-indigo-700' :
           isInsideZone ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 
@@ -163,6 +200,11 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
             </div>
           )}
         </div>
+      ) : (
+        <div className="p-5 bg-slate-100 border border-slate-200 rounded-3xl flex items-center gap-4 text-slate-500">
+          <i className="fa-solid fa-circle-info text-lg"></i>
+          <p className="text-xs font-black uppercase tracking-widest">No worksite selected for check-in.</p>
+        </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -180,16 +222,16 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
           </p>
           <button
             onClick={handleToggle}
-            disabled={processing || (!activeRecord && !isInsideZone && userProject?.geofence?.enabled)}
+            disabled={processing || (!activeRecord && !isInsideZone && userProject?.geofence?.enabled) || (!activeRecord && !userProject)}
             className={`w-full max-w-xs py-5 rounded-2xl text-xl font-black tracking-tight transition-all shadow-xl active:scale-95 ${
               activeRecord ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'
             } text-white disabled:opacity-30 disabled:grayscale`}
           >
             {processing ? <i className="fa-solid fa-circle-notch fa-spin" /> : (activeRecord ? 'Clock Out' : 'Clock In')}
           </button>
-          {!activeRecord && !isInsideZone && userProject?.geofence?.enabled && (
-             <p className="text-rose-500 text-[10px] font-black uppercase mt-4 animate-pulse">
-               <i className="fa-solid fa-circle-exclamation mr-1"></i> Site Perimeter Required
+          {!activeRecord && !userProject && (
+             <p className="text-indigo-600 text-[10px] font-black uppercase mt-4">
+               <i className="fa-solid fa-hand-pointer mr-1"></i> Choose a site to begin
              </p>
           )}
         </div>

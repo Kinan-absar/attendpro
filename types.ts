@@ -16,6 +16,18 @@ export interface User {
   disableDeductions?: boolean;
 }
 
+export interface Broadcast {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'urgent';
+  active: boolean;
+  targetProjectIds?: string[]; // New: Filter by specific projects
+  targetUserIds?: string[];    // New: Filter by specific individuals
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
 export interface MobilityLog {
   timestamp: Date;
   status: 'inside' | 'outside';

@@ -11,6 +11,7 @@ import ActiveEmployees from './components/ActiveEmployees';
 import AdminLocationSettings from './components/AdminLocationSettings';
 import AdminUserManagement from './components/AdminUserManagement';
 import AdminShiftManagement from './components/AdminShiftManagement';
+import AdminBroadcastManagement from './components/AdminBroadcastManagement';
 
 const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDOM as any;
 
@@ -26,6 +27,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
   if (user.role === 'admin') {
     links.push({ path: '/admin', label: 'Reports', icon: 'fa-chart-pie' });
     links.push({ path: '/admin/active', label: 'Active', icon: 'fa-user-clock' });
+    links.push({ path: '/admin/broadcasts', label: 'Notices', icon: 'fa-bullhorn' });
     links.push({ path: '/admin/users', label: 'Staff', icon: 'fa-users-gear' });
     links.push({ path: '/admin/shifts', label: 'Schedules', icon: 'fa-calendar-day' });
     links.push({ path: '/admin/location', label: 'Worksite', icon: 'fa-location-dot' });
@@ -33,7 +35,6 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-[100] md:top-0 md:bottom-auto md:flex-col md:w-64 md:h-screen md:border-r md:border-t-0 md:justify-start md:py-8 md:z-50 print:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.05)] md:shadow-none pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
-      {/* Sidebar Header (Desktop Only) */}
       <div className="hidden md:flex flex-col px-6 mb-10">
         <div className="flex items-center space-x-3 mb-8">
           <div className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
@@ -50,7 +51,6 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
         </div>
       </div>
 
-      {/* Navigation Links Container */}
       <div 
         ref={navRef}
         className="flex flex-row md:flex-col overflow-x-auto overflow-y-hidden md:overflow-y-visible no-scrollbar flex-nowrap items-center md:items-stretch px-2 md:px-3 py-1 md:py-0 w-full"
@@ -83,7 +83,6 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
         </button>
       </div>
 
-      {/* Desktop Logout (Bottom) */}
       <div className="hidden md:block mt-auto px-6 pt-4 border-t border-slate-50">
         <button
           onClick={onLogout}
@@ -160,7 +159,7 @@ const App: React.FC = () => {
         <main className="flex-1 pb-24 md:pb-8 md:pl-64 min-w-0 md:min-h-screen">
           <div className="max-w-5xl mx-auto px-4 pt-6 md:pt-12">
             {showUpdateToast && (
-              <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-sm animate-fadeIn no-print update-toast">
+              <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-sm animate-fadeIn no-print update-toast">
                 <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between border border-white/10">
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center animate-pulse">
@@ -183,6 +182,7 @@ const App: React.FC = () => {
                   <Route path="/admin/location" element={<AdminLocationSettings />} />
                   <Route path="/admin/users" element={<AdminUserManagement />} />
                   <Route path="/admin/shifts" element={<AdminShiftManagement />} />
+                  <Route path="/admin/broadcasts" element={<AdminBroadcastManagement />} />
                 </>
               )}
               <Route path="*" element={<Navigate to="/" replace />} />
