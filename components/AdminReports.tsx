@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { dataService } from '../services/dataService';
-import { MonthlyReport, AttendanceRecord, User, Project } from '../types';
+import { MonthlyReport, AttendanceRecord, User, Project, Holiday } from '../types';
 import History from './History';
 
 const AdminReports: React.FC = () => {
   const [reports, setReports] = useState<MonthlyReport[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -16,8 +17,14 @@ const AdminReports: React.FC = () => {
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>('all');
   
   const [selectedEmployee, setSelectedEmployee] = useState<{ user: User; records: AttendanceRecord[] } | null>(null);
+  const [showHolidayModal, setShowHolidayModal] = useState(false);
+  const [newHoliday, setNewHoliday] = useState({ name: '', date: '' });
   
-  // Date range state - harmonized with History.tsx
+  // Holiday Deletion State
+  const [holidayToDelete, setHolidayToDelete] = useState<Holiday | null>(null);
+  const [isDeletingHoliday, setIsDeletingHoliday] = useState(false);
+  const [isSavingHoliday, setIsSavingHoliday] = useState(false);
+  
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   
@@ -37,9 +44,6 @@ const AdminReports: React.FC = () => {
       await dataService.saveGlobalSettings({ standardHours: val });
     } catch (err: any) {
       console.error("Critical Permission Error:", err);
-      if (err.message?.includes("PERMISSION_DENIED") || err.code === 'permission-denied') {
-        alert("PERMISSION ERROR: Your account lacks write access to '/settings'. Update your Firestore Security Rules.");
-      }
     }
   };
 
@@ -49,16 +53,18 @@ const AdminReports: React.FC = () => {
     const from = fromDate ? new Date(fromDate) : undefined;
     const to = toDate ? new Date(toDate) : undefined;
     try {
-      const [reportData, userData, projectData, settings] = await Promise.all([
+      const [reportData, userData, projectData, settings, holidayData] = await Promise.all([
         dataService.getMonthlyReports(from, to),
         dataService.getUsers(),
         dataService.getProjects(),
-        dataService.getGlobalSettings()
+        dataService.getGlobalSettings(),
+        dataService.getHolidays()
       ]);
       setReports(reportData);
       setUsers(userData);
       setProjects(projectData);
       setGlobalRequiredHours(settings.standardHours);
+      setHolidays(holidayData.sort((a,b) => a.date.localeCompare(b.date)));
     } catch (err: any) {
       console.error("Report load failed:", err);
       if (err.message?.includes("PERMISSION_DENIED") || err.code === 'permission-denied') {
@@ -74,6 +80,34 @@ const AdminReports: React.FC = () => {
   useEffect(() => {
     fetch();
   }, [fetch]);
+
+  const handleAddHoliday = async () => {
+    if (!newHoliday.name || !newHoliday.date) return alert('Name and date required');
+    setIsSavingHoliday(true);
+    try {
+      await dataService.saveHoliday(newHoliday);
+      setNewHoliday({ name: '', date: '' });
+      await fetch();
+    } catch (err) { 
+      alert('Failed to save holiday'); 
+    } finally {
+      setIsSavingHoliday(false);
+    }
+  };
+
+  const handleConfirmDeleteHoliday = async () => {
+    if (!holidayToDelete) return;
+    setIsDeletingHoliday(true);
+    try {
+      await dataService.deleteHoliday(holidayToDelete.id);
+      setHolidayToDelete(null);
+      await fetch();
+    } catch (err) { 
+      alert('Failed to delete holiday'); 
+    } finally {
+      setIsDeletingHoliday(false);
+    }
+  };
 
   const handleViewEmployee = async (employeeName: string) => {
     const user = users.find(u => u.name === employeeName);
@@ -131,10 +165,16 @@ const AdminReports: React.FC = () => {
           <p className="text-slate-500">Review billable hours and shift flags</p>
         </div>
         
-        {/* IMPROVED DATE CONTROLS - MATCHING HISTORY.TSX */}
         <div className="flex flex-wrap items-end gap-3 no-print bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+           <button 
+            onClick={() => setShowHolidayModal(true)}
+            className="px-4 py-2.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all flex items-center space-x-2"
+          >
+            <i className="fa-solid fa-calendar-star"></i>
+            <span>Manage Holidays</span>
+          </button>
           <div className="flex flex-col">
-            <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-1 ml-1 flex items-center">
+            <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-1.5 ml-1 flex items-center">
               <i className="fa-solid fa-clock-rotate-left mr-1"></i> Std. Hours
             </span>
             <input
@@ -145,7 +185,7 @@ const AdminReports: React.FC = () => {
             />
           </div>
           <div className="flex flex-col">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">From Date</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">From</label>
             <input 
               type="date" 
               value={fromDate} 
@@ -154,7 +194,7 @@ const AdminReports: React.FC = () => {
             />
           </div>
           <div className="flex flex-col">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">To Date</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">To</label>
             <input 
               type="date" 
               value={toDate} 
@@ -163,25 +203,98 @@ const AdminReports: React.FC = () => {
             />
           </div>
           <div className="flex gap-2">
-            {(fromDate || toDate) && (
-              <button 
-                onClick={() => { setFromDate(''); setToDate(''); }}
-                className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
-                title="Clear Filters"
-              >
-                Clear
-              </button>
-            )}
             <button 
               onClick={handlePrint} 
               className="px-5 py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2 active:scale-95 transition-all"
             >
               <i className="fa-solid fa-print"></i>
-              <span>Print Report</span>
+              <span>Print</span>
             </button>
           </div>
         </div>
       </div>
+
+      {/* HOLIDAY MODAL */}
+      {showHolidayModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+           <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full overflow-hidden animate-fadeIn relative">
+             
+             {/* Delete Confirmation Overlay for Holiday */}
+             {holidayToDelete && (
+               <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-[210] flex items-center justify-center p-8 animate-fadeIn">
+                 <div className="text-center space-y-6 max-w-xs">
+                    <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <i className="fa-solid fa-calendar-xmark text-2xl"></i>
+                    </div>
+                    <h3 className="text-xl font-black text-slate-900 leading-tight">Delete Official Holiday?</h3>
+                    <p className="text-xs font-bold text-slate-500 leading-relaxed uppercase tracking-wide">
+                      This will remove <span className="text-rose-600">"{holidayToDelete.name}"</span> from the global calendar. This cannot be undone in Firestore.
+                    </p>
+                    <div className="flex gap-3">
+                      <button onClick={() => setHolidayToDelete(null)} disabled={isDeletingHoliday} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>
+                      <button onClick={handleConfirmDeleteHoliday} disabled={isDeletingHoliday} className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-rose-100 hover:bg-rose-700 transition-all">
+                        {isDeletingHoliday ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Confirm Delete'}
+                      </button>
+                    </div>
+                 </div>
+               </div>
+             )}
+
+             <div className="bg-rose-500 p-8 text-white flex justify-between items-center">
+               <div>
+                  <h2 className="text-xl font-black">Official Holidays</h2>
+                  <p className="text-[10px] font-bold text-rose-100 uppercase tracking-widest mt-1">Non-Working Date Management</p>
+               </div>
+               <button onClick={() => setShowHolidayModal(false)} className="text-white/60 hover:text-white transition-colors">
+                  <i className="fa-solid fa-circle-xmark text-2xl"></i>
+               </button>
+             </div>
+             
+             <div className="p-8 space-y-6">
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Holiday Name</label>
+                        <input type="text" value={newHoliday.name} onChange={e => setNewHoliday({...newHoliday, name: e.target.value})} placeholder="e.g. Eid Al-Fitr" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Date</label>
+                        <input type="date" value={newHoliday.date} onChange={e => setNewHoliday({...newHoliday, date: e.target.value})} className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+                      </div>
+                   </div>
+                   <button onClick={handleAddHoliday} disabled={isSavingHoliday} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50">
+                      {isSavingHoliday ? <i className="fa-solid fa-circle-notch fa-spin mr-2"></i> : <i className="fa-solid fa-plus mr-2"></i>}
+                      Add to Calendar
+                   </button>
+                </div>
+
+                <div className="max-h-[300px] overflow-y-auto pr-2 no-scrollbar space-y-2">
+                   {holidays.length === 0 ? (
+                      <div className="text-center py-10">
+                        <i className="fa-solid fa-calendar-day text-3xl text-slate-100 mb-3 block"></i>
+                        <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">No holidays scheduled.</p>
+                      </div>
+                   ) : holidays.map(h => (
+                      <div key={h.id} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl shadow-sm group hover:border-rose-100 transition-all">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-10 h-10 bg-rose-50 text-rose-500 rounded-xl flex items-center justify-center">
+                            <i className="fa-solid fa-gift"></i>
+                          </div>
+                          <div>
+                            <p className="font-black text-slate-900 text-xs">{h.name}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{new Date(h.date).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                          </div>
+                        </div>
+                        <button onClick={() => setHolidayToDelete(h)} className="w-8 h-8 rounded-lg bg-slate-50 text-slate-300 hover:bg-rose-50 hover:text-rose-600 transition-all">
+                           <i className="fa-solid fa-trash-can text-xs"></i>
+                        </button>
+                      </div>
+                   ))}
+                </div>
+             </div>
+           </div>
+        </div>
+      )}
 
       {/* FILTER CONTROLS */}
       <div className="flex flex-wrap gap-4 no-print p-6 bg-slate-50 rounded-[1.5rem] border border-slate-200">

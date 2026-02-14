@@ -58,6 +58,12 @@ export interface Project {
   assignedUserIds: string[];
 }
 
+export interface Holiday {
+  id: string;
+  date: string; // ISO format YYYY-MM-DD
+  name: string;
+}
+
 export interface ShiftSchedule {
   id: string;
   name: string;
@@ -65,6 +71,7 @@ export interface ShiftSchedule {
   endTime: string;
   workingDays: string[];
   assignedUserIds: string[];
+  disableAutoClose?: boolean; // New: Exception for midnight closure
 }
 
 export interface MonthlyReport {
@@ -76,7 +83,7 @@ export interface MonthlyReport {
     totalHours: number;
     shiftCount: number;
     projectId?: string;
-    flaggedCount: number; // Track shifts needing review per employee
+    flaggedCount: number;
   }[];
 }
 

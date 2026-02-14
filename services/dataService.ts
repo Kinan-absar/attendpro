@@ -27,13 +27,14 @@ import {
 } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { auth, db, firebaseConfig } from '../firebase';
-import { AttendanceRecord, User, MonthlyReport, Project, ShiftSchedule } from '../types';
+import { AttendanceRecord, User, MonthlyReport, Project, ShiftSchedule, Holiday } from '../types';
 
 const USERS = 'users';
 const ATTENDANCE = 'attendance';
 const PROJECTS = 'projects';
 const SHIFTS = 'shifts';
 const SETTINGS = 'settings';
+const HOLIDAYS = 'holidays';
 
 class DataService {
   private currentUser: User | null = null;
@@ -61,29 +62,6 @@ class DataService {
     if (!snap.exists()) throw new Error('User profile missing in Firestore.');
     const data = snap.data();
     const user: User = { id: cred.user.uid, email: cred.user.email || '', ...data } as User;
-    this.currentUser = user;
-    return user;
-  }
-
-  async signup(email: string, password: string, name: string, employeeId: string, department: string): Promise<User> {
-    const normalizedEmail = email.trim().toLowerCase();
-    const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
-    const userData = {
-      name, 
-      email: normalizedEmail, 
-      employeeId, 
-      department,
-      role: 'employee', 
-      grossSalary: 0, 
-      company: 'Absar Alomran',
-      standardHours: 0, 
-      disableOvertime: true, 
-      disableDeductions: false,
-      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
-    };
-    // Create the profile doc
-    await setDoc(doc(db, USERS, cred.user.uid), userData);
-    const user = { id: cred.user.uid, ...userData } as User;
     this.currentUser = user;
     return user;
   }
@@ -118,7 +96,6 @@ class DataService {
         avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}&background=random`
       };
 
-      // CRITICAL: Write the Firestore doc using the ADMIN'S authenticated context on the main 'db'
       await setDoc(doc(db, USERS, uid), sanitized);
       return uid;
     } catch (error: any) {
@@ -145,7 +122,7 @@ class DataService {
     this.currentUser = null;
   }
 
-  /* ⚙️ GLOBAL SETTINGS */
+  /* ⚙️ GLOBAL SETTINGS & HOLIDAYS */
   async getGlobalSettings(): Promise<{ standardHours: number }> {
     try {
       const snap = await getDoc(doc(db, SETTINGS, 'global_config'));
@@ -169,8 +146,58 @@ class DataService {
     }, { merge: true });
   }
 
+  async getHolidays(): Promise<Holiday[]> {
+    const snap = await getDocs(collection(db, HOLIDAYS));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Holiday));
+  }
+
+  async saveHoliday(holiday: Partial<Holiday>) {
+    this.ensureAdmin();
+    if (holiday.id) {
+      await updateDoc(doc(db, HOLIDAYS, holiday.id), holiday);
+    } else {
+      await addDoc(collection(db, HOLIDAYS), holiday);
+    }
+  }
+
+  async deleteHoliday(id: string) {
+    this.ensureAdmin();
+    await deleteDoc(doc(db, HOLIDAYS, id));
+  }
+
   /* 🕒 AUTO-CLOSE ENGINE */
   async processAutoClosures(userId: string) {
+    // 1. Get user's active shift to see if they have closure exception
+    const shiftsSnap = await getDocs(query(collection(db, SHIFTS), where('assignedUserIds', 'array-contains', userId)));
+    const activeShift = shiftsSnap.docs[0]?.data() as ShiftSchedule | undefined;
+    
+    // If user's shift disables auto-close, we don't automatically terminate at midnight
+    if (activeShift?.disableAutoClose) {
+      // However, we should still auto-close if the shift is older than, say, 24 hours to prevent "forgotten" check-ins
+      const q = query(collection(db, ATTENDANCE), where('userId', '==', userId), where('checkOut', '==', null));
+      const snap = await getDocs(q);
+      const now = new Date();
+      const batch = writeBatch(db);
+      let count = 0;
+      snap.docs.forEach(d => {
+        const data = d.data();
+        const checkIn = this.convertToDate(data.checkIn);
+        if (!checkIn) return;
+        const diffHours = (now.getTime() - checkIn.getTime()) / 3600000;
+        if (diffHours > 24) { // Absolute limit 24h for night shifts
+          batch.update(d.ref, {
+            checkOut: Timestamp.fromDate(now),
+            autoClosed: true,
+            needsReview: true
+          });
+          count++;
+        }
+      });
+      if (count > 0) await batch.commit();
+      return;
+    }
+
+    // Default Behavior: Close at midnight
     const q = query(collection(db, ATTENDANCE), where('userId', '==', userId), where('checkOut', '==', null));
     const snap = await getDocs(q);
     const now = new Date();
@@ -239,12 +266,10 @@ class DataService {
       const r = d.data();
       const checkIn = this.convertToDate(r.checkIn) || new Date(0);
       const checkOut = this.convertToDate(r.checkOut);
-      
       let duration = Number(r.duration);
       if ((!duration || isNaN(duration)) && checkOut) {
         duration = (checkOut.getTime() - checkIn.getTime()) / 60000;
       }
-
       return { id: d.id, ...r, checkIn, checkOut, duration } as AttendanceRecord;
     });
   }
@@ -396,7 +421,6 @@ class DataService {
     return `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 🛡️ Helper: Checks if the requester has the 'admin' role in their user document
     function isAdmin() {
       return request.auth != null && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
@@ -404,9 +428,8 @@ service cloud.firestore {
     }
 
     match /users/{id} {
-      // Allow users to read/update their own profile, or Admins to do everything
       allow read: if request.auth != null && (request.auth.uid == id || isAdmin());
-      allow create: if request.auth != null; // Allows initial signup AND Admin creations
+      allow create: if request.auth != null;
       allow update: if request.auth != null && (request.auth.uid == id || isAdmin());
       allow delete: if isAdmin();
     }
@@ -429,6 +452,11 @@ service cloud.firestore {
     }
 
     match /settings/{id} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    match /holidays/{id} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }

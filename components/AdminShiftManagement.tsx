@@ -88,7 +88,7 @@ const AdminShiftManagement: React.FC = () => {
         </div>
         {!editingShift && (
           <button 
-            onClick={() => setEditingShift({ name: '', startTime: '08:00', endTime: '17:00', workingDays: ["Mon", "Tue", "Wed", "Thu", "Fri"], assignedUserIds: [] })}
+            onClick={() => setEditingShift({ name: '', startTime: '08:00', endTime: '17:00', workingDays: ["Mon", "Tue", "Wed", "Thu", "Fri"], assignedUserIds: [], disableAutoClose: false })}
             className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center space-x-2"
           >
             <i className="fa-solid fa-calendar-plus"></i>
@@ -114,8 +114,8 @@ const AdminShiftManagement: React.FC = () => {
                   type="text"
                   value={editingShift.name}
                   onChange={(e) => setEditingShift({ ...editingShift, name: e.target.value })}
-                  placeholder="e.g. Morning Shift - Site A"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="e.g. Night Shift - Site A"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
                 />
               </div>
 
@@ -138,6 +138,21 @@ const AdminShiftManagement: React.FC = () => {
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono text-sm"
                   />
                 </div>
+              </div>
+
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+                 <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-black text-slate-900 uppercase">Disable Midnight Auto-Close</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Allow sessions to stay open across midnight (Ideal for Night Shifts)</p>
+                    </div>
+                    <button 
+                      onClick={() => setEditingShift({ ...editingShift, disableAutoClose: !editingShift.disableAutoClose })}
+                      className={`w-12 h-6 rounded-full relative transition-all duration-300 ${editingShift.disableAutoClose ? 'bg-rose-500' : 'bg-slate-300'}`}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-sm ${editingShift.disableAutoClose ? 'left-7' : 'left-1'}`}></div>
+                    </button>
+                 </div>
               </div>
 
               <div>
@@ -186,11 +201,12 @@ const AdminShiftManagement: React.FC = () => {
             </div>
           </div>
 
-          <div className="pt-6 border-t border-slate-100">
-            <button 
+          <div className="pt-6 border-t border-slate-100 flex gap-4">
+             <button onClick={() => setEditingShift(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>
+             <button 
               onClick={handleSave}
               disabled={saving}
-              className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all disabled:opacity-50"
+              className="flex-2 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
             >
               {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Apply Schedule Configuration'}
             </button>
@@ -201,8 +217,8 @@ const AdminShiftManagement: React.FC = () => {
           {shifts.map(shift => (
             <div key={shift.id} className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col group">
               <div className="flex justify-between items-start mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                  <i className="fa-solid fa-business-time text-xl"></i>
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${shift.disableAutoClose ? 'bg-rose-50 text-rose-500 ring-2 ring-rose-100' : 'bg-indigo-50 text-indigo-600'}`}>
+                  <i className={`fa-solid ${shift.disableAutoClose ? 'fa-moon' : 'fa-business-time'} text-xl`}></i>
                 </div>
                 <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-all">
                   <button onClick={() => setEditingShift(shift)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600">
@@ -215,10 +231,16 @@ const AdminShiftManagement: React.FC = () => {
               </div>
 
               <h3 className="text-xl font-black text-slate-900 mb-1">{shift.name}</h3>
-              <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-widest text-indigo-500 mb-4">
+              <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-widest text-indigo-500 mb-2">
                 <i className="fa-solid fa-clock"></i>
                 <span>{shift.startTime} — {shift.endTime}</span>
               </div>
+              
+              {shift.disableAutoClose && (
+                <div className="mb-4 inline-flex items-center px-2 py-1 bg-rose-50 text-rose-600 text-[8px] font-black uppercase tracking-widest rounded border border-rose-100 w-fit">
+                   <i className="fa-solid fa-bolt mr-1"></i> Midnight Closure Disabled
+                </div>
+              )}
 
               <div className="flex flex-wrap gap-1 mb-6">
                 {shift.workingDays.map(d => (
@@ -233,12 +255,12 @@ const AdminShiftManagement: React.FC = () => {
                   {(shift.assignedUserIds || []).slice(0, 4).map(uid => {
                     const u = users.find(user => user.id === uid);
                     return u ? (
-                      <img key={uid} src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} className="w-6 h-6 rounded-full border-2 border-white" />
+                      <img key={uid} src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} className="w-6 h-6 rounded-full border-2 border-white shadow-sm" title={u.name} />
                     ) : null;
                   })}
                 </div>
-                <span className="text-[10px] font-black text-slate-300 uppercase">
-                  {(shift.assignedUserIds || []).length} Assigned
+                <span className="text-[10px] font-black text-slate-300 uppercase tracking-tighter">
+                  {(shift.assignedUserIds || []).length} Personnel
                 </span>
               </div>
             </div>
@@ -246,7 +268,7 @@ const AdminShiftManagement: React.FC = () => {
           {shifts.length === 0 && (
              <div className="col-span-full py-20 bg-white rounded-3xl border border-dashed border-slate-200 text-center">
                 <i className="fa-solid fa-calendar-xmark text-4xl text-slate-100 mb-4 block"></i>
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No active shift schedules.</p>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No active shift schedules defined.</p>
              </div>
           )}
         </div>
