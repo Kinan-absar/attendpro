@@ -358,7 +358,7 @@ const AdminReports: React.FC = () => {
 
           return (
             <div key={`${report.year}-${report.month}`} className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-12 card">
-              <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-6 items-center justify-between">
+              <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-6 items-center justify-between no-print">
                 <div className="flex items-center space-x-4">
                   <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
                     <i className="fa-solid fa-calendar-check text-xl"></i>
@@ -372,21 +372,21 @@ const AdminReports: React.FC = () => {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto no-scrollbar">
+                <table className="w-full text-[11px]">
                   <thead>
                     <tr className="bg-slate-50/50">
-                      <th className="px-6 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee</th>
-                      <th className="px-4 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Shifts</th>
-                      <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Hours</th>
-                      <th className="px-4 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Diff</th>
-                      <th className="px-4 py-4 text-center font-black text-rose-500 uppercase text-[10px] tracking-widest">Flags</th>
-                      <th className="px-4 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross</th>
-                      <th className="px-4 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest">Deduc.</th>
-                      <th className="px-4 py-4 text-right font-black text-emerald-400 uppercase text-[10px] tracking-widest">OT</th>
-                      <th className="px-4 py-4 text-center font-black text-rose-600 uppercase text-[10px] tracking-widest no-print">Other Ded.</th>
-                      <th className="px-4 py-4 text-center font-black text-emerald-600 uppercase text-[10px] tracking-widest no-print">Reimb.</th>
-                      <th className="px-6 py-4 text-right font-black text-slate-900 uppercase text-[10px] tracking-widest">Net (SR)</th>
+                      <th className="px-4 py-4 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee</th>
+                      <th className="px-2 py-4 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest no-print">Shifts</th>
+                      <th className="px-2 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest no-print">Hours</th>
+                      <th className="px-2 py-4 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest no-print">Diff</th>
+                      <th className="px-2 py-4 text-center font-black text-rose-500 uppercase text-[10px] tracking-widest no-print">Flags</th>
+                      <th className="px-3 py-4 text-right font-black text-indigo-400 uppercase text-[10px] tracking-widest">Gross</th>
+                      <th className="px-3 py-4 text-right font-black text-rose-400 uppercase text-[10px] tracking-widest">Deduc.</th>
+                      <th className="px-3 py-4 text-right font-black text-emerald-400 uppercase text-[10px] tracking-widest">OT</th>
+                      <th className="px-3 py-4 text-center font-black text-rose-600 uppercase text-[10px] tracking-widest">Other Ded.</th>
+                      <th className="px-3 py-4 text-center font-black text-emerald-600 uppercase text-[10px] tracking-widest">Reimb.</th>
+                      <th className="px-4 py-4 text-right font-black text-slate-900 uppercase text-[10px] tracking-widest">Net (SR)</th>
                       <th className="px-6 py-4 text-right no-print"></th>
                     </tr>
                   </thead>
@@ -430,39 +430,41 @@ const AdminReports: React.FC = () => {
 
                       return (
                         <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-3">
                             <span className="font-bold text-slate-900">{user.name}</span>
                           </td>
-                          <td className="px-4 py-4 text-center font-bold text-slate-500">{stats.shiftCount}</td>
-                          <td className="px-4 py-4 text-right font-mono font-bold">{stats.totalHours.toFixed(2)}</td>
-                          <td className={`px-4 py-4 text-right font-mono font-bold ${diff < -0.01 ? 'text-rose-500' : diff > 0.01 ? 'text-emerald-500' : 'text-slate-400'}`}>
+                          <td className="px-2 py-3 text-center font-bold text-slate-500 no-print">{stats.shiftCount}</td>
+                          <td className="px-2 py-3 text-right font-mono font-bold no-print">{stats.totalHours.toFixed(2)}</td>
+                          <td className={`px-2 py-3 text-right font-mono font-bold no-print ${diff < -0.01 ? 'text-rose-500' : diff > 0.01 ? 'text-emerald-500' : 'text-slate-400'}`}>
                             {diff > 0 ? '+' : ''}{diff.toFixed(1)}
                           </td>
-                          <td className="px-4 py-4 text-center">
+                          <td className="px-2 py-3 text-center no-print">
                             {stats.flaggedCount > 0 ? (
-                               <span className="px-2 py-0.5 bg-rose-500 text-white rounded text-[9px] font-black">{stats.flaggedCount} FLAG</span>
+                               <span className="px-1.5 py-0.5 bg-rose-500 text-white rounded text-[8px] font-black">{stats.flaggedCount}F</span>
                             ) : <i className="fa-solid fa-circle-check text-emerald-400"></i>}
                           </td>
-                          <td className="px-4 py-4 text-right font-mono font-bold text-slate-600">{grossSalary.toLocaleString()}</td>
-                          <td className="px-4 py-4 text-right font-mono font-bold text-rose-600">
+                          <td className="px-3 py-3 text-right font-mono font-bold text-slate-600">{grossSalary.toLocaleString()}</td>
+                          <td className="px-3 py-3 text-right font-mono font-bold text-rose-600">
                              {deductionAmount > 0 ? `-${deductionAmount.toLocaleString(undefined, { maximumFractionDigits: 1 })}` : '-'}
                           </td>
-                          <td className="px-4 py-4 text-right font-mono font-bold text-emerald-600">
+                          <td className="px-3 py-3 text-right font-mono font-bold text-emerald-600">
                              {overtimePay > 0 ? `+${overtimePay.toLocaleString(undefined, { maximumFractionDigits: 1 })}` : '-'}
                           </td>
-                          <td className="px-4 py-4 text-center no-print">
-                            <input type="number" value={otherDeductions[user.name] || ''} onChange={(e) => handleValueChange(setOtherDeductions, user.name, parseFloat(e.target.value) || 0)} className="w-20 px-2 py-1 bg-rose-50 border border-rose-100 rounded text-right font-mono text-xs font-bold text-rose-700 outline-none" />
+                          <td className="px-3 py-3 text-center">
+                            <input type="number" value={otherDeductions[user.name] || ''} onChange={(e) => handleValueChange(setOtherDeductions, user.name, parseFloat(e.target.value) || 0)} className="w-16 px-1.5 py-0.5 bg-rose-50 border border-rose-100 rounded text-right font-mono text-[10px] font-bold text-rose-700 outline-none no-print-input" />
+                            <span className="hidden print:inline font-mono font-bold text-rose-700">{otherDed > 0 ? `-${otherDed}` : '-'}</span>
                           </td>
-                          <td className="px-4 py-4 text-center no-print">
-                            <input type="number" value={reimbursements[user.name] || ''} onChange={(e) => handleValueChange(setReimbursements, user.name, parseFloat(e.target.value) || 0)} className="w-20 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded text-right font-mono text-xs font-bold text-emerald-700 outline-none" />
+                          <td className="px-3 py-3 text-center">
+                            <input type="number" value={reimbursements[user.name] || ''} onChange={(e) => handleValueChange(setReimbursements, user.name, parseFloat(e.target.value) || 0)} className="w-16 px-1.5 py-0.5 bg-emerald-50 border border-emerald-100 rounded text-right font-mono text-[10px] font-bold text-emerald-700 outline-none no-print-input" />
+                            <span className="hidden print:inline font-mono font-bold text-emerald-700">{reimb > 0 ? `+${reimb}` : '-'}</span>
                           </td>
-                          <td className="px-6 py-4 text-right">
-                             <span className="font-mono font-black text-slate-900 bg-slate-100 px-3 py-1.5 rounded-xl">
+                          <td className="px-4 py-3 text-right">
+                             <span className="font-mono font-black text-slate-900 bg-slate-100 px-2 py-1 rounded-lg">
                                SR {netSalary.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                              </span>
                           </td>
-                          <td className="px-6 py-4 text-right no-print">
-                            <button onClick={() => handleViewEmployee(user.name)} className="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:text-indigo-600"><i className="fa-solid fa-magnifying-glass-chart text-xs"></i></button>
+                          <td className="px-6 py-3 text-right no-print">
+                            <button onClick={() => handleViewEmployee(user.name)} className="w-7 h-7 rounded-lg bg-slate-100 text-slate-400 hover:text-indigo-600"><i className="fa-solid fa-magnifying-glass-chart text-[10px]"></i></button>
                           </td>
                         </tr>
                       );
@@ -470,17 +472,18 @@ const AdminReports: React.FC = () => {
                   </tbody>
                   <tfoot className="bg-slate-900 text-white font-black">
                     <tr>
-                      <td colSpan={2} className="px-6 py-5 uppercase text-[10px] tracking-widest">Group Totals</td>
-                      <td className="px-4 py-5 text-right font-mono">{totalPeriodHours.toFixed(1)}h</td>
-                      <td className="px-4 py-5 text-right font-mono">--</td>
-                      <td className="px-4 py-5 text-center font-mono">--</td>
-                      <td className="px-4 py-5 text-right font-mono text-indigo-300">SR {totalPeriodGross.toLocaleString()}</td>
-                      <td className="px-4 py-5 text-right font-mono text-rose-300">-SR {totalPeriodDeduc.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-4 py-5 text-right font-mono text-emerald-300">+SR {totalPeriodOT.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-4 py-5 text-center font-mono text-rose-400 no-print">-SR {totalPeriodOtherDed.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-4 py-5 text-center font-mono text-emerald-400 no-print">+SR {totalPeriodReimb.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-6 py-5 text-right font-mono text-indigo-100">SR {totalPeriodNet.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-6 py-5 no-print"></td>
+                      <td className="px-4 py-4 uppercase text-[9px] tracking-widest">Group Totals</td>
+                      <td className="px-2 py-4 no-print"></td>
+                      <td className="px-2 py-4 text-right font-mono no-print">{totalPeriodHours.toFixed(1)}h</td>
+                      <td className="px-2 py-4 no-print"></td>
+                      <td className="px-2 py-4 no-print"></td>
+                      <td className="px-3 py-4 text-right font-mono text-indigo-300">SR {totalPeriodGross.toLocaleString()}</td>
+                      <td className="px-3 py-4 text-right font-mono text-rose-300">-SR {totalPeriodDeduc.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-3 py-4 text-right font-mono text-emerald-300">+SR {totalPeriodOT.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-3 py-4 text-center font-mono text-rose-400">-SR {totalPeriodOtherDed.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-3 py-4 text-center font-mono text-emerald-400">+SR {totalPeriodReimb.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-4 py-4 text-right font-mono text-indigo-100 whitespace-nowrap">SR {totalPeriodNet.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-6 py-4 no-print"></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -489,6 +492,11 @@ const AdminReports: React.FC = () => {
           );
         })
       )}
+      <style>{`
+        @media print {
+          .no-print-input { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 };
