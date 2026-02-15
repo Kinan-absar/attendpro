@@ -12,6 +12,7 @@ import AdminLocationSettings from './components/AdminLocationSettings';
 import AdminUserManagement from './components/AdminUserManagement';
 import AdminShiftManagement from './components/AdminShiftManagement';
 import AdminBroadcastManagement from './components/AdminBroadcastManagement';
+import ReloadPrompt from './components/ReloadPrompt';
 
 const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDOM as any;
 
@@ -100,7 +101,6 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [history, setHistory] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showUpdateToast, setShowUpdateToast] = useState(false);
 
   const refreshData = useCallback(async () => {
     if (!user) return;
@@ -119,12 +119,6 @@ const App: React.FC = () => {
       setUser(u);
       setLoading(false);
     });
-
-    if ('serviceWorker' in navigator) {
-      const handleUpdate = () => setShowUpdateToast(true);
-      window.addEventListener('sw-update-available', handleUpdate);
-      return () => window.removeEventListener('sw-update-available', handleUpdate);
-    }
   }, []);
 
   useEffect(() => {
@@ -134,10 +128,6 @@ const App: React.FC = () => {
   const handleLogout = () => {
     dataService.logout();
     setUser(null);
-  };
-
-  const handleUpdateApp = () => {
-    window.location.reload();
   };
 
   if (loading) {
@@ -158,20 +148,7 @@ const App: React.FC = () => {
         <Navigation user={user} onLogout={handleLogout} />
         <main className="flex-1 pb-24 md:pb-8 md:pl-64 min-w-0 md:min-h-screen">
           <div className="max-w-5xl mx-auto px-4 pt-6 md:pt-12">
-            {showUpdateToast && (
-              <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-sm animate-fadeIn no-print update-toast">
-                <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between border border-white/10">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center animate-pulse">
-                      <i className="fa-solid fa-cloud-arrow-down text-xs"></i>
-                    </div>
-                    <p className="text-xs font-bold tracking-tight">App Update Found</p>
-                  </div>
-                  <button onClick={handleUpdateApp} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors">Reload</button>
-                </div>
-              </div>
-            )}
-
+            <ReloadPrompt />
             <Routes>
               <Route path="/" element={<Dashboard user={user} history={history} onAction={refreshData} />} />
               <Route path="/history" element={<History history={history} user={user} onRefresh={refreshData} />} />
