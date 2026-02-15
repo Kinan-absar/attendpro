@@ -146,7 +146,7 @@ class DataService {
         } as Broadcast;
       });
 
-      // Filter in-memory based on targeting
+      // Filter in-memory based on targetin
       return items.filter(b => {
         const hasProjectFilter = b.targetProjectIds && b.targetProjectIds.length > 0;
         const hasUserFilter = b.targetUserIds && b.targetUserIds.length > 0;
