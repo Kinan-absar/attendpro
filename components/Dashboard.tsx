@@ -28,19 +28,18 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
     const fetchData = async () => {
       setLoading(true);
       
-      // Load Targeted Notices
       dataService.getActiveBroadcasts().then(setBroadcasts).catch(e => console.error("Broadcasts load error:", e));
 
       try {
         const assigned = await dataService.getProjects(user.id);
         
         if (user.role === 'admin') {
-          // Admins see a monitor selector. 
-          // Default to their personally assigned project if it exists.
-          // Otherwise, don't pre-select an unassigned site.
+          // ADMIN DASHBOARD LOGIC: Don't force assigned[0].
+          // Let admin select from the full list or stay in "Select Site" state.
           const all = await dataService.getProjects();
           setAllProjects(all);
-          setUserProject(assigned[0] || null);
+          // Only auto-select if they have an actual direct assignment
+          setUserProject(assigned.length > 0 ? assigned[0] : null);
         } else {
           setUserProject(assigned[0] || null);
         }

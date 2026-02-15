@@ -12,7 +12,6 @@ import AdminLocationSettings from './components/AdminLocationSettings';
 import AdminUserManagement from './components/AdminUserManagement';
 import AdminShiftManagement from './components/AdminShiftManagement';
 import AdminBroadcastManagement from './components/AdminBroadcastManagement';
-import ReloadPrompt from './components/ReloadPrompt';
 
 const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDOM as any;
 
@@ -148,7 +147,6 @@ const App: React.FC = () => {
         <Navigation user={user} onLogout={handleLogout} />
         <main className="flex-1 pb-24 md:pb-8 md:pl-64 min-w-0 md:min-h-screen">
           <div className="max-w-5xl mx-auto px-4 pt-6 md:pt-12">
-            <ReloadPrompt />
             <Routes>
               <Route path="/" element={<Dashboard user={user} history={history} onAction={refreshData} />} />
               <Route path="/history" element={<History history={history} user={user} onRefresh={refreshData} />} />
