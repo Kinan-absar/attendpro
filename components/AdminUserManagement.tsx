@@ -1,19 +1,23 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { dataService } from '../services/dataService';
-import { User, AttendanceRecord, ShiftSchedule } from '../types';
+import { User, AttendanceRecord, ShiftSchedule, Project } from '../types';
 import History from './History';
 
 const AdminUserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [shifts, setShifts] = useState<ShiftSchedule[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
   const [password, setPassword] = useState('');
   const [viewingLogs, setViewingLogs] = useState<{ user: User; records: AttendanceRecord[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [projectFilter, setProjectFilter] = useState('all');
   const [fixing, setFixing] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   
   // Deletion State
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
@@ -22,12 +26,14 @@ const AdminUserManagement: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [u, s] = await Promise.all([
+      const [u, s, p] = await Promise.all([
         dataService.getUsers(),
-        dataService.getShiftSchedules()
+        dataService.getShiftSchedules(),
+        dataService.getProjects()
       ]);
       setUsers(u);
       setShifts(s);
+      setProjects(p);
     } catch (err) {
       console.error(err);
     } finally {
@@ -37,6 +43,16 @@ const AdminUserManagement: React.FC = () => {
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleSave = async () => {
@@ -65,7 +81,7 @@ const AdminUserManagement: React.FC = () => {
       setEditingUser(null);
     } catch (err: any) {
       console.error("Staff update error:", err);
-      alert(err.message || 'Failed to process staff update. Ensure permissions are set.');
+      alert(err.message || 'Failed to process staff update.');
     } finally {
       setSaving(false);
     }
@@ -79,25 +95,37 @@ const AdminUserManagement: React.FC = () => {
       setUsers(prev => prev.filter(u => u.id !== deletingUser.id));
       setDeletingUser(null);
     } catch (err: any) {
-      console.error("Delete failed:", err);
-      alert(err.message || "Failed to delete staff profile. Check Firestore permissions.");
+      alert(err.message || "Failed to delete staff profile.");
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const handleBulkFix = async () => {
-    if (!confirm('This will fix data types for all users and apply default policies (OT disabled) to any missing records. Continue?')) return;
-    setFixing(true);
-    try {
-      await dataService.bulkUpdateDefaultRules();
-      await fetchData();
-      alert('All staff profiles have been corrected and aligned with standard policies.');
-    } catch (err) {
-      alert('Fix failed.');
-    } finally {
-      setFixing(false);
-    }
+  const handleExportCSV = () => {
+    setShowExportMenu(false);
+    const headers = ["Name", "Staff ID", "Email", "Department", "Company", "Role", "Salary", "Std Hours"];
+    const rows = filteredUsers.map(u => [
+      u.name,
+      u.employeeId,
+      u.email,
+      u.department,
+      u.company || 'Absar Alomran',
+      u.role,
+      u.grossSalary,
+      u.standardHours
+    ]);
+    
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Staff_Directory_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  const handlePrint = () => {
+    setShowExportMenu(false);
+    window.print();
   };
 
   const handleViewLogs = async (user: User) => {
@@ -106,7 +134,7 @@ const AdminUserManagement: React.FC = () => {
       const logs = await dataService.getAttendanceHistory(user.id);
       setViewingLogs({ user, records: logs });
     } catch (err) {
-      alert("Failed to fetch logs for this user.");
+      alert("Failed to fetch logs.");
     } finally {
       setLoading(false);
     }
@@ -116,13 +144,22 @@ const AdminUserManagement: React.FC = () => {
     return shifts.find(s => s.assignedUserIds.includes(userId));
   };
 
-  const filteredUsers = users.filter(u => {
-    const s = search.toLowerCase();
-    const name = (u.name || '').toLowerCase();
-    const email = (u.email || '').toLowerCase();
-    const empId = (u.employeeId || '').toLowerCase();
-    return name.includes(s) || email.includes(s) || empId.includes(s);
-  });
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const s = search.toLowerCase();
+      const matchesSearch = (u.name || '').toLowerCase().includes(s) || 
+                            (u.email || '').toLowerCase().includes(s) || 
+                            (u.employeeId || '').toLowerCase().includes(s);
+      
+      let matchesProject = true;
+      if (projectFilter !== 'all') {
+        const project = projects.find(p => p.id === projectFilter);
+        matchesProject = project?.assignedUserIds.includes(u.id) || false;
+      }
+      
+      return matchesSearch && matchesProject;
+    });
+  }, [users, search, projectFilter, projects]);
 
   if (viewingLogs) {
     return (
@@ -132,14 +169,10 @@ const AdminUserManagement: React.FC = () => {
             <i className="fa-solid fa-arrow-left mr-2"></i>
             Back to Staff List
           </button>
-          <div className="text-right">
-            <h2 className="text-lg font-black text-slate-900">{viewingLogs.user.name}</h2>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Employee Logs</p>
-          </div>
         </div>
         <History 
           history={viewingLogs.records} 
-          user={dataService.getCurrentUser()!} 
+          user={viewingLogs.user} 
           onRefresh={async () => {
              const updatedLogs = await dataService.getAttendanceHistory(viewingLogs.user.id);
              setViewingLogs({ ...viewingLogs, records: updatedLogs });
@@ -149,84 +182,145 @@ const AdminUserManagement: React.FC = () => {
     );
   }
 
-  if (loading && users.length === 0) return (
-    <div className="p-20 text-center">
-      <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-      <p className="text-slate-400 font-black text-xs uppercase tracking-widest">Loading Staff Directory...</p>
-    </div>
-  );
-
   return (
     <div className="space-y-8 animate-fadeIn pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Staff Management</h1>
-          <p className="text-slate-500">Manage employee profiles, salaries, and work rules</p>
+          <p className="text-slate-500">Manage {users.length} employee profiles and policies</p>
         </div>
         <div className="flex gap-2">
-           <button onClick={handleBulkFix} disabled={fixing} className="px-5 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-sm hover:bg-slate-50 transition-all flex items-center space-x-2">
-            {fixing ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
-            <span>Verify All Data</span>
-          </button>
-          <button onClick={() => { setEditingUser({ name: '', email: '', employeeId: '', department: '', role: 'employee', grossSalary: 0, company: 'Absar Alomran', disableOvertime: true, disableDeductions: false, standardHours: 0 }); setPassword(''); }} className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center space-x-2">
+          <button onClick={() => setEditingUser({ name: '', email: '', employeeId: '', department: '', role: 'employee', grossSalary: 0, company: 'Absar Alomran', disableOvertime: true, disableDeductions: false, standardHours: 0 })} className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center space-x-2">
             <i className="fa-solid fa-user-plus"></i>
             <span>Add New Staff</span>
           </button>
         </div>
       </div>
 
-      <div className="relative group max-w-md">
-        <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-        <input type="text" placeholder="Search by name, ID, or email..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm" />
-      </div>
-
-      {/* DELETE CONFIRMATION MODAL */}
-      {deletingUser && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full overflow-hidden animate-fadeIn">
-            <div className="bg-rose-500 p-8 text-white text-center">
-              <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white/30">
-                <i className="fa-solid fa-user-slash text-3xl"></i>
-              </div>
-              <h2 className="text-xl font-black">Remove Staff?</h2>
-              <p className="text-xs font-bold text-rose-100 uppercase tracking-widest mt-2">Permanent Firestore Action</p>
-            </div>
-            <div className="p-8 text-center space-y-6">
-              <p className="text-slate-500 text-sm font-medium leading-relaxed">
-                Are you sure you want to delete <span className="text-slate-900 font-black">{deletingUser.name}</span>? 
-                This will remove their profile, salary, and rules from the database.
-              </p>
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest leading-tight">
-                  <i className="fa-solid fa-circle-info mr-1"></i> Note: To fully disable their login, you must also delete them from the Firebase Auth console.
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setDeletingUser(null)}
-                  disabled={isDeleting}
-                  className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={handleConfirmDelete}
-                  disabled={isDeleting}
-                  className="flex-1 py-4 bg-rose-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-rose-100 hover:bg-rose-600 transition-all disabled:opacity-50"
-                >
-                  {isDeleting ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Confirm Delete'}
-                </button>
-              </div>
-            </div>
+      {/* FILTERS & EXPORT */}
+      <div className="flex flex-wrap items-end gap-4 no-print bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+        <div className="flex-1 min-w-[240px]">
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Search Directory</label>
+          <div className="relative">
+            <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"></i>
+            <input 
+              type="text" 
+              placeholder="Name, ID, or email..." 
+              value={search} 
+              onChange={(e) => setSearch(e.target.value)} 
+              className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-sm" 
+            />
           </div>
         </div>
-      )}
 
+        <div className="w-full md:w-auto">
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Filter by Site</label>
+          <select 
+            value={projectFilter} 
+            onChange={(e) => setProjectFilter(e.target.value)} 
+            className="w-full md:w-56 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
+          >
+            <option value="all">All Worksites</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+
+        <div className="relative" ref={exportMenuRef}>
+          <button 
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            className="px-5 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2 active:scale-95 transition-all"
+          >
+            <i className="fa-solid fa-file-export"></i>
+            <span>Export List</span>
+            <i className={`fa-solid fa-chevron-down ml-1 transition-transform ${showExportMenu ? 'rotate-180' : ''}`}></i>
+          </button>
+          
+          {showExportMenu && (
+            <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[150] overflow-hidden animate-fadeIn">
+              <button onClick={handlePrint} className="w-full text-left px-5 py-4 hover:bg-slate-50 flex items-center space-x-3 transition-colors">
+                <i className="fa-solid fa-file-pdf text-rose-500"></i>
+                <span className="text-xs font-black uppercase tracking-widest text-slate-700">PDF Report</span>
+              </button>
+              <div className="h-px bg-slate-100"></div>
+              <button onClick={handleExportCSV} className="w-full text-left px-5 py-4 hover:bg-slate-50 flex items-center space-x-3 transition-colors">
+                <i className="fa-solid fa-file-excel text-emerald-500"></i>
+                <span className="text-xs font-black uppercase tracking-widest text-slate-700">Excel / CSV</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* PRINT HEADER */}
+      <div className="hidden print:block mb-8 border-b-2 border-slate-900 pb-6">
+        <h1 className="text-2xl font-black uppercase tracking-tighter">Staff Directory Report</h1>
+        <p className="text-sm font-bold text-slate-600">Company: Absar Alomran Construction</p>
+        <p className="text-xs font-medium text-slate-500 mt-1">Generated: {new Date().toLocaleDateString()}</p>
+      </div>
+
+      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden card">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b border-slate-100">
+              <tr>
+                <th className="px-8 py-5 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee</th>
+                <th className="px-6 py-5 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Site Assignments</th>
+                <th className="px-6 py-5 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Std Hours</th>
+                <th className="px-6 py-5 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Gross Salary</th>
+                <th className="px-8 py-5 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest no-print">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filteredUsers.map(u => {
+                const assignedProjects = projects.filter(p => p.assignedUserIds.includes(u.id));
+                return (
+                  <tr key={u.id} className="hover:bg-slate-50/30 transition-colors">
+                    <td className="px-8 py-5">
+                      <div className="flex items-center space-x-4">
+                        <img src={u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=random`} className="w-11 h-11 rounded-2xl border border-slate-100" />
+                        <div>
+                          <p className="font-bold text-slate-900 leading-tight">{u.name}</p>
+                          <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">{u.employeeId} • {u.department}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="flex flex-wrap gap-1">
+                        {assignedProjects.length > 0 ? assignedProjects.map(p => (
+                          <span key={p.id} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[8px] font-black uppercase rounded border border-indigo-100">{p.name}</span>
+                        )) : <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">No Sites Assigned</span>}
+                      </div>
+                    </td>
+                    <td className="px-6 py-5 text-center">
+                      <span className="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-black text-slate-600 uppercase">
+                        {Number(u.standardHours) > 0 ? `${u.standardHours}h` : 'Default'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-5 text-right">
+                      <span className="font-mono font-bold text-slate-900 text-sm">SR {(Number(u.grossSalary) || 0).toLocaleString()}</span>
+                    </td>
+                    <td className="px-8 py-5 text-right no-print">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => handleViewLogs(u)} className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all"><i className="fa-solid fa-list-check text-[10px]"></i></button>
+                        <button onClick={() => setEditingUser(u)} className="w-9 h-9 rounded-xl bg-slate-50 text-slate-400 hover:text-indigo-600 transition-all"><i className="fa-solid fa-pen-to-square text-[10px]"></i></button>
+                        <button onClick={() => setDeletingUser(u)} className="w-9 h-9 rounded-xl bg-slate-50 text-slate-400 hover:text-rose-600 transition-all"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* MODALS (Reuse existing editing and deleting UI) */}
       {editingUser && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[200] flex items-center justify-center p-4 no-print">
           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden animate-fadeIn">
             <div className="bg-indigo-600 p-8 text-white">
-              <div className="flex justify-between items-center mb-2">
+              <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-black">{editingUser.id ? 'Edit Profile' : 'Add New Staff'}</h2>
                 <button onClick={() => setEditingUser(null)} className="text-white/60 hover:text-white transition-colors">
                    <i className="fa-solid fa-circle-xmark text-2xl"></i>
@@ -238,76 +332,34 @@ const AdminUserManagement: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
                 <div className="md:col-span-2">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Full Name</label>
-                  <input type="text" value={editingUser.name || ''} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" />
+                  <input type="text" value={editingUser.name || ''} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
                 </div>
-                
                 <div className="md:col-span-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Corporate Email</label>
-                  <input type="email" value={editingUser.email || ''} onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" />
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Email</label>
+                  <input type="email" value={editingUser.email || ''} onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
                 </div>
-
                 {!editingUser.id && (
-                  <div className="md:col-span-2 animate-fadeIn">
-                    <label className="block text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] mb-2 ml-1">Initial Security Key (Login Password)</label>
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 6 characters" className="w-full px-5 py-4 bg-rose-50 border border-rose-100 rounded-2xl font-bold focus:ring-2 focus:ring-rose-500 outline-none transition-all shadow-sm" />
+                  <div className="md:col-span-2">
+                    <label className="block text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] mb-2 ml-1">Initial Security Key</label>
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 6 characters" className="w-full px-5 py-4 bg-rose-50 border border-rose-100 rounded-2xl font-bold focus:ring-2 focus:ring-rose-500 outline-none transition-all" />
                   </div>
                 )}
-                
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Staff ID</label>
-                  <input type="text" value={editingUser.employeeId || ''} onChange={(e) => setEditingUser({ ...editingUser, employeeId: e.target.value })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Department</label>
-                  <input type="text" value={editingUser.department || ''} onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" />
-                </div>
-                
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Company</label>
-                  <input type="text" value={editingUser.company || ''} onChange={(e) => setEditingUser({ ...editingUser, company: e.target.value })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" />
+                  <input type="text" value={editingUser.employeeId || ''} onChange={(e) => setEditingUser({ ...editingUser, employeeId: e.target.value })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Role</label>
-                  <select value={editingUser.role || 'employee'} onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm cursor-pointer appearance-none">
+                  <select value={editingUser.role || 'employee'} onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none cursor-pointer">
                     <option value="employee">Employee</option>
                     <option value="admin">Administrator</option>
                   </select>
                 </div>
-                
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Gross Salary (SR)</label>
-                  <input type="number" value={editingUser.grossSalary || ''} onChange={(e) => setEditingUser({ ...editingUser, grossSalary: parseFloat(e.target.value) || 0 })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Standard Hours</label>
-                  <input type="number" value={editingUser.standardHours || ''} onChange={(e) => setEditingUser({ ...editingUser, standardHours: parseFloat(e.target.value) || 0 })} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" placeholder="e.g. 236" />
-                </div>
-
-                <div className="md:col-span-2 flex items-center justify-between p-5 bg-slate-50 rounded-[1.5rem] border border-slate-200 shadow-inner mt-2">
-                  <div>
-                    <p className="text-xs font-black text-slate-900 uppercase tracking-tight">Disable Overtime</p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em] mt-0.5">Pay extra if hours {'>'} standard</p>
-                  </div>
-                  <button onClick={() => setEditingUser({ ...editingUser, disableOvertime: !editingUser.disableOvertime })} className={`w-14 h-7 rounded-full relative transition-all duration-300 ${editingUser.disableOvertime ? 'bg-indigo-600' : 'bg-slate-300'}`}>
-                    <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all duration-300 shadow-sm ${editingUser.disableOvertime ? 'left-8' : 'left-1'}`}></div>
-                  </button>
-                </div>
-                
-                <div className="md:col-span-2 flex items-center justify-between p-5 bg-slate-50 rounded-[1.5rem] border border-slate-200 shadow-inner">
-                  <div>
-                    <p className="text-xs font-black text-slate-900 uppercase tracking-tight">Disable Deductions</p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em] mt-0.5">Deduct if hours {'<'} standard</p>
-                  </div>
-                  <button onClick={() => setEditingUser({ ...editingUser, disableDeductions: !editingUser.disableDeductions })} className={`w-14 h-7 rounded-full relative transition-all duration-300 ${editingUser.disableDeductions ? 'bg-indigo-600' : 'bg-slate-300'}`}>
-                    <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all duration-300 shadow-sm ${editingUser.disableDeductions ? 'left-8' : 'left-1'}`}></div>
-                  </button>
-                </div>
               </div>
-
               <div className="pt-6 flex gap-4">
-                <button type="button" onClick={() => setEditingUser(null)} className="flex-1 py-5 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>
-                <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50">
-                  {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : (editingUser.id ? 'Save Staff Profile' : 'Create Staff Account')}
+                <button type="button" onClick={() => setEditingUser(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest">Cancel</button>
+                <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50">
+                  {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Save Profile'}
                 </button>
               </div>
             </div>
@@ -315,64 +367,23 @@ const AdminUserManagement: React.FC = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50/50 border-b border-slate-100">
-              <tr>
-                <th className="px-8 py-5 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Employee</th>
-                <th className="px-6 py-5 text-left font-black text-slate-400 uppercase text-[10px] tracking-widest">Shift</th>
-                <th className="px-6 py-5 text-center font-black text-slate-400 uppercase text-[10px] tracking-widest">Std Hours</th>
-                <th className="px-6 py-5 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Salary</th>
-                <th className="px-8 py-5 text-right font-black text-slate-400 uppercase text-[10px] tracking-widest">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filteredUsers.map(u => {
-                const userShift = getUserShift(u.id);
-                return (
-                  <tr key={u.id} className="hover:bg-slate-50/30 transition-colors">
-                    <td className="px-8 py-5">
-                      <div className="flex items-center space-x-4">
-                        <img src={u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=random`} className="w-11 h-11 rounded-2xl border border-slate-100 shadow-sm" />
-                        <div>
-                          <p className="font-bold text-slate-900 leading-tight">{u.name}</p>
-                          <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">{u.employeeId} • {u.company || 'Absar'}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      {userShift ? (
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider">{userShift.name}</span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase">{userShift.startTime} - {userShift.endTime}</span>
-                        </div>
-                      ) : (
-                        <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">No Shift</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-5 text-center">
-                      <span className="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-black text-slate-600 uppercase">
-                        {Number(u.standardHours) > 0 ? `${u.standardHours}h` : 'Default'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-5 text-right">
-                      <span className="font-mono font-bold text-indigo-600 text-sm">SR {(Number(u.grossSalary) || 0).toLocaleString()}</span>
-                    </td>
-                    <td className="px-8 py-5 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => handleViewLogs(u)} className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all"><i className="fa-solid fa-list-check text-[10px]"></i></button>
-                        <button onClick={() => setEditingUser(u)} className="w-9 h-9 rounded-xl bg-slate-50 text-slate-400 hover:text-indigo-600 transition-all shadow-sm"><i className="fa-solid fa-pen-to-square text-[10px]"></i></button>
-                        <button onClick={() => setDeletingUser(u)} className="w-9 h-9 rounded-xl bg-slate-50 text-slate-400 hover:text-rose-600 transition-all shadow-sm"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {deletingUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[300] flex items-center justify-center p-6 no-print">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full overflow-hidden animate-fadeIn text-center p-8">
+              <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i className="fa-solid fa-user-slash text-3xl"></i>
+              </div>
+              <h2 className="text-xl font-black text-slate-900">Remove Staff?</h2>
+              <p className="text-sm text-slate-500 font-medium mt-2">Delete profile for <b>{deletingUser.name}</b>?</p>
+              <div className="flex gap-3 mt-8">
+                <button onClick={() => setDeletingUser(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest">Cancel</button>
+                <button onClick={handleConfirmDelete} disabled={isDeleting} className="flex-1 py-4 bg-rose-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-600">
+                  {isDeleting ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Delete'}
+                </button>
+              </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

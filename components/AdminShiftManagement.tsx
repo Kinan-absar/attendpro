@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { dataService } from '../services/dataService';
 import { ShiftSchedule, User } from '../types';
 
@@ -9,6 +9,7 @@ const AdminShiftManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editingShift, setEditingShift] = useState<Partial<ShiftSchedule> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
 
   const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -72,6 +73,14 @@ const AdminShiftManagement: React.FC = () => {
     setEditingShift(prev => ({ ...prev, assignedUserIds: updated }));
   };
 
+  const filteredUsers = useMemo(() => {
+    const s = userSearch.toLowerCase();
+    return users.filter(u => 
+      u.name.toLowerCase().includes(s) || 
+      u.employeeId.toLowerCase().includes(s)
+    ).sort((a, b) => a.name.localeCompare(b.name));
+  }, [users, userSearch]);
+
   if (loading) return (
     <div className="p-20 text-center">
       <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -88,7 +97,10 @@ const AdminShiftManagement: React.FC = () => {
         </div>
         {!editingShift && (
           <button 
-            onClick={() => setEditingShift({ name: '', startTime: '08:00', endTime: '17:00', workingDays: ["Mon", "Tue", "Wed", "Thu", "Fri"], assignedUserIds: [], disableAutoClose: false })}
+            onClick={() => {
+              setEditingShift({ name: '', startTime: '08:00', endTime: '17:00', workingDays: ["Mon", "Tue", "Wed", "Thu", "Fri"], assignedUserIds: [], disableAutoClose: false });
+              setUserSearch('');
+            }}
             className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center space-x-2"
           >
             <i className="fa-solid fa-calendar-plus"></i>
@@ -178,8 +190,24 @@ const AdminShiftManagement: React.FC = () => {
 
             <div className="flex flex-col">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Assigned Personnel</label>
-              <div className="flex-1 overflow-y-auto max-h-[300px] border border-slate-100 rounded-2xl bg-slate-50 p-2 space-y-1">
-                {users.map(user => {
+              
+              <div className="mb-3 relative group">
+                <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors"></i>
+                <input 
+                  type="text" 
+                  placeholder="Find staff..." 
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              <div className="flex-1 overflow-y-auto max-h-[300px] border border-slate-100 rounded-2xl bg-slate-50 p-2 space-y-1 shadow-inner no-scrollbar">
+                {filteredUsers.length === 0 ? (
+                  <div className="py-10 text-center opacity-40">
+                    <p className="text-[10px] font-black uppercase tracking-widest">No matching staff</p>
+                  </div>
+                ) : filteredUsers.map(user => {
                   const isAssigned = (editingShift.assignedUserIds || []).includes(user.id);
                   return (
                     <button
@@ -189,9 +217,12 @@ const AdminShiftManagement: React.FC = () => {
                         isAssigned ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-100'
                       }`}
                     >
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-3 text-left">
                         <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} className="w-6 h-6 rounded-full border border-white/20" />
-                        <p className="text-xs font-bold leading-none">{user.name}</p>
+                        <div>
+                          <p className="text-xs font-bold leading-none">{user.name}</p>
+                          <p className={`text-[8px] font-black uppercase tracking-tighter mt-0.5 ${isAssigned ? 'text-indigo-200' : 'text-slate-400'}`}>{user.employeeId}</p>
+                        </div>
                       </div>
                       {isAssigned && <i className="fa-solid fa-check text-[10px]"></i>}
                     </button>
@@ -221,7 +252,7 @@ const AdminShiftManagement: React.FC = () => {
                   <i className={`fa-solid ${shift.disableAutoClose ? 'fa-moon' : 'fa-business-time'} text-xl`}></i>
                 </div>
                 <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-all">
-                  <button onClick={() => setEditingShift(shift)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600">
+                  <button onClick={() => { setEditingShift(shift); setUserSearch(''); }} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600">
                     <i className="fa-solid fa-pen-to-square text-xs"></i>
                   </button>
                   <button onClick={() => handleDelete(shift.id)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-rose-600">

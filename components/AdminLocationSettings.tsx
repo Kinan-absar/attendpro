@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { dataService } from '../services/dataService';
 import { Project, User } from '../types';
 
@@ -10,6 +10,7 @@ const AdminLocationSettings: React.FC = () => {
   const [editingProject, setEditingProject] = useState<Partial<Project> | null>(null);
   const [saving, setSaving] = useState(false);
   const [permissionError, setPermissionError] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
 
   const fetch = async () => {
     setLoading(true);
@@ -22,10 +23,8 @@ const AdminLocationSettings: React.FC = () => {
       setProjects(p);
       setUsers(u);
     } catch (err: any) {
-      console.error("Fetch failed in Admin Settings:", err);
-      if (err.code === 'permission-denied') {
-        setPermissionError(true);
-      }
+      console.error(err);
+      if (err.code === 'permission-denied') setPermissionError(true);
     } finally {
       setLoading(false);
     }
@@ -47,25 +46,19 @@ const AdminLocationSettings: React.FC = () => {
       await fetch();
       setEditingProject(null);
     } catch (err: any) {
-      console.error(err);
-      if (err.code === 'permission-denied') {
-        setPermissionError(true);
-      } else {
-        alert('Failed to save project');
-      }
+      alert('Failed to save project');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this project?')) return;
+    if (!confirm('Are you sure?')) return;
     try {
       await dataService.deleteProject(id);
       setProjects(projects.filter(p => p.id !== id));
     } catch (err: any) {
-      if (err.code === 'permission-denied') setPermissionError(true);
-      else alert('Delete failed');
+      alert('Delete failed');
     }
   };
 
@@ -93,10 +86,17 @@ const AdminLocationSettings: React.FC = () => {
     });
   };
 
+  const filteredUsersToAssign = useMemo(() => {
+    const s = userSearch.toLowerCase();
+    return users.filter(u => 
+      u.name.toLowerCase().includes(s) || 
+      u.employeeId.toLowerCase().includes(s)
+    ).sort((a, b) => a.name.localeCompare(b.name));
+  }, [users, userSearch]);
+
   if (loading) return (
     <div className="p-20 text-center">
-      <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-      <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Loading Worksites...</p>
+      <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
     </div>
   );
 
@@ -105,54 +105,22 @@ const AdminLocationSettings: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Worksites & Projects</h1>
-          <p className="text-slate-500">Manage locations or create flexible remote work groups</p>
+          <p className="text-slate-500">Manage location-based geofencing and staff clusters</p>
         </div>
-        <div className="flex gap-2">
-           <button 
-            onClick={fetch}
-            className="px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold text-sm hover:bg-slate-50 transition-all flex items-center space-x-2"
-            title="Refresh List"
-          >
-            <i className="fa-solid fa-rotate"></i>
-          </button>
-          {!editingProject && (
-            <button 
-              onClick={() => {
-                setEditingProject({ 
-                  name: '', 
-                  geofence: { lat: 0, lng: 0, radius: 100, enabled: true },
-                  assignedUserIds: [] 
-                });
-                setPermissionError(false);
-              }}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center space-x-2"
-            >
-              <i className="fa-solid fa-plus"></i>
-              <span>Add New Site</span>
-            </button>
-          )}
-        </div>
+        <button 
+          onClick={() => {
+            setEditingProject({ 
+              name: '', 
+              geofence: { lat: 0, lng: 0, radius: 100, enabled: true },
+              assignedUserIds: [] 
+            });
+            setUserSearch('');
+          }}
+          className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all"
+        >
+          Add New Site
+        </button>
       </div>
-
-      {permissionError && (
-        <div className="bg-rose-50 border-2 border-rose-200 p-8 rounded-3xl space-y-4 animate-fadeIn">
-          <div className="flex items-center space-x-4 text-rose-700">
-            <div className="w-12 h-12 bg-rose-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-rose-200">
-              <i className="fa-solid fa-shield-halved text-2xl"></i>
-            </div>
-            <div>
-              <h2 className="text-xl font-black leading-none mb-1">Permission Denied</h2>
-              <p className="text-sm font-bold opacity-80 uppercase tracking-wider">Action required in Firebase Rules</p>
-            </div>
-          </div>
-          
-          <div className="bg-white/80 p-6 rounded-2xl border border-rose-100 space-y-4">
-            <p className="text-sm text-slate-700 leading-relaxed">
-              Listing requires <code>read</code> access. Ensure your rules allow logged-in users to read projects.
-            </p>
-          </div>
-        </div>
-      )}
 
       {editingProject ? (
         <div className="max-w-4xl bg-white rounded-3xl border border-slate-100 shadow-xl p-8 space-y-8 animate-fadeIn">
@@ -171,17 +139,14 @@ const AdminLocationSettings: React.FC = () => {
                   type="text"
                   value={editingProject.name}
                   onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
-                  placeholder="e.g. Remote Sales Team"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  placeholder="e.g. Building A Site"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none"
                 />
               </div>
 
-              <div className={`p-4 rounded-2xl border transition-all ${editingProject.geofence?.enabled ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+              <div className={`p-4 rounded-2xl border ${editingProject.geofence?.enabled ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
                 <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="font-bold text-slate-900 text-sm">Enforce Location Boundary</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Restrict check-in to specific GPS area</p>
-                  </div>
+                  <span className="font-bold text-slate-900 text-sm">Geofence Boundary</span>
                   <button 
                     onClick={() => setEditingProject({
                       ...editingProject,
@@ -197,66 +162,44 @@ const AdminLocationSettings: React.FC = () => {
                   <div className="space-y-4 animate-fadeIn">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Lat</label>
-                        <input 
-                          type="number"
-                          value={editingProject.geofence?.lat}
-                          onChange={(e) => setEditingProject({
-                            ...editingProject,
-                            geofence: { ...editingProject.geofence!, lat: parseFloat(e.target.value) }
-                          })}
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-mono text-xs"
-                        />
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Lat</label>
+                        <input type="number" step="any" value={editingProject.geofence?.lat} onChange={(e) => setEditingProject({...editingProject, geofence: {...editingProject.geofence!, lat: parseFloat(e.target.value)}})} className="w-full px-3 py-2 border rounded-lg text-xs" />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Lng</label>
-                        <input 
-                          type="number"
-                          value={editingProject.geofence?.lng}
-                          onChange={(e) => setEditingProject({
-                            ...editingProject,
-                            geofence: { ...editingProject.geofence!, lng: parseFloat(e.target.value) }
-                          })}
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-mono text-xs"
-                        />
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Lng</label>
+                        <input type="number" step="any" value={editingProject.geofence?.lng} onChange={(e) => setEditingProject({...editingProject, geofence: {...editingProject.geofence!, lng: parseFloat(e.target.value)}})} className="w-full px-3 py-2 border rounded-lg text-xs" />
                       </div>
                     </div>
-
-                    <button 
-                      onClick={captureLocation}
-                      className="w-full py-3 bg-white text-slate-700 border border-slate-200 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center space-x-2"
-                    >
-                      <i className="fa-solid fa-crosshairs"></i>
-                      <span>Use Current Location</span>
-                    </button>
-
+                    <button onClick={captureLocation} className="w-full py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-50">Capture My GPS</button>
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Radius: {editingProject.geofence?.radius}m</label>
-                      <input 
-                        type="range" min="10" max="1000" step="10"
-                        value={editingProject.geofence?.radius}
-                        onChange={(e) => setEditingProject({
-                          ...editingProject,
-                          geofence: { ...editingProject.geofence!, radius: parseInt(e.target.value) }
-                        })}
-                        className="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                      />
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Radius: {editingProject.geofence?.radius}m</label>
+                      <input type="range" min="10" max="1000" step="10" value={editingProject.geofence?.radius} onChange={(e) => setEditingProject({...editingProject, geofence: {...editingProject.geofence!, radius: parseInt(e.target.value)}})} className="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
                     </div>
-                  </div>
-                )}
-                {!editingProject.geofence?.enabled && (
-                  <div className="p-4 text-center bg-white/50 rounded-xl border border-dashed border-slate-300">
-                    <i className="fa-solid fa-globe text-2xl text-slate-200 mb-2"></i>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Flexible location mode active</p>
                   </div>
                 )}
               </div>
             </div>
 
             <div className="flex flex-col">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Assign Staff</label>
-              <div className="flex-1 overflow-y-auto max-h-[300px] border border-slate-100 rounded-2xl bg-slate-50 p-2 space-y-1">
-                {users.map(user => {
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Assign Staff</label>
+              
+              <div className="mb-3 relative group">
+                 <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors"></i>
+                 <input 
+                  type="text" 
+                  placeholder="Find staff..." 
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                 />
+              </div>
+
+              <div className="flex-1 overflow-y-auto max-h-[300px] border border-slate-100 rounded-2xl bg-slate-50 p-2 space-y-1 no-scrollbar shadow-inner">
+                {filteredUsersToAssign.length === 0 ? (
+                  <div className="py-10 text-center opacity-40">
+                    <p className="text-[10px] font-black uppercase tracking-widest">No matching staff</p>
+                  </div>
+                ) : filteredUsersToAssign.map(user => {
                   const isAssigned = editingProject.assignedUserIds?.includes(user.id);
                   return (
                     <button
@@ -270,7 +213,7 @@ const AdminLocationSettings: React.FC = () => {
                         <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} className="w-6 h-6 rounded-full border border-white/20" />
                         <div className="text-left">
                           <p className="text-xs font-bold leading-none">{user.name}</p>
-                          <p className={`text-[8px] font-black uppercase tracking-tighter ${isAssigned ? 'text-indigo-200' : 'text-slate-400'}`}>{user.role}</p>
+                          <p className={`text-[8px] font-black uppercase tracking-tighter ${isAssigned ? 'text-indigo-200' : 'text-slate-400'}`}>{user.employeeId}</p>
                         </div>
                       </div>
                       {isAssigned && <i className="fa-solid fa-check text-[10px]"></i>}
@@ -282,19 +225,16 @@ const AdminLocationSettings: React.FC = () => {
           </div>
 
           <div className="pt-6 border-t border-slate-100 flex gap-4">
-            <button 
-              onClick={handleSave}
-              disabled={saving}
-              className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
-            >
-              {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Save Changes'}
+            <button onClick={() => setEditingProject(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest">Cancel</button>
+            <button onClick={handleSave} disabled={saving} className="flex-2 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-50 transition-all">
+              {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Apply Changes'}
             </button>
           </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map(project => (
-            <div key={project.id} className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col group">
+            <div key={project.id} className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
               <div className="flex justify-between items-start mb-4">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${project.geofence.enabled ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
                   <i className={`fa-solid ${project.geofence.enabled ? 'fa-building-shield' : 'fa-globe'} text-xl`}></i>
@@ -308,29 +248,19 @@ const AdminLocationSettings: React.FC = () => {
                   </button>
                 </div>
               </div>
-
               <h3 className="text-xl font-black text-slate-900 mb-1">{project.name}</h3>
-              <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-widest mb-6">
-                {project.geofence.enabled ? (
-                   <span className="text-indigo-500 flex items-center">
-                     <i className="fa-solid fa-location-dot mr-1"></i> {project.geofence.radius}m Radius
-                   </span>
-                ) : (
-                   <span className="text-emerald-500">Flexible Location</span>
-                )}
-              </div>
-
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">
+                {project.geofence.enabled ? `${project.geofence.radius}m Safe Zone` : 'Flexible Site'}
+              </p>
               <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
                 <div className="flex -space-x-2">
                   {(project.assignedUserIds || []).slice(0, 4).map(uid => {
                     const u = users.find(user => user.id === uid);
-                    return u ? (
-                      <img key={uid} src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} className="w-6 h-6 rounded-full border-2 border-white" title={u.name} />
-                    ) : null;
+                    return u ? <img key={uid} src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} className="w-6 h-6 rounded-full border-2 border-white shadow-sm" /> : null;
                   })}
                 </div>
                 <span className="text-[10px] font-black text-slate-300 uppercase">
-                  {(project.assignedUserIds || []).length} Assigned
+                  {(project.assignedUserIds || []).length} Personnel
                 </span>
               </div>
             </div>
