@@ -12,16 +12,14 @@
   "theme_color": "#4f46e5",
   "icons": [
     {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "src": "https://cdn-icons-png.flaticon.com/512/3125/3125856.png",
+      "type": "image/png",
+      "sizes": "192x192"
     },
     {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
+      "src": "https://cdn-icons-png.flaticon.com/512/3125/3125856.png",
+      "type": "image/png",
+      "sizes": "512x512"
     }
   ],
   "categories": ["business", "productivity"],
