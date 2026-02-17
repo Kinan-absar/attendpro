@@ -123,17 +123,82 @@ class DataService {
     this.currentUser = null;
   }
 
+  /* 🕒 AUTO-CLOSE ENGINE */
+  async processAutoClosures(userId: string) {
+    try {
+      // 1. Find any open shifts for this specific user
+      const q = query(
+        collection(db, ATTENDANCE), 
+        where('userId', '==', userId), 
+        where('checkOut', '==', null)
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) return;
+
+      // 2. Check if the user has an assigned shift with "disableAutoClose" (Night Shift exception)
+      const shiftsSnap = await getDocs(query(collection(db, SHIFTS), where('assignedUserIds', 'array-contains', userId)));
+      const schedules = shiftsSnap.docs.map(d => d.data() as ShiftSchedule);
+      const hasNightShiftExemption = schedules.some(s => s.disableAutoClose === true);
+
+      const now = new Date();
+      const batch = writeBatch(db);
+      let count = 0;
+
+      snap.docs.forEach(d => {
+        const data = d.data();
+        const checkIn = this.convertToDate(data.checkIn);
+        if (!checkIn) return;
+
+        // Is the shift from a previous day?
+        const isFromPreviousDay = checkIn.toDateString() !== now.toDateString() && checkIn < now;
+
+        if (isFromPreviousDay) {
+          if (hasNightShiftExemption) {
+            // EXCEPTION: 24-hour limit instead of midnight
+            const diffHours = (now.getTime() - checkIn.getTime()) / 3600000;
+            if (diffHours > 24) {
+              batch.update(d.ref, {
+                checkOut: Timestamp.fromDate(now),
+                autoClosed: true,
+                needsReview: true,
+                duration: diffHours * 60
+              });
+              count++;
+            }
+          } else {
+            // STANDARD: Close at 23:59:59 of the check-in day
+            const autoCloseTime = new Date(checkIn);
+            autoCloseTime.setHours(23, 59, 59, 999);
+            const duration = (autoCloseTime.getTime() - checkIn.getTime()) / 60000;
+            batch.update(d.ref, {
+              checkOut: Timestamp.fromDate(autoCloseTime),
+              duration: duration > 0 ? duration : 0,
+              autoClosed: true,
+              needsReview: true
+            });
+            count++;
+          }
+        }
+      });
+
+      if (count > 0) {
+        await batch.commit();
+        console.log(`Auto-closed ${count} stale shifts for user ${userId}`);
+      }
+    } catch (err) {
+      console.error("Auto-close process failed:", err);
+    }
+  }
+
   /* 📢 COMMUNICATIONS (Broadcasts) */
   async getActiveBroadcasts(): Promise<Broadcast[]> {
     try {
       this.ensureAuth();
       const user = this.currentUser!;
       
-      // Get all active broadcasts
       const q = query(collection(db, BROADCASTS), where('active', '==', true));
       const snap = await getDocs(q);
       
-      // Get user's projects to verify membership
       const userProjects = await this.getProjects(user.id);
       const userProjectIds = userProjects.map(p => p.id);
 
@@ -146,20 +211,12 @@ class DataService {
         } as Broadcast;
       });
 
-      // Filter in-memory based on targeting
       return items.filter(b => {
         const hasProjectFilter = b.targetProjectIds && b.targetProjectIds.length > 0;
         const hasUserFilter = b.targetUserIds && b.targetUserIds.length > 0;
-
-        // If no filters, it's global
         if (!hasProjectFilter && !hasUserFilter) return true;
-
-        // Check if user is targeted directly
         const userMatch = hasUserFilter && b.targetUserIds!.includes(user.id);
-        
-        // Check if user's project is targeted
         const projectMatch = hasProjectFilter && b.targetProjectIds!.some(pid => userProjectIds.includes(pid));
-
         return userMatch || projectMatch;
       }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     } catch (err) {
@@ -251,60 +308,6 @@ class DataService {
   async deleteHoliday(id: string) {
     this.ensureAdmin();
     await deleteDoc(doc(db, HOLIDAYS, id));
-  }
-
-  /* 🕒 AUTO-CLOSE ENGINE */
-  async processAutoClosures(userId: string) {
-    const shiftsSnap = await getDocs(query(collection(db, SHIFTS), where('assignedUserIds', 'array-contains', userId)));
-    const activeShift = shiftsSnap.docs[0]?.data() as ShiftSchedule | undefined;
-    
-    if (activeShift?.disableAutoClose) {
-      const q = query(collection(db, ATTENDANCE), where('userId', '==', userId), where('checkOut', '==', null));
-      const snap = await getDocs(q);
-      const now = new Date();
-      const batch = writeBatch(db);
-      let count = 0;
-      snap.docs.forEach(d => {
-        const data = d.data();
-        const checkIn = this.convertToDate(data.checkIn);
-        if (!checkIn) return;
-        const diffHours = (now.getTime() - checkIn.getTime()) / 3600000;
-        if (diffHours > 24) { 
-          batch.update(d.ref, {
-            checkOut: Timestamp.fromDate(now),
-            autoClosed: true,
-            needsReview: true
-          });
-          count++;
-        }
-      });
-      if (count > 0) await batch.commit();
-      return;
-    }
-
-    const q = query(collection(db, ATTENDANCE), where('userId', '==', userId), where('checkOut', '==', null));
-    const snap = await getDocs(q);
-    const now = new Date();
-    const batch = writeBatch(db);
-    let count = 0;
-    snap.docs.forEach(d => {
-      const data = d.data();
-      const checkIn = this.convertToDate(data.checkIn);
-      if (!checkIn) return;
-      if (checkIn.toDateString() !== now.toDateString() && checkIn < now) {
-        const autoCloseTime = new Date(checkIn);
-        autoCloseTime.setHours(23, 59, 59, 999);
-        const duration = (autoCloseTime.getTime() - checkIn.getTime()) / 60000;
-        batch.update(d.ref, {
-          checkOut: Timestamp.fromDate(autoCloseTime),
-          duration: duration > 0 ? duration : 0,
-          autoClosed: true,
-          needsReview: true
-        });
-        count++;
-      }
-    });
-    if (count > 0) await batch.commit();
   }
 
   /* ⏱️ ATTENDANCE ACTIONS */

@@ -34,11 +34,8 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
         const assigned = await dataService.getProjects(user.id);
         
         if (user.role === 'admin') {
-          // ADMIN DASHBOARD LOGIC: Don't force assigned[0].
-          // Let admin select from the full list or stay in "Select Site" state.
           const all = await dataService.getProjects();
           setAllProjects(all);
-          // Only auto-select if they have an actual direct assignment
           setUserProject(assigned.length > 0 ? assigned[0] : null);
         } else {
           setUserProject(assigned[0] || null);
@@ -87,7 +84,16 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
     return currentDistance <= userProject.geofence.radius;
   }, [currentDistance, userProject]);
 
-  const activeRecord = useMemo(() => history.find(r => r.checkIn && !r.checkOut), [history]);
+  const activeRecord = useMemo(() => {
+    const record = history.find(r => r.checkIn && !r.checkOut);
+    
+    // UI-SIDE STALE CHECK: If the record belongs to a previous day, treat it as closed
+    if (record && record.checkIn.toDateString() !== now.toDateString()) {
+       return null; 
+    }
+    
+    return record;
+  }, [history, now]);
 
   const handleToggle = async () => {
     if (processing) return;

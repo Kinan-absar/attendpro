@@ -120,6 +120,18 @@ const App: React.FC = () => {
     });
   }, []);
 
+  // Background Heartbeat: Check for auto-closures every minute
+  useEffect(() => {
+    if (!user) return;
+
+    const heartbeat = setInterval(async () => {
+      await dataService.processAutoClosures(user.id);
+      refreshData();
+    }, 60000); // 1 minute
+
+    return () => clearInterval(heartbeat);
+  }, [user, refreshData]);
+
   useEffect(() => {
     if (user) refreshData();
   }, [user, refreshData]);
