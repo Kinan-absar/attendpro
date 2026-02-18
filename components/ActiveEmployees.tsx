@@ -28,10 +28,15 @@ const ActiveEmployees: React.FC = () => {
         dataService.getAllAttendance()
       ]);
       
+      const todayStr = new Date().toDateString();
+      
+      // Filter records: Must have no checkOut AND must have started TODAY
+      // If they started yesterday, they are "Awaiting Auto-Close" and shouldn't show in Live Active tab
       const currentActiveRecords = allAttendance.filter(r => 
         r.checkIn && 
         r.checkIn.getTime() > 1000000 && 
-        !r.checkOut
+        !r.checkOut &&
+        r.checkIn.toDateString() === todayStr
       );
       
       const activeShifts: ActiveShift[] = [];
@@ -62,6 +67,9 @@ const ActiveEmployees: React.FC = () => {
 
   useEffect(() => {
     load();
+    // Refresh active list every 30 seconds to catch auto-closures
+    const refreshTimer = setInterval(load, 30000);
+    return () => clearInterval(refreshTimer);
   }, []);
 
   const getDuration = (start: Date) => {
@@ -71,7 +79,7 @@ const ActiveEmployees: React.FC = () => {
     return `${hours}h ${minutes}m`;
   };
 
-  if (loading) return (
+  if (loading && active.length === 0) return (
     <div className="p-20 text-center">
       <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
       <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Scanning Active Workforce...</p>

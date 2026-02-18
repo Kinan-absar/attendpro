@@ -56,6 +56,28 @@ class DataService {
     }
   }
 
+  /**
+   * Deeply sanitizes an object to ensure it only contains Firestore-compatible primitives.
+   * Prevents "Circular structure to JSON" or "Unsupported field value" errors.
+   */
+  private sanitize(data: any): any {
+    if (data === null || data === undefined) return null;
+    if (typeof data === 'function') return null;
+    if (typeof data !== 'object') return data;
+    if (data instanceof Date) return Timestamp.fromDate(data);
+    if (data instanceof Timestamp) return data;
+    if (Array.isArray(data)) return data.map(v => this.sanitize(v)).filter(v => v !== undefined);
+
+    const sanitized: any = {};
+    for (const key in data) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        const val = this.sanitize(data[key]);
+        if (val !== undefined) sanitized[key] = val;
+      }
+    }
+    return sanitized;
+  }
+
   /* 🔐 AUTHENTICATION */
   async login(email: string, password: string): Promise<User> {
     const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
@@ -97,7 +119,7 @@ class DataService {
         avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}&background=random`
       };
 
-      await setDoc(doc(db, USERS, uid), sanitized);
+      await setDoc(doc(db, USERS, uid), this.sanitize(sanitized));
       return uid;
     } catch (error: any) {
       console.error("Admin user creation process failed:", error);
@@ -113,7 +135,17 @@ class DataService {
       const snap = await getDoc(doc(db, USERS, fbUser.uid));
       if (!snap.exists()) { onUser(null); return; }
       this.currentUser = { id: fbUser.uid, email: fbUser.email || '', ...snap.data() } as User;
-      await this.processAutoClosures(fbUser.uid);
+      
+      try {
+        if (this.currentUser.role === 'admin') {
+          await this.processAllAutoClosures();
+        } else {
+          await this.processAutoClosures(fbUser.uid);
+        }
+      } catch (e) {
+        console.error("Auth init auto-close error:", e);
+      }
+      
       onUser(this.currentUser);
     });
   }
@@ -124,18 +156,77 @@ class DataService {
   }
 
   /* 🕒 AUTO-CLOSE ENGINE */
-  async processAutoClosures(userId: string) {
+  async processAllAutoClosures(): Promise<boolean> {
     try {
-      // 1. Find any open shifts for this specific user
+      this.ensureAdmin();
+      const q = query(collection(db, ATTENDANCE), where('checkOut', '==', null));
+      const snap = await getDocs(q);
+      if (snap.empty) return false;
+
+      const shiftsSnap = await getDocs(collection(db, SHIFTS));
+      const schedules = shiftsSnap.docs.map(d => ({ id: d.id, ...d.data() } as ShiftSchedule));
+
+      const now = new Date();
+      const batch = writeBatch(db);
+      let count = 0;
+
+      snap.docs.forEach(d => {
+        const data = d.data();
+        const checkIn = this.convertToDate(data.checkIn);
+        if (!checkIn) return;
+
+        const isFromPreviousDay = checkIn.toDateString() !== now.toDateString() && checkIn < now;
+        if (!isFromPreviousDay) return;
+
+        const userSchedule = schedules.find(s => s.assignedUserIds.includes(data.userId));
+        const hasExemption = userSchedule?.disableAutoClose === true;
+
+        if (hasExemption) {
+          const diffHours = (now.getTime() - checkIn.getTime()) / 3600000;
+          if (diffHours > 24) {
+            batch.update(d.ref, {
+              checkOut: Timestamp.fromDate(now),
+              autoClosed: true,
+              needsReview: true,
+              duration: diffHours * 60
+            });
+            count++;
+          }
+        } else {
+          const autoCloseTime = new Date(checkIn);
+          autoCloseTime.setHours(23, 59, 59, 999);
+          const duration = (autoCloseTime.getTime() - checkIn.getTime()) / 60000;
+          batch.update(d.ref, {
+            checkOut: Timestamp.fromDate(autoCloseTime),
+            duration: duration > 0 ? duration : 0,
+            autoClosed: true,
+            needsReview: true
+          });
+          count++;
+        }
+      });
+
+      if (count > 0) {
+        await batch.commit();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("Global auto-close failed:", err);
+      return false;
+    }
+  }
+
+  async processAutoClosures(userId: string): Promise<boolean> {
+    try {
       const q = query(
         collection(db, ATTENDANCE), 
         where('userId', '==', userId), 
         where('checkOut', '==', null)
       );
       const snap = await getDocs(q);
-      if (snap.empty) return;
+      if (snap.empty) return false;
 
-      // 2. Check if the user has an assigned shift with "disableAutoClose" (Night Shift exception)
       const shiftsSnap = await getDocs(query(collection(db, SHIFTS), where('assignedUserIds', 'array-contains', userId)));
       const schedules = shiftsSnap.docs.map(d => d.data() as ShiftSchedule);
       const hasNightShiftExemption = schedules.some(s => s.disableAutoClose === true);
@@ -149,12 +240,10 @@ class DataService {
         const checkIn = this.convertToDate(data.checkIn);
         if (!checkIn) return;
 
-        // Is the shift from a previous day?
         const isFromPreviousDay = checkIn.toDateString() !== now.toDateString() && checkIn < now;
 
         if (isFromPreviousDay) {
           if (hasNightShiftExemption) {
-            // EXCEPTION: 24-hour limit instead of midnight
             const diffHours = (now.getTime() - checkIn.getTime()) / 3600000;
             if (diffHours > 24) {
               batch.update(d.ref, {
@@ -166,7 +255,6 @@ class DataService {
               count++;
             }
           } else {
-            // STANDARD: Close at 23:59:59 of the check-in day
             const autoCloseTime = new Date(checkIn);
             autoCloseTime.setHours(23, 59, 59, 999);
             const duration = (autoCloseTime.getTime() - checkIn.getTime()) / 60000;
@@ -183,10 +271,12 @@ class DataService {
 
       if (count > 0) {
         await batch.commit();
-        console.log(`Auto-closed ${count} stale shifts for user ${userId}`);
+        return true;
       }
+      return false;
     } catch (err) {
-      console.error("Auto-close process failed:", err);
+      console.error("User auto-close failed:", err);
+      return false;
     }
   }
 
@@ -195,13 +285,10 @@ class DataService {
     try {
       this.ensureAuth();
       const user = this.currentUser!;
-      
       const q = query(collection(db, BROADCASTS), where('active', '==', true));
       const snap = await getDocs(q);
-      
       const userProjects = await this.getProjects(user.id);
       const userProjectIds = userProjects.map(p => p.id);
-
       const items = snap.docs.map(d => {
         const data = d.data();
         return { 
@@ -210,7 +297,6 @@ class DataService {
           createdAt: this.convertToDate(data.createdAt) || new Date() 
         } as Broadcast;
       });
-
       return items.filter(b => {
         const hasProjectFilter = b.targetProjectIds && b.targetProjectIds.length > 0;
         const hasUserFilter = b.targetUserIds && b.targetUserIds.length > 0;
@@ -220,7 +306,7 @@ class DataService {
         return userMatch || projectMatch;
       }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     } catch (err) {
-      console.error("Failed to fetch active broadcasts:", err);
+      console.error("Broadcasts fetch error:", err);
       return [];
     }
   }
@@ -231,11 +317,7 @@ class DataService {
     const snap = await getDocs(q);
     return snap.docs.map(d => {
       const data = d.data();
-      return { 
-        id: d.id, 
-        ...data, 
-        createdAt: this.convertToDate(data.createdAt) || new Date() 
-      } as Broadcast;
+      return { id: d.id, ...data, createdAt: this.convertToDate(data.createdAt) || new Date() } as Broadcast;
     });
   }
 
@@ -246,19 +328,11 @@ class DataService {
       targetProjectIds: broadcast.targetProjectIds || [],
       targetUserIds: broadcast.targetUserIds || []
     };
-
     if (broadcast.id) {
       const { id, ...data } = dataToSave;
-      await updateDoc(doc(db, BROADCASTS, id), {
-        ...data,
-        updatedAt: serverTimestamp()
-      });
+      await updateDoc(doc(db, BROADCASTS, id), this.sanitize({ ...data, updatedAt: serverTimestamp() }));
     } else {
-      await addDoc(collection(db, BROADCASTS), {
-        ...dataToSave,
-        createdAt: serverTimestamp(),
-        active: broadcast.active ?? true
-      });
+      await addDoc(collection(db, BROADCASTS), this.sanitize({ ...dataToSave, createdAt: serverTimestamp(), active: broadcast.active ?? true }));
     }
   }
 
@@ -271,24 +345,14 @@ class DataService {
   async getGlobalSettings(): Promise<{ standardHours: number }> {
     try {
       const snap = await getDoc(doc(db, SETTINGS, 'global_config'));
-      if (snap.exists()) {
-        const data = snap.data();
-        return { standardHours: Number(data.standardHours) || 225 };
-      }
-    } catch (e) {
-      console.warn("Settings fetch failed, using default 225.");
-    }
+      if (snap.exists()) return { standardHours: Number(snap.data().standardHours) || 225 };
+    } catch (e) {}
     return { standardHours: 225 };
   }
 
   async saveGlobalSettings(settings: { standardHours: number }) {
     this.ensureAdmin();
-    const ref = doc(db, SETTINGS, 'global_config');
-    await setDoc(ref, {
-      standardHours: Number(settings.standardHours),
-      updatedAt: serverTimestamp(),
-      updatedBy: this.currentUser?.id
-    }, { merge: true });
+    await setDoc(doc(db, SETTINGS, 'global_config'), this.sanitize({ standardHours: Number(settings.standardHours), updatedAt: serverTimestamp(), updatedBy: this.currentUser?.id }), { merge: true });
   }
 
   async getHolidays(): Promise<Holiday[]> {
@@ -298,11 +362,8 @@ class DataService {
 
   async saveHoliday(holiday: Partial<Holiday>) {
     this.ensureAdmin();
-    if (holiday.id) {
-      await updateDoc(doc(db, HOLIDAYS, holiday.id), holiday);
-    } else {
-      await addDoc(collection(db, HOLIDAYS), holiday);
-    }
+    if (holiday.id) await updateDoc(doc(db, HOLIDAYS, holiday.id), this.sanitize(holiday));
+    else await addDoc(collection(db, HOLIDAYS), this.sanitize(holiday));
   }
 
   async deleteHoliday(id: string) {
@@ -313,14 +374,15 @@ class DataService {
   /* ⏱️ ATTENDANCE ACTIONS */
   async checkIn(user: User, location?: { lat: number, lng: number, accuracy?: number }, projectId?: string) {
     this.ensureAuth();
-    await addDoc(collection(db, ATTENDANCE), {
+    await addDoc(collection(db, ATTENDANCE), this.sanitize({
       userId: user.id,
       userName: user.name,
       checkIn: serverTimestamp(),
+      checkOut: null, 
       projectId: projectId || null,
       location: location || null,
       needsReview: false
-    });
+    }));
   }
 
   async checkOut(recordId: string, location?: { lat: number, lng: number, accuracy?: number }, outsideGeofence: boolean = false) {
@@ -331,12 +393,12 @@ class DataService {
     const checkIn = this.convertToDate(data.checkIn) || new Date();
     const checkOut = new Date();
     const duration = (checkOut.getTime() - checkIn.getTime()) / 60000;
-    await updateDoc(doc(db, ATTENDANCE, recordId), {
+    await updateDoc(doc(db, ATTENDANCE, recordId), this.sanitize({
       checkOut: serverTimestamp(),
       checkOutLocation: location || null,
       duration: duration > 0 ? duration : 0,
       needsReview: outsideGeofence 
-    });
+    }));
   }
 
   private convertToDate(val: any): Date | undefined {
@@ -371,19 +433,15 @@ class DataService {
       const snap = await getDocs(q);
       return snap.docs.map(d => ({ id: d.id, ...d.data() } as Project));
     } catch (err) {
-      console.error("Failed to fetch projects:", err);
+      console.error("Projects fetch error:", err);
       return [];
     }
   }
 
   async saveProject(project: Partial<Project>) {
     this.ensureAdmin();
-    if (project.id) {
-      const { id, ...data } = project;
-      await updateDoc(doc(db, PROJECTS, id), data);
-    } else {
-      await addDoc(collection(db, PROJECTS), project);
-    }
+    if (project.id) await updateDoc(doc(db, PROJECTS, project.id), this.sanitize(project));
+    else await addDoc(collection(db, PROJECTS), this.sanitize(project));
   }
 
   async deleteProject(id: string) {
@@ -449,29 +507,8 @@ class DataService {
 
   async saveUser(user: Partial<User>) {
     this.ensureAdmin();
-    const sanitizedUser = { 
-      ...user, 
-      grossSalary: Number(user.grossSalary || 0), 
-      standardHours: Number(user.standardHours || 0)
-    };
-    await setDoc(doc(db, USERS, user.id!), sanitizedUser, { merge: true });
-  }
-
-  async bulkUpdateDefaultRules() {
-    this.ensureAdmin();
-    const snap = await getDocs(collection(db, USERS));
-    const batch = writeBatch(db);
-    snap.docs.forEach(d => {
-      const data = d.data();
-      batch.update(d.ref, {
-        disableOvertime: data.disableOvertime ?? true,
-        disableDeductions: data.disableDeductions ?? false,
-        standardHours: Number(data.standardHours || 0),
-        grossSalary: Number(data.grossSalary || 0),
-        company: data.company ?? 'Absar Alomran'
-      });
-    });
-    await batch.commit();
+    const sanitizedUser = { ...user, grossSalary: Number(user.grossSalary || 0), standardHours: Number(user.standardHours || 0) };
+    await setDoc(doc(db, USERS, user.id!), this.sanitize(sanitizedUser), { merge: true });
   }
 
   async deleteUser(id: string) {
@@ -486,11 +523,8 @@ class DataService {
 
   async saveShiftSchedule(shift: Partial<ShiftSchedule>) {
     this.ensureAdmin();
-    if (shift.id) {
-      await updateDoc(doc(db, SHIFTS, shift.id), shift);
-    } else {
-      await addDoc(collection(db, SHIFTS), shift);
-    }
+    if (shift.id) await updateDoc(doc(db, SHIFTS, shift.id), this.sanitize(shift));
+    else await addDoc(collection(db, SHIFTS), this.sanitize(shift));
   }
 
   async deleteShiftSchedule(id: string) {
@@ -501,12 +535,12 @@ class DataService {
   async updateAttendanceRecord(id: string, updates: { checkIn: Date, checkOut?: Date }) {
     this.ensureAdmin();
     const duration = updates.checkOut ? (updates.checkOut.getTime() - updates.checkIn.getTime()) / 60000 : 0;
-    await updateDoc(doc(db, ATTENDANCE, id), {
+    await updateDoc(doc(db, ATTENDANCE, id), this.sanitize({
       checkIn: Timestamp.fromDate(updates.checkIn),
       checkOut: updates.checkOut ? Timestamp.fromDate(updates.checkOut) : null,
       duration: duration > 0 ? duration : 0,
       needsReview: false 
-    });
+    }));
   }
 
   getRecommendedRules(): string {
@@ -518,42 +552,35 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
-
     match /users/{id} {
       allow read: if request.auth != null && (request.auth.uid == id || isAdmin());
       allow create: if request.auth != null;
       allow update: if request.auth != null && (request.auth.uid == id || isAdmin());
       allow delete: if isAdmin();
     }
-
     match /attendance/{id} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if request.auth != null;
       allow update: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
       allow delete: if isAdmin();
     }
-
     match /projects/{id} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
-
     match /shifts/{id} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
-
     match /settings/{id} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
-
     match /holidays/{id} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
       allow delete: if isAdmin();
     }
-
     match /broadcasts/{id} {
       allow read: if request.auth != null;
       allow create, update, delete: if isAdmin();

@@ -54,19 +54,14 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
       <div 
         ref={navRef}
         className="flex flex-row md:flex-col overflow-x-auto overflow-y-hidden md:overflow-y-visible no-scrollbar flex-nowrap items-center md:items-stretch px-2 md:px-3 py-1 md:py-0 w-full"
-        style={{ 
-          WebkitOverflowScrolling: 'touch',
-          justifyContent: 'flex-start'
-        }}
+        style={{ WebkitOverflowScrolling: 'touch', justifyContent: 'flex-start' }}
       >
         {links.map((link) => (
           <Link
             key={link.path}
             to={link.path}
             className={`flex flex-col md:flex-row items-center justify-center space-y-1 md:space-y-0 md:space-x-4 px-4 py-2.5 md:px-5 md:py-3.5 rounded-2xl transition-all duration-300 flex-shrink-0 md:flex-shrink-1 min-w-[80px] md:min-w-0 ${
-              location.pathname === link.path
-                ? 'text-indigo-600 md:bg-indigo-50/80 font-bold scale-105 md:scale-100'
-                : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
+              location.pathname === link.path ? 'text-indigo-600 md:bg-indigo-50/80 font-bold scale-105 md:scale-100' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
             }`}
           >
             <i className={`fa-solid ${link.icon} text-lg md:text-xl`}></i>
@@ -74,20 +69,14 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
           </Link>
         ))}
         
-        <button
-          onClick={onLogout}
-          className="flex flex-col md:hidden items-center justify-center space-y-1 px-4 py-2.5 rounded-2xl text-rose-500 flex-shrink-0 min-w-[80px]"
-        >
+        <button onClick={onLogout} className="flex flex-col md:hidden items-center justify-center space-y-1 px-4 py-2.5 rounded-2xl text-rose-500 flex-shrink-0 min-w-[80px]">
           <i className="fa-solid fa-right-from-bracket text-lg"></i>
           <span className="text-[10px] font-bold whitespace-nowrap tracking-tight">Logout</span>
         </button>
       </div>
 
       <div className="hidden md:block mt-auto px-6 pt-4 border-t border-slate-50">
-        <button
-          onClick={onLogout}
-          className="w-full flex items-center space-x-4 px-5 py-3.5 rounded-2xl text-rose-500 hover:bg-rose-50 transition-all font-bold"
-        >
+        <button onClick={onLogout} className="w-full flex items-center space-x-4 px-5 py-3.5 rounded-2xl text-rose-500 hover:bg-rose-50 transition-all font-bold">
           <i className="fa-solid fa-right-from-bracket text-xl"></i>
           <span className="text-[15px] tracking-tight">Sign Out</span>
         </button>
@@ -125,8 +114,17 @@ const App: React.FC = () => {
     if (!user) return;
 
     const heartbeat = setInterval(async () => {
-      await dataService.processAutoClosures(user.id);
-      refreshData();
+      let changed = false;
+      if (user.role === 'admin') {
+        changed = await dataService.processAllAutoClosures();
+      } else {
+        changed = await dataService.processAutoClosures(user.id);
+      }
+      
+      // Force refresh if database was updated
+      if (changed) {
+        refreshData();
+      }
     }, 60000); // 1 minute
 
     return () => clearInterval(heartbeat);

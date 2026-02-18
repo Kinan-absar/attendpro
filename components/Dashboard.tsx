@@ -85,10 +85,14 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   }, [currentDistance, userProject]);
 
   const activeRecord = useMemo(() => {
+    // 1. Find the latest record with no checkOut
     const record = history.find(r => r.checkIn && !r.checkOut);
-    
-    // UI-SIDE STALE CHECK: If the record belongs to a previous day, treat it as closed
-    if (record && record.checkIn.toDateString() !== now.toDateString()) {
+    if (!record) return null;
+
+    // 2. UI-SIDE STALE CHECK: If the record belongs to a previous day, treat it as closed locally
+    // This provides immediate visual feedback even before the heartbeat syncs with Firebase.
+    const checkInDate = new Date(record.checkIn);
+    if (checkInDate.toDateString() !== now.toDateString()) {
        return null; 
     }
     
@@ -114,13 +118,13 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
       }
       await onAction();
     } catch (err: any) {
-      alert("Shift action failed.");
+      alert("Shift action failed: " + (err.message || "Unknown error"));
     } finally {
       setProcessing(false);
     }
   };
 
-  const activeMs = activeRecord ? now.getTime() - activeRecord.checkIn.getTime() : 0;
+  const activeMs = activeRecord ? now.getTime() - new Date(activeRecord.checkIn).getTime() : 0;
   const hours = Math.floor(activeMs / 3600000);
   const minutes = Math.floor((activeMs % 3600000) / 60000);
 
@@ -223,7 +227,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
             {hours.toString().padStart(2, '0')}:{minutes.toString().padStart(2, '0')}
           </div>
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-12">
-            {activeRecord ? `Clocked in @ ${activeRecord.checkIn.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Shift Inactive'}
+            {activeRecord ? `Clocked in @ ${new Date(activeRecord.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Shift Inactive'}
           </p>
           <button
             onClick={handleToggle}
