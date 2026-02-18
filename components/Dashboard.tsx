@@ -85,12 +85,10 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   }, [currentDistance, userProject]);
 
   const activeRecord = useMemo(() => {
-    // 1. Find the latest record with no checkOut
     const record = history.find(r => r.checkIn && !r.checkOut);
     if (!record) return null;
 
-    // 2. UI-SIDE STALE CHECK: If the record belongs to a previous day, treat it as closed locally
-    // This provides immediate visual feedback even before the heartbeat syncs with Firebase.
+    // Treat as closed locally if from a previous day (awaiting auto-close)
     const checkInDate = new Date(record.checkIn);
     if (checkInDate.toDateString() !== now.toDateString()) {
        return null; 
@@ -113,11 +111,15 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
       if (activeRecord) {
         await dataService.checkOut(activeRecord.id, loc, !isInsideZone);
       } else {
-        if (!userProject) return alert("Please select a worksite first.");
+        if (!userProject) {
+            setProcessing(false);
+            return alert("Please select a worksite first.");
+        }
         await dataService.checkIn(user, loc, userProject.id);
       }
       await onAction();
     } catch (err: any) {
+      console.error("Action Error:", err);
       alert("Shift action failed: " + (err.message || "Unknown error"));
     } finally {
       setProcessing(false);
@@ -125,8 +127,12 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   };
 
   const activeMs = activeRecord ? now.getTime() - new Date(activeRecord.checkIn).getTime() : 0;
-  const hours = Math.floor(activeMs / 3600000);
-  const minutes = Math.floor((activeMs % 3600000) / 60000);
+  // Ensure duration is never negative or excessive due to 1970 fallback
+  const safeActiveMs = activeMs < 0 || activeMs > 86400000 ? 0 : activeMs;
+  const hours = Math.floor(safeActiveMs / 3600000);
+  const minutes = Math.floor((safeActiveMs % 3600000) / 60000);
+
+  const displayTime = activeRecord ? new Date(activeRecord.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Shift Inactive';
 
   return (
     <div className="space-y-8 animate-fadeIn pb-12">
@@ -227,7 +233,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
             {hours.toString().padStart(2, '0')}:{minutes.toString().padStart(2, '0')}
           </div>
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-12">
-            {activeRecord ? `Clocked in @ ${new Date(activeRecord.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Shift Inactive'}
+            {activeRecord ? `Clocked in @ ${displayTime}` : 'Shift Inactive'}
           </p>
           <button
             onClick={handleToggle}

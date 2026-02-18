@@ -58,21 +58,35 @@ class DataService {
 
   /**
    * Deeply sanitizes an object to ensure it only contains Firestore-compatible primitives.
-   * Prevents "Circular structure to JSON" or "Unsupported field value" errors.
+   * Prevents "Circular structure to JSON" errors by identifying plain objects vs class instances.
    */
   private sanitize(data: any): any {
-    if (data === null || data === undefined) return null;
-    if (typeof data === 'function') return null;
-    if (typeof data !== 'object') return data;
-    if (data instanceof Date) return Timestamp.fromDate(data);
-    if (data instanceof Timestamp) return data;
-    if (Array.isArray(data)) return data.map(v => this.sanitize(v)).filter(v => v !== undefined);
+    if (data === null || data === undefined) return data;
+    
+    const type = typeof data;
+    if (type !== 'object') return data;
+    
+    // Pass through native safe types
+    if (data instanceof Date || data instanceof Timestamp) return data;
+    
+    // Check for plain objects vs Class instances (like FieldValue or internal SDK objects)
+    // We only want to recurse into plain objects/arrays.
+    const proto = Object.getPrototypeOf(data);
+    const isPlainObject = proto === null || proto === Object.prototype;
+
+    if (Array.isArray(data)) {
+      return data.map(v => this.sanitize(v));
+    }
+
+    if (!isPlainObject) {
+      // This is a class instance (like FieldValue for serverTimestamp). Pass it through.
+      return data;
+    }
 
     const sanitized: any = {};
     for (const key in data) {
       if (Object.prototype.hasOwnProperty.call(data, key)) {
-        const val = this.sanitize(data[key]);
-        if (val !== undefined) sanitized[key] = val;
+        sanitized[key] = this.sanitize(data[key]);
       }
     }
     return sanitized;
@@ -93,9 +107,6 @@ class DataService {
     this.ensureAdmin();
     
     const normalizedEmail = (userData.email || '').trim().toLowerCase();
-    if (!normalizedEmail) throw new Error("Email is required.");
-    if (password.length < 6) throw new Error("Security Key must be at least 6 characters.");
-
     const appName = `AdminUserCreator-${Date.now()}`;
     const secondaryApp = initializeApp(firebaseConfig, appName);
     const secondaryAuth = getAuth(secondaryApp);
@@ -105,7 +116,7 @@ class DataService {
       const cred = await createUserWithEmailAndPassword(secondaryAuth, normalizedEmail, password);
       const uid = cred.user.uid;
 
-      const sanitized = {
+      const userProfile = {
         name: userData.name || 'New Staff',
         email: normalizedEmail,
         employeeId: userData.employeeId || 'EMP-TEMP',
@@ -119,11 +130,8 @@ class DataService {
         avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}&background=random`
       };
 
-      await setDoc(doc(db, USERS, uid), this.sanitize(sanitized));
+      await setDoc(doc(db, USERS, uid), this.sanitize(userProfile));
       return uid;
-    } catch (error: any) {
-      console.error("Admin user creation process failed:", error);
-      throw error;
     } finally {
       await deleteApp(secondaryApp);
     }
@@ -374,7 +382,7 @@ class DataService {
   /* ⏱️ ATTENDANCE ACTIONS */
   async checkIn(user: User, location?: { lat: number, lng: number, accuracy?: number }, projectId?: string) {
     this.ensureAuth();
-    await addDoc(collection(db, ATTENDANCE), this.sanitize({
+    const docData = {
       userId: user.id,
       userName: user.name,
       checkIn: serverTimestamp(),
@@ -382,7 +390,8 @@ class DataService {
       projectId: projectId || null,
       location: location || null,
       needsReview: false
-    }));
+    };
+    await addDoc(collection(db, ATTENDANCE), this.sanitize(docData));
   }
 
   async checkOut(recordId: string, location?: { lat: number, lng: number, accuracy?: number }, outsideGeofence: boolean = false) {
@@ -402,9 +411,12 @@ class DataService {
   }
 
   private convertToDate(val: any): Date | undefined {
+    if (!val) return undefined;
     if (val instanceof Timestamp) return val.toDate();
-    if (val?.seconds) return new Date(val.seconds * 1000);
-    return val instanceof Date ? val : undefined;
+    if (val instanceof Date) return val;
+    if (typeof val.toDate === 'function') return val.toDate();
+    if (typeof val.seconds === 'number') return new Date(val.seconds * 1000);
+    return undefined;
   }
 
   async getAttendanceHistory(userId: string): Promise<AttendanceRecord[]> {
@@ -413,14 +425,14 @@ class DataService {
     const snap = await getDocs(q);
     return snap.docs.map(d => {
       const r = d.data();
-      const checkIn = this.convertToDate(r.checkIn) || new Date(0);
+      const checkIn = this.convertToDate(r.checkIn);
       const checkOut = this.convertToDate(r.checkOut);
       let duration = Number(r.duration);
-      if ((!duration || isNaN(duration)) && checkOut) {
+      if ((!duration || isNaN(duration)) && checkIn && checkOut) {
         duration = (checkOut.getTime() - checkIn.getTime()) / 60000;
       }
       return { id: d.id, ...r, checkIn, checkOut, duration } as AttendanceRecord;
-    });
+    }).filter(r => r.checkIn !== undefined) as AttendanceRecord[];
   }
 
   /* 🏗️ PROJECT ACTIONS */
