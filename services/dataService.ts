@@ -186,8 +186,10 @@ class DataService {
         const isFromPreviousDay = checkIn.toDateString() !== now.toDateString() && checkIn < now;
         if (!isFromPreviousDay) return;
 
-        const userSchedule = schedules.find(s => s.assignedUserIds.includes(data.userId));
-        const hasExemption = userSchedule?.disableAutoClose === true;
+        // Check if user has ANY shift schedule with midnight closure disabled
+        const hasExemption = schedules.some(s => 
+          s.assignedUserIds.includes(data.userId) && s.disableAutoClose === true
+        );
 
         if (hasExemption) {
           const diffHours = (now.getTime() - checkIn.getTime()) / 3600000;

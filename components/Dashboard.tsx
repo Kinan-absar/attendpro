@@ -88,9 +88,12 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
     const record = history.find(r => r.checkIn && !r.checkOut);
     if (!record) return null;
 
-    // Treat as closed locally if from a previous day (awaiting auto-close)
-    const checkInDate = new Date(record.checkIn);
-    if (checkInDate.toDateString() !== now.toDateString()) {
+    const checkInTime = new Date(record.checkIn).getTime();
+    const diffHours = (now.getTime() - checkInTime) / 3600000;
+
+    // Allow the record to stay active for up to 24 hours regardless of midnight crossing.
+    // This supports night shifts.
+    if (diffHours > 24) {
        return null; 
     }
     
@@ -127,7 +130,6 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   };
 
   const activeMs = activeRecord ? now.getTime() - new Date(activeRecord.checkIn).getTime() : 0;
-  // Ensure duration is never negative or excessive due to 1970 fallback
   const safeActiveMs = activeMs < 0 || activeMs > 86400000 ? 0 : activeMs;
   const hours = Math.floor(safeActiveMs / 3600000);
   const minutes = Math.floor((safeActiveMs % 3600000) / 60000);
@@ -267,7 +269,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
               </li>
               <li className="flex items-start space-x-3 text-xs">
                 <i className="fa-solid fa-check text-indigo-500 mt-1"></i>
-                <p>Unclosed shifts auto-terminate at <strong>23:59</strong>.</p>
+                <p>Unclosed shifts auto-terminate at <strong>23:59</strong> unless exempt.</p>
               </li>
             </ul>
           </div>

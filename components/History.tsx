@@ -134,8 +134,10 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
                   const calcDuration = coutDate ? (coutDate.getTime() - cinDate.getTime()) / 60000 : 0;
                   const finalDuration = (!isNaN(rawDuration) && rawDuration > 0) ? rawDuration : calcDuration;
                   
-                  // Logical check: Is this record from a previous day but has no checkout?
-                  const isStale = !coutDate && cinDate.toDateString() !== now.toDateString();
+                  // Logical check: Is this record truly stale? 
+                  // It's stale if it's over 24 hours old and has no checkout.
+                  // This allows night shifts to stay active across midnight.
+                  const isStale = !coutDate && (now.getTime() - cinDate.getTime() > 86400000);
 
                   return (
                     <tr key={record.id} className={`hover:bg-slate-50/30 transition-colors ${record.needsReview || isStale ? 'bg-rose-50/20' : ''}`}>
