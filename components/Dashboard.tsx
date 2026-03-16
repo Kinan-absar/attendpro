@@ -184,9 +184,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-black text-sm uppercase tracking-tight">{b.title}</p>
-               <div className="text-xs font-medium opacity-80 leading-relaxed mt-1 prose prose-sm max-w-none">
-  <ReactMarkdown>{b.message}</ReactMarkdown>
-</div>
+                <p className="text-xs font-medium opacity-80 leading-relaxed mt-1">{b.message}</p>
               </div>
             </div>
           ))}
