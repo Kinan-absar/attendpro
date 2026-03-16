@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { dataService } from '../services/dataService';
+import Linkify from './Linkify';
 import { Broadcast, Project, User } from '../types';
 
 const AdminBroadcastManagement: React.FC = () => {
@@ -254,7 +255,7 @@ const AdminBroadcastManagement: React.FC = () => {
               </div>
 
               <h3 className="text-lg font-black text-slate-900 mb-1 leading-tight">{b.title}</h3>
-              <p className="text-xs text-slate-500 font-medium mb-6 line-clamp-3 leading-relaxed">{b.message}</p>
+              <Linkify text={b.message} className="text-xs text-slate-500 font-medium mb-6 line-clamp-3 leading-relaxed block" />
 
               <div className="flex flex-wrap gap-1 mb-6">
                 {!b.targetProjectIds?.length && !b.targetUserIds?.length ? (

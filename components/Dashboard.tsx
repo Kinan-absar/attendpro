@@ -1,5 +1,6 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
+import Linkify from './Linkify';
 import { AttendanceRecord, User, Project, Broadcast } from '../types';
 import { dataService } from '../services/dataService';
 
@@ -184,7 +185,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-black text-sm uppercase tracking-tight">{b.title}</p>
-                <p className="text-xs font-medium opacity-80 leading-relaxed mt-1">{b.message}</p>
+                <Linkify text={b.message} className="text-xs font-medium opacity-80 leading-relaxed mt-1 block" />
               </div>
             </div>
           ))}
