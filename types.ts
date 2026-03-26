@@ -100,6 +100,7 @@ export interface MonthlyReport {
     shiftCount: number;
     projectId?: string;
     flaggedCount: number;
+    absentDays: number;
   }[];
 }
 

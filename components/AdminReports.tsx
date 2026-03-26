@@ -30,8 +30,8 @@ const AdminReports: React.FC = () => {
   const [fromDate, setFromDate] = useState(localStorage.getItem('payroll_from_date') || '');
   const [toDate, setToDate] = useState(localStorage.getItem('payroll_to_date') || '');
   
-  const [globalRequiredHours, setGlobalRequiredHours] = useState<number>(225); 
-  const [payrollAdjustments, setPayrollAdjustments] = useState<Record<string, { otherDeductions: number, reimbursements: number }>>({});
+  const [globalRequiredHours, setGlobalRequiredHours] = useState<number>(240); 
+  const [payrollAdjustments, setPayrollAdjustments] = useState<Record<string, { otherDeductions: number, reimbursements: number, absentDays: number }>>({});
 
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
@@ -46,15 +46,15 @@ const AdminReports: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleValueChange = async (userId: string, year: number, month: string, type: 'otherDeductions' | 'reimbursements', value: number) => {
+  const handleValueChange = async (userId: string, year: number, month: string, type: 'otherDeductions' | 'reimbursements' | 'absentDays', value: number) => {
     const key = `${year}-${month}-${userId}`;
-    const current = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0 };
+    const current = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0, absentDays: 0 };
     const updated = { ...current, [type]: value };
     
     setPayrollAdjustments(prev => ({ ...prev, [key]: updated }));
     
     try {
-      await dataService.savePayrollAdjustment(year, month, userId, updated.otherDeductions, updated.reimbursements);
+      await dataService.savePayrollAdjustment(year, month, userId, updated.otherDeductions, updated.reimbursements, updated.absentDays);
     } catch (err) {
       console.error("Failed to save payroll adjustment:", err);
     }
@@ -75,37 +75,45 @@ const AdminReports: React.FC = () => {
         .reduce((acc, s) => ({
           totalHours: acc.totalHours + Number(s.totalHours || 0),
           shiftCount: acc.shiftCount + Number(s.shiftCount || 0),
-        }), { totalHours: 0, shiftCount: 0 });
+          absentDays: acc.absentDays + (Number(s.absentDays) || 0)
+        }), { totalHours: 0, shiftCount: 0, absentDays: 0 });
 
       const grossSalary = Number(user.grossSalary) || 0;
       const userTarget = Number(user.standardHours);
       const targetHours = (userTarget > 0) ? userTarget : Number(globalRequiredHours);
-      const grossHourlyRate = grossSalary / 208;
-      const basicHourlyRate = (grossSalary / 1.35) / 208;
+      const grossHourlyRate = grossSalary / 240;
+      const basicHourlyRate = (grossSalary / 1.35) / 240;
       const overtimeHourlyRate = grossHourlyRate + (0.5 * basicHourlyRate);
+      const dailyRate = grossSalary / 30;
       const diff = stats.totalHours - targetHours;
       
-      const deductionAmount = (diff < -0.01 && user.disableDeductions === false) ? Math.abs(diff) * grossHourlyRate : 0;
-      const overtimePay = (diff > 0.01 && user.disableOvertime === false) ? diff * overtimeHourlyRate : 0;
       const key = `${report.year}-${report.month}-${user.id}`;
-      const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0 };
+      const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0, absentDays: 0 };
+      
+      const hourlyDeduction = (diff < -0.01 && user.disableDeductions === false) ? Math.abs(diff) * grossHourlyRate : 0;
+      const absentDeduction = (adj.absentDays || 0) * dailyRate;
+      const totalDeduction = hourlyDeduction + absentDeduction;
+
+      const overtimePay = (diff > 0.01 && user.disableOvertime === false) ? diff * overtimeHourlyRate : 0;
       const otherDed = adj.otherDeductions;
       const reimb = adj.reimbursements;
-      const netSalary = grossSalary - deductionAmount + overtimePay - otherDed + reimb;
+      const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
+      const netSalary = grossSalary - totalDeduction + overtimePay - otherDed + reimb;
 
       return [
         user.name,
         grossSalary.toFixed(2),
-        deductionAmount.toFixed(2),
+        totalDeduction.toFixed(2),
         overtimePay.toFixed(2),
         otherDed.toFixed(2),
         reimb.toFixed(2),
         netSalary.toFixed(2),
-        formatHoursToHHMM(stats.totalHours)
+        formatHoursToHHMM(stats.totalHours),
+        totalAbsentDays.toString()
       ];
     });
 
-    const headers = ["Employee", "Gross Salary", "Deduction", "Overtime", "Other Ded.", "Reimb.", "Net Salary (SR)", "Worked Hours"];
+    const headers = ["Employee", "Gross Salary", "Total Deduction", "Overtime", "Other Ded.", "Reimb.", "Net Salary (SR)", "Worked Hours", "Absent Days"];
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
@@ -139,12 +147,12 @@ const AdminReports: React.FC = () => {
     else localStorage.removeItem('payroll_to_date');
 
     try {
-      const [reportData, userData, projectData, settings, holidayData] = await Promise.all([
-        dataService.getMonthlyReports(from, to),
+      const holidayData = await dataService.getHolidays();
+      const [reportData, userData, projectData, settings] = await Promise.all([
+        dataService.getMonthlyReports(from, to, holidayData),
         dataService.getUsers(),
         dataService.getProjects(),
-        dataService.getGlobalSettings(),
-        dataService.getHolidays()
+        dataService.getGlobalSettings()
       ]);
       setReports(reportData);
       setUsers(userData);
@@ -153,7 +161,7 @@ const AdminReports: React.FC = () => {
       setHolidays(holidayData.sort((a,b) => a.date.localeCompare(b.date)));
 
       // Fetch adjustments for all months in the reports
-      const allAdjs: Record<string, { otherDeductions: number, reimbursements: number }> = {};
+      const allAdjs: Record<string, { otherDeductions: number, reimbursements: number, absentDays: number }> = {};
       await Promise.all(reportData.map(async (r) => {
         const monthAdjs = await dataService.getPayrollAdjustments(r.year, r.month);
         Object.entries(monthAdjs).forEach(([uid, val]) => {
@@ -506,10 +514,11 @@ const AdminReports: React.FC = () => {
                       <th className="px-1 py-4 text-right font-black text-slate-400 uppercase text-[9px] tracking-widest no-print w-[8%]">Diff</th>
                       <th className="px-1 py-4 text-center font-black text-rose-500 uppercase text-[9px] tracking-widest no-print w-[6%]">Flags</th>
                       <th className="px-2 py-4 text-right font-black text-indigo-400 uppercase text-[9px] tracking-widest w-[10%]">Gross</th>
-                      <th className="px-2 py-4 text-right font-black text-rose-400 uppercase text-[9px] tracking-widest w-[10%]">Deduc.</th>
-                      <th className="px-2 py-4 text-right font-black text-emerald-400 uppercase text-[9px] tracking-widest w-[10%]">OT</th>
-                      <th className="px-2 py-4 text-center font-black text-rose-600 uppercase text-[9px] tracking-widest w-[9%]">Other Ded.</th>
-                      <th className="px-2 py-4 text-center font-black text-emerald-600 uppercase text-[9px] tracking-widest w-[9%]">Reimb.</th>
+                      <th className="px-2 py-4 text-right font-black text-rose-400 uppercase text-[9px] tracking-widest w-[8%]">Deduc.</th>
+                      <th className="px-2 py-4 text-right font-black text-emerald-400 uppercase text-[9px] tracking-widest w-[8%]">OT</th>
+                      <th className="px-1 py-4 text-center font-black text-rose-400 uppercase text-[9px] tracking-widest w-[6%]">Abs. Days</th>
+                      <th className="px-2 py-4 text-center font-black text-rose-600 uppercase text-[9px] tracking-widest w-[8%]">Other Ded.</th>
+                      <th className="px-2 py-4 text-center font-black text-emerald-600 uppercase text-[9px] tracking-widest w-[8%]">Reimb.</th>
                       <th className="px-3 py-4 text-right font-black text-slate-900 uppercase text-[9px] tracking-widest w-[10%]">Net</th>
                       <th className="px-4 py-4 text-right no-print w-[5%]"></th>
                     </tr>
@@ -521,34 +530,41 @@ const AdminReports: React.FC = () => {
                         .reduce((acc, s) => ({
                           totalHours: acc.totalHours + Number(s.totalHours || 0),
                           shiftCount: acc.shiftCount + Number(s.shiftCount || 0),
-                          flaggedCount: acc.flaggedCount + (Number(s.flaggedCount) || 0)
-                        }), { totalHours: 0, shiftCount: 0, flaggedCount: 0 });
+                          flaggedCount: acc.flaggedCount + (Number(s.flaggedCount) || 0),
+                          absentDays: acc.absentDays + (Number(s.absentDays) || 0)
+                        }), { totalHours: 0, shiftCount: 0, flaggedCount: 0, absentDays: 0 });
 
                       const grossSalary = Number(user.grossSalary) || 0;
                       const basicSalary = grossSalary / 1.35;
                       const userTarget = Number(user.standardHours);
                       const targetHours = (userTarget > 0) ? userTarget : Number(globalRequiredHours);
 
-                      const grossHourlyRate = grossSalary / 208;
-                      const basicHourlyRate = basicSalary / 208;
+                      const grossHourlyRate = grossSalary / 240;
+                      const basicHourlyRate = basicSalary / 240;
                       const overtimeHourlyRate = grossHourlyRate + (0.5 * basicHourlyRate);
+                      const dailyRate = grossSalary / 30;
 
                       const diff = stats.totalHours - targetHours;
                       const otEnabled = user.disableOvertime === false;
                       const dedEnabled = user.disableDeductions === false;
 
-                      const deductionAmount = (diff < -0.01 && dedEnabled) ? Math.abs(diff) * grossHourlyRate : 0;
+                      const key = `${report.year}-${report.month}-${user.id}`;
+                      const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0, absentDays: 0 };
+                      
+                      const hourlyDeduction = (diff < -0.01 && dedEnabled) ? Math.abs(diff) * grossHourlyRate : 0;
+                      const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
+                      const absentDeduction = totalAbsentDays * dailyRate;
+                      const totalDeduction = hourlyDeduction + absentDeduction;
+
                       const overtimePay = (diff > 0.01 && otEnabled) ? diff * overtimeHourlyRate : 0;
                       
-                      const key = `${report.year}-${report.month}-${user.id}`;
-                      const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0 };
                       const otherDed = adj.otherDeductions;
                       const reimb = adj.reimbursements;
-                      const netSalary = grossSalary - deductionAmount + overtimePay - otherDed + reimb;
+                      const netSalary = grossSalary - totalDeduction + overtimePay - otherDed + reimb;
 
                       totalPeriodHours += stats.totalHours;
                       totalPeriodGross += grossSalary;
-                      totalPeriodDeduc += deductionAmount;
+                      totalPeriodDeduc += totalDeduction;
                       totalPeriodOT += overtimePay;
                       totalPeriodOtherDed += otherDed;
                       totalPeriodReimb += reimb;
@@ -584,10 +600,17 @@ const AdminReports: React.FC = () => {
                           </td>
                           <td className="px-2 py-2 text-right font-mono font-bold text-slate-600">{grossSalary.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                           <td className="px-2 py-2 text-right font-mono font-bold text-rose-600">
-                             {deductionAmount > 0 ? `-${deductionAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
+                             {totalDeduction > 0 ? `-${totalDeduction.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
                           </td>
                           <td className="px-2 py-2 text-right font-mono font-bold text-emerald-600">
                              {overtimePay > 0 ? `+${overtimePay.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
+                          </td>
+                          <td className="px-1 py-2 text-center">
+                            <div className="flex flex-col items-center">
+                              <span className="text-[9px] font-black text-rose-500 mb-0.5">{stats.absentDays}</span>
+                              <input type="number" step="0.5" value={payrollAdjustments[`${report.year}-${report.month}-${user.id}`]?.absentDays || ''} onChange={(e) => handleValueChange(user.id, report.year, report.month, 'absentDays', parseFloat(e.target.value) || 0)} className="w-10 px-1 py-0.5 bg-rose-50 border border-rose-100 rounded text-center font-mono text-[8px] font-bold text-rose-700 outline-none no-print-input" placeholder="Adj" />
+                            </div>
+                            <span className="hidden print:inline font-mono font-bold text-rose-700 text-[9px]">{totalAbsentDays || '-'}</span>
                           </td>
                           <td className="px-2 py-2 text-center">
                             <input type="number" value={payrollAdjustments[`${report.year}-${report.month}-${user.id}`]?.otherDeductions || ''} onChange={(e) => handleValueChange(user.id, report.year, report.month, 'otherDeductions', parseFloat(e.target.value) || 0)} className="w-12 px-1 py-0.5 bg-rose-50 border border-rose-100 rounded text-right font-mono text-[9px] font-bold text-rose-700 outline-none no-print-input" />
@@ -619,6 +642,7 @@ const AdminReports: React.FC = () => {
                       <td className="px-2 py-4 text-right font-mono text-indigo-300 text-[9px]">SR {totalPeriodGross.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
                       <td className="px-2 py-4 text-right font-mono text-rose-300 text-[9px]">-SR {totalPeriodDeduc.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
                       <td className="px-2 py-4 text-right font-mono text-emerald-300 text-[9px]">+SR {totalPeriodOT.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-1 py-4 text-center font-mono text-rose-300 text-[9px]"></td>
                       <td className="px-2 py-4 text-center font-mono text-rose-400 text-[9px]">-SR {totalPeriodOtherDed.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
                       <td className="px-2 py-4 text-center font-mono text-emerald-400 text-[9px]">+SR {totalPeriodReimb.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
                       <td className="px-3 py-4 text-right font-mono whitespace-nowrap text-[10px] print-black-text text-indigo-100">SR {totalPeriodNet.toLocaleString(undefined, {maximumFractionDigits:0})}</td>

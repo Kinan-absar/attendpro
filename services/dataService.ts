@@ -359,9 +359,9 @@ class DataService {
   async getGlobalSettings(): Promise<{ standardHours: number }> {
     try {
       const snap = await getDoc(doc(db, SETTINGS, 'global_config'));
-      if (snap.exists()) return { standardHours: Number(snap.data().standardHours) || 225 };
+      if (snap.exists()) return { standardHours: Number(snap.data().standardHours) || 240 };
     } catch (e) {}
-    return { standardHours: 225 };
+    return { standardHours: 240 };
   }
 
   async saveGlobalSettings(settings: { standardHours: number }) {
@@ -489,11 +489,19 @@ class DataService {
     });
   }
 
-  async getMonthlyReports(from?: Date, to?: Date): Promise<MonthlyReport[]> {
+  private toLocalDateString(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  async getMonthlyReports(from?: Date, to?: Date, holidays: Holiday[] = []): Promise<MonthlyReport[]> {
     this.ensureAdmin();
     const snap = await getDocs(collection(db, ATTENDANCE));
     const users = await this.getUsers();
     const grouped: Record<string, MonthlyReport> = {};
+    const userWorkDays: Record<string, Set<string>> = {}; // key: "year-month-userId", value: Set of "YYYY-MM-DD"
 
     const start = from ? new Date(from) : null;
     if (start) start.setHours(0, 0, 0, 0);
@@ -521,10 +529,14 @@ class DataService {
       const user = users.find(u => u.id === r.userId);
       if (!user) return;
       
+      const userKey = `${key}-${user.id}`;
+      userWorkDays[userKey] ??= new Set();
+      userWorkDays[userKey].add(this.toLocalDateString(cin));
+
       const pId = r.projectId || 'none';
       let emp = grouped[key].employees.find(e => e.userId === user.id && e.projectId === pId);
       if (!emp) {
-        emp = { userId: user.id, name: user.name, totalHours: 0, shiftCount: 0, projectId: pId, flaggedCount: 0 };
+        emp = { userId: user.id, name: user.name, totalHours: 0, shiftCount: 0, projectId: pId, flaggedCount: 0, absentDays: 0 };
         grouped[key].employees.push(emp);
       }
       
@@ -538,6 +550,50 @@ class DataService {
       emp.totalHours += finalDuration;
       if (r.needsReview) emp.flaggedCount++;
     });
+
+    // Calculate absent days for each employee in each report
+    Object.entries(grouped).forEach(([key, report]) => {
+      const [year, month] = key.split('-').map(Number);
+      
+      // Cycle: from (year, month-1, 26) to (year, month, 25)
+      const cycleStart = new Date(year, month - 1, 26);
+      const cycleEnd = new Date(year, month, 25);
+      
+      // If we have a global filter, respect it
+      const actualStart = start && start > cycleStart ? start : cycleStart;
+      const actualEnd = end && end < cycleEnd ? end : cycleEnd;
+
+      // Identify unique users in this report
+      const reportUserIds = [...new Set(report.employees.map(e => e.userId))];
+
+      reportUserIds.forEach(userId => {
+        let absentCount = 0;
+        const userKey = `${key}-${userId}`;
+        const workedDays = userWorkDays[userKey] || new Set();
+
+        const current = new Date(actualStart);
+        while (current <= actualEnd) {
+          const dateStr = this.toLocalDateString(current);
+          const isFriday = current.getDay() === 5;
+          const isHoliday = holidays.some(h => h.date === dateStr);
+
+          if (!isFriday && !isHoliday) {
+            if (!workedDays.has(dateStr)) {
+              absentCount++;
+            }
+          }
+          current.setDate(current.getDate() + 1);
+        }
+
+        // Assign absentCount to the first entry for this user in the report
+        // (to avoid double-counting during aggregation in the UI)
+        const userEntries = report.employees.filter(e => e.userId === userId);
+        if (userEntries.length > 0) {
+          userEntries[0].absentDays = absentCount;
+        }
+      });
+    });
+
     return Object.values(grouped);
   }
 
@@ -580,22 +636,23 @@ class DataService {
   }
 
   /* 💸 PAYROLL ADJUSTMENTS */
-  async getPayrollAdjustments(year: number, month: string): Promise<Record<string, { otherDeductions: number, reimbursements: number }>> {
+  async getPayrollAdjustments(year: number, month: string): Promise<Record<string, { otherDeductions: number, reimbursements: number, absentDays: number }>> {
     this.ensureAdmin();
     const q = query(collection(db, PAYROLL_ADJUSTMENTS), where('year', '==', year), where('month', '==', month));
     const snap = await getDocs(q);
-    const adjustments: Record<string, { otherDeductions: number, reimbursements: number }> = {};
+    const adjustments: Record<string, { otherDeductions: number, reimbursements: number, absentDays: number }> = {};
     snap.docs.forEach(d => {
       const data = d.data();
       adjustments[data.userId] = {
         otherDeductions: Number(data.otherDeductions || 0),
-        reimbursements: Number(data.reimbursements || 0)
+        reimbursements: Number(data.reimbursements || 0),
+        absentDays: Number(data.absentDays || 0)
       };
     });
     return adjustments;
   }
 
-  async savePayrollAdjustment(year: number, month: string, userId: string, otherDeductions: number, reimbursements: number) {
+  async savePayrollAdjustment(year: number, month: string, userId: string, otherDeductions: number, reimbursements: number, absentDays: number) {
     this.ensureAdmin();
     const docId = `${year}-${month}-${userId}`;
     await setDoc(doc(db, PAYROLL_ADJUSTMENTS, docId), this.sanitize({
@@ -604,6 +661,7 @@ class DataService {
       userId,
       otherDeductions: Number(otherDeductions),
       reimbursements: Number(reimbursements),
+      absentDays: Number(absentDays),
       updatedAt: serverTimestamp()
     }), { merge: true });
   }

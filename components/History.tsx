@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
-import { AttendanceRecord, User } from '../types';
+import { AttendanceRecord, User, ShiftSchedule } from '../types';
 import { dataService } from '../services/dataService';
-import { formatMinutesToHHMM } from '../utils/format';
+import { formatMinutesToHHMM, calculateEffectiveMinutes } from '../utils/format';
 
 interface Props {
   history: AttendanceRecord[];
@@ -15,6 +15,11 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
   const [saving, setSaving] = useState(false);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [shifts, setShifts] = useState<ShiftSchedule[]>([]);
+
+  React.useEffect(() => {
+    dataService.getShiftSchedules().then(setShifts);
+  }, []);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,13 +63,31 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
   }, [history, startDate, endDate]);
 
   const totalHours = useMemo(() => {
-    return filteredHistory.reduce((acc, record) => {
+    // Group durations by day to apply the shift logic to the total daily duration
+    const dailyMinutes: Record<string, number> = {};
+    
+    filteredHistory.forEach(record => {
       const rawDuration = Number(record.duration);
-      const calcDuration = record.checkOut ? (new Date(record.checkOut).getTime() - new Date(record.checkIn).getTime()) / 60000 : 0;
-      const finalDuration = (!isNaN(rawDuration) && rawDuration > 0) ? rawDuration : calcDuration;
-      return acc + (finalDuration / 60);
+      const cinDate = new Date(record.checkIn);
+      const calcDuration = record.checkOut ? (new Date(record.checkOut).getTime() - cinDate.getTime()) / 60000 : 0;
+      const finalDurationMinutes = (!isNaN(rawDuration) && rawDuration > 0) ? rawDuration : calcDuration;
+      
+      const dateKey = cinDate.toISOString().split('T')[0];
+      dailyMinutes[dateKey] = (dailyMinutes[dateKey] || 0) + finalDurationMinutes;
+    });
+
+    return Object.entries(dailyMinutes).reduce((acc, [dateStr, totalMinutes]) => {
+      const date = new Date(dateStr);
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+      const userShift = shifts.find(s => 
+        s.assignedUserIds.includes(user.id) && 
+        s.workingDays.includes(dayName)
+      );
+
+      const effectiveMinutes = calculateEffectiveMinutes(totalMinutes, userShift);
+      return acc + (effectiveMinutes / 60);
     }, 0);
-  }, [filteredHistory]);
+  }, [filteredHistory, shifts, user.id]);
 
   const handleExportExcel = () => {
     const formatDateTime = (date: Date) => {
