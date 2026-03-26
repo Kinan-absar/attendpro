@@ -14,6 +14,9 @@ export interface User {
   standardHours?: number; 
   disableOvertime?: boolean;
   disableDeductions?: boolean;
+  isOnLeave?: boolean;
+  leaveStartDate?: string; // ISO format YYYY-MM-DD
+  leaveEndDate?: string;   // ISO format YYYY-MM-DD
 }
 
 export interface Broadcast {
@@ -91,6 +94,7 @@ export interface MonthlyReport {
   year: number;
   requiredHours?: number;
   employees: {
+    userId: string;
     name: string;
     totalHours: number;
     shiftCount: number;

@@ -36,6 +36,7 @@ const SHIFTS = 'shifts';
 const SETTINGS = 'settings';
 const HOLIDAYS = 'holidays';
 const BROADCASTS = 'broadcasts';
+const PAYROLL_ADJUSTMENTS = 'payroll_adjustments';
 
 class DataService {
   private currentUser: User | null = null;
@@ -127,6 +128,9 @@ class DataService {
         company: userData.company || 'Absar Alomran',
         disableOvertime: userData.disableOvertime ?? true,
         disableDeductions: userData.disableDeductions ?? false,
+        isOnLeave: userData.isOnLeave ?? false,
+        leaveStartDate: userData.leaveStartDate || null,
+        leaveEndDate: userData.leaveEndDate || null,
         avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}&background=random`
       };
 
@@ -507,9 +511,9 @@ class DataService {
       const user = users.find(u => u.id === r.userId);
       if (!user) return;
       const pId = r.projectId || 'none';
-      let emp = grouped[key].employees.find(e => e.name === user.name && e.projectId === pId);
+      let emp = grouped[key].employees.find(e => e.userId === user.id && e.projectId === pId);
       if (!emp) {
-        emp = { name: user.name, totalHours: 0, shiftCount: 0, projectId: pId, flaggedCount: 0 };
+        emp = { userId: user.id, name: user.name, totalHours: 0, shiftCount: 0, projectId: pId, flaggedCount: 0 };
         grouped[key].employees.push(emp);
       }
       emp.shiftCount++;
@@ -557,14 +561,45 @@ class DataService {
     }));
   }
 
+  /* 💸 PAYROLL ADJUSTMENTS */
+  async getPayrollAdjustments(year: number, month: string): Promise<Record<string, { otherDeductions: number, reimbursements: number }>> {
+    this.ensureAdmin();
+    const q = query(collection(db, PAYROLL_ADJUSTMENTS), where('year', '==', year), where('month', '==', month));
+    const snap = await getDocs(q);
+    const adjustments: Record<string, { otherDeductions: number, reimbursements: number }> = {};
+    snap.docs.forEach(d => {
+      const data = d.data();
+      adjustments[data.userId] = {
+        otherDeductions: Number(data.otherDeductions || 0),
+        reimbursements: Number(data.reimbursements || 0)
+      };
+    });
+    return adjustments;
+  }
+
+  async savePayrollAdjustment(year: number, month: string, userId: string, otherDeductions: number, reimbursements: number) {
+    this.ensureAdmin();
+    const docId = `${year}-${month}-${userId}`;
+    await setDoc(doc(db, PAYROLL_ADJUSTMENTS, docId), this.sanitize({
+      year,
+      month,
+      userId,
+      otherDeductions: Number(otherDeductions),
+      reimbursements: Number(reimbursements),
+      updatedAt: serverTimestamp()
+    }), { merge: true });
+  }
+
   getRecommendedRules(): string {
     return `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isAdmin() {
-      return request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return request.auth != null && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == "kinan88m@gmail.com" && request.auth.token.email_verified == true)
+      );
     }
     match /users/{id} {
       allow read: if request.auth != null && (request.auth.uid == id || isAdmin());
@@ -598,6 +633,9 @@ service cloud.firestore {
     match /broadcasts/{id} {
       allow read: if request.auth != null;
       allow create, update, delete: if isAdmin();
+    }
+    match /payroll_adjustments/{id} {
+      allow read, write: if isAdmin();
     }
   }
 }`;

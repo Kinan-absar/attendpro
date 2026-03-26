@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { dataService } from '../services/dataService';
 import { MonthlyReport, AttendanceRecord, User, Project, Holiday } from '../types';
 import History from './History';
+import UserEditModal from './UserEditModal';
 
 const AdminReports: React.FC = () => {
   const [reports, setReports] = useState<MonthlyReport[]>([]);
@@ -11,6 +12,7 @@ const AdminReports: React.FC = () => {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
   
   const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState<string>('all');
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState<string>('all');
@@ -24,12 +26,11 @@ const AdminReports: React.FC = () => {
   const [isDeletingHoliday, setIsDeletingHoliday] = useState(false);
   const [isSavingHoliday, setIsSavingHoliday] = useState(false);
   
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [fromDate, setFromDate] = useState(localStorage.getItem('payroll_from_date') || '');
+  const [toDate, setToDate] = useState(localStorage.getItem('payroll_to_date') || '');
   
   const [globalRequiredHours, setGlobalRequiredHours] = useState<number>(225); 
-  const [otherDeductions, setOtherDeductions] = useState<Record<string, number>>({});
-  const [reimbursements, setReimbursements] = useState<Record<string, number>>({});
+  const [payrollAdjustments, setPayrollAdjustments] = useState<Record<string, { otherDeductions: number, reimbursements: number }>>({});
 
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
@@ -44,8 +45,18 @@ const AdminReports: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleValueChange = (setter: React.Dispatch<React.SetStateAction<Record<string, number>>>, name: string, value: number) => {
-    setter(prev => ({ ...prev, [name]: value }));
+  const handleValueChange = async (userId: string, year: number, month: string, type: 'otherDeductions' | 'reimbursements', value: number) => {
+    const key = `${year}-${month}-${userId}`;
+    const current = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0 };
+    const updated = { ...current, [type]: value };
+    
+    setPayrollAdjustments(prev => ({ ...prev, [key]: updated }));
+    
+    try {
+      await dataService.savePayrollAdjustment(year, month, userId, updated.otherDeductions, updated.reimbursements);
+    } catch (err) {
+      console.error("Failed to save payroll adjustment:", err);
+    }
   };
 
   const handlePrint = () => {
@@ -76,8 +87,10 @@ const AdminReports: React.FC = () => {
       
       const deductionAmount = (diff < -0.01 && user.disableDeductions === false) ? Math.abs(diff) * grossHourlyRate : 0;
       const overtimePay = (diff > 0.01 && user.disableOvertime === false) ? diff * overtimeHourlyRate : 0;
-      const otherDed = Number(otherDeductions[user.name]) || 0;
-      const reimb = Number(reimbursements[user.name]) || 0;
+      const key = `${report.year}-${report.month}-${user.id}`;
+      const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0 };
+      const otherDed = adj.otherDeductions;
+      const reimb = adj.reimbursements;
       const netSalary = grossSalary - deductionAmount + overtimePay - otherDed + reimb;
 
       return [
@@ -117,6 +130,12 @@ const AdminReports: React.FC = () => {
     setError(null);
     const from = fromDate ? new Date(fromDate) : undefined;
     const to = toDate ? new Date(toDate) : undefined;
+    
+    if (fromDate) localStorage.setItem('payroll_from_date', fromDate);
+    else localStorage.removeItem('payroll_from_date');
+    if (toDate) localStorage.setItem('payroll_to_date', toDate);
+    else localStorage.removeItem('payroll_to_date');
+
     try {
       const [reportData, userData, projectData, settings, holidayData] = await Promise.all([
         dataService.getMonthlyReports(from, to),
@@ -130,6 +149,16 @@ const AdminReports: React.FC = () => {
       setProjects(projectData);
       setGlobalRequiredHours(settings.standardHours);
       setHolidays(holidayData.sort((a,b) => a.date.localeCompare(b.date)));
+
+      // Fetch adjustments for all months in the reports
+      const allAdjs: Record<string, { otherDeductions: number, reimbursements: number }> = {};
+      await Promise.all(reportData.map(async (r) => {
+        const monthAdjs = await dataService.getPayrollAdjustments(r.year, r.month);
+        Object.entries(monthAdjs).forEach(([uid, val]) => {
+          allAdjs[`${r.year}-${r.month}-${uid}`] = val;
+        });
+      }));
+      setPayrollAdjustments(allAdjs);
     } catch (err: any) {
       console.error("Report load failed:", err);
       if (err.message?.includes("PERMISSION_DENIED") || err.code === 'permission-denied') {
@@ -509,8 +538,10 @@ const AdminReports: React.FC = () => {
                       const deductionAmount = (diff < -0.01 && dedEnabled) ? Math.abs(diff) * grossHourlyRate : 0;
                       const overtimePay = (diff > 0.01 && otEnabled) ? diff * overtimeHourlyRate : 0;
                       
-                      const otherDed = Number(otherDeductions[user.name]) || 0;
-                      const reimb = Number(reimbursements[user.name]) || 0;
+                      const key = `${report.year}-${report.month}-${user.id}`;
+                      const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0 };
+                      const otherDed = adj.otherDeductions;
+                      const reimb = adj.reimbursements;
                       const netSalary = grossSalary - deductionAmount + overtimePay - otherDed + reimb;
 
                       totalPeriodHours += stats.totalHours;
@@ -524,7 +555,20 @@ const AdminReports: React.FC = () => {
                       return (
                         <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-2 py-2 truncate text-[10px]" title={user.name}>
-                            <span className="font-bold text-slate-900">{user.name}</span>
+                            <div className="flex flex-col">
+                              {user.isOnLeave && (
+                                <div className="flex items-center gap-1 text-[8px] font-black text-indigo-500 uppercase tracking-tighter mb-0.5">
+                                  <i className="fa-solid fa-plane text-[7px]"></i>
+                                  <span>On Leave</span>
+                                </div>
+                              )}
+                              <button 
+                                onClick={() => setEditingUser(user)}
+                                className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors cursor-pointer text-left"
+                              >
+                                {user.name}
+                              </button>
+                            </div>
                           </td>
                           <td className="px-1 py-2 text-center font-bold text-slate-500 no-print">{stats.shiftCount}</td>
                           <td className="px-1 py-2 text-right font-mono font-bold no-print">{stats.totalHours.toFixed(1)}</td>
@@ -544,11 +588,11 @@ const AdminReports: React.FC = () => {
                              {overtimePay > 0 ? `+${overtimePay.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
                           </td>
                           <td className="px-2 py-2 text-center">
-                            <input type="number" value={otherDeductions[user.name] || ''} onChange={(e) => handleValueChange(setOtherDeductions, user.name, parseFloat(e.target.value) || 0)} className="w-12 px-1 py-0.5 bg-rose-50 border border-rose-100 rounded text-right font-mono text-[9px] font-bold text-rose-700 outline-none no-print-input" />
+                            <input type="number" value={payrollAdjustments[`${report.year}-${report.month}-${user.id}`]?.otherDeductions || ''} onChange={(e) => handleValueChange(user.id, report.year, report.month, 'otherDeductions', parseFloat(e.target.value) || 0)} className="w-12 px-1 py-0.5 bg-rose-50 border border-rose-100 rounded text-right font-mono text-[9px] font-bold text-rose-700 outline-none no-print-input" />
                             <span className="hidden print:inline font-mono font-bold text-rose-700 text-[9px]">{otherDed > 0 ? `-${otherDed}` : '-'}</span>
                           </td>
                           <td className="px-2 py-2 text-center">
-                            <input type="number" value={reimbursements[user.name] || ''} onChange={(e) => handleValueChange(setReimbursements, user.name, parseFloat(e.target.value) || 0)} className="w-12 px-1 py-0.5 bg-emerald-50 border border-emerald-100 rounded text-right font-mono text-[9px] font-bold text-emerald-700 outline-none no-print-input" />
+                            <input type="number" value={payrollAdjustments[`${report.year}-${report.month}-${user.id}`]?.reimbursements || ''} onChange={(e) => handleValueChange(user.id, report.year, report.month, 'reimbursements', parseFloat(e.target.value) || 0)} className="w-12 px-1 py-0.5 bg-emerald-50 border border-emerald-100 rounded text-right font-mono text-[9px] font-bold text-emerald-700 outline-none no-print-input" />
                             <span className="hidden print:inline font-mono font-bold text-emerald-700 text-[9px]">{reimb > 0 ? `+${reimb}` : '-'}</span>
                           </td>
                           <td className="px-3 py-2 text-right">
@@ -596,6 +640,13 @@ const AdminReports: React.FC = () => {
           .text-indigo-300, .text-rose-300, .text-emerald-300, .text-indigo-100 { color: #000 !important; }
         }
       `}</style>
+      {editingUser && (
+        <UserEditModal 
+          user={editingUser} 
+          onClose={() => setEditingUser(null)} 
+          onSave={fetch} 
+        />
+      )}
     </div>
   );
 };
