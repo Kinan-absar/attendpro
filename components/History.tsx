@@ -65,6 +65,41 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
     }, 0);
   }, [filteredHistory]);
 
+  const handleExportExcel = () => {
+    const formatDateTime = (date: Date) => {
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    };
+
+    const headers = ["Check In", "Check Out", "Duration (Hours)", "Status"];
+    const rows = filteredHistory.map(record => {
+      const cinDate = new Date(record.checkIn);
+      const coutDate = record.checkOut ? new Date(record.checkOut) : null;
+      const rawDuration = Number(record.duration);
+      const calcDuration = coutDate ? (coutDate.getTime() - cinDate.getTime()) / 60000 : 0;
+      const finalDuration = (!isNaN(rawDuration) && rawDuration > 0) ? rawDuration : calcDuration;
+      
+      let status = "Active";
+      if (record.autoClosed) status = "Auto-Closed";
+      else if (record.needsReview) status = "Flagged";
+      else if (coutDate) status = "Verified";
+
+      return [
+        formatDateTime(cinDate),
+        coutDate ? formatDateTime(coutDate) : "Ongoing",
+        (finalDuration / 60).toFixed(2),
+        status
+      ];
+    });
+
+    const csvContent = [headers, ...rows].map(e => e.map(val => `"${val}"`).join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Attendance_Logs_${user.name}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
   const now = new Date();
 
   return (
@@ -85,9 +120,13 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
           </div>
           <div className="flex gap-2">
             {(startDate || endDate) && <button onClick={() => { setStartDate(''); setEndDate(''); }} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest">Clear</button>}
-            <button onClick={() => window.print()} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2">
+            <button onClick={handleExportExcel} className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2 active:scale-95 transition-all">
+              <i className="fa-solid fa-file-excel"></i>
+              <span>Excel</span>
+            </button>
+            <button onClick={() => window.print()} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2 active:scale-95 transition-all">
               <i className="fa-solid fa-print"></i>
-              <span>Print Sheet</span>
+              <span>Print</span>
             </button>
           </div>
         </div>

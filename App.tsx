@@ -12,6 +12,7 @@ import AdminLocationSettings from './components/AdminLocationSettings';
 import AdminUserManagement from './components/AdminUserManagement';
 import AdminShiftManagement from './components/AdminShiftManagement';
 import AdminBroadcastManagement from './components/AdminBroadcastManagement';
+import AdminLogExport from './components/AdminLogExport';
 
 const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDOM as any;
 
@@ -26,6 +27,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
 
   if (user.role === 'admin') {
     links.push({ path: '/admin', label: 'Reports', icon: 'fa-chart-pie' });
+    links.push({ path: '/admin/logs-export', label: 'Log Export', icon: 'fa-file-export' });
     links.push({ path: '/admin/active', label: 'Active', icon: 'fa-user-clock' });
     links.push({ path: '/admin/broadcasts', label: 'Notices', icon: 'fa-bullhorn' });
     links.push({ path: '/admin/users', label: 'Staff', icon: 'fa-users-gear' });
@@ -163,6 +165,7 @@ const App: React.FC = () => {
               {user.role === 'admin' && (
                 <>
                   <Route path="/admin" element={<AdminReports />} />
+                  <Route path="/admin/logs-export" element={<AdminLogExport />} />
                   <Route path="/admin/active" element={<ActiveEmployees />} />
                   <Route path="/admin/location" element={<AdminLocationSettings />} />
                   <Route path="/admin/users" element={<AdminUserManagement />} />
