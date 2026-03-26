@@ -90,14 +90,14 @@ const AdminReports: React.FC = () => {
       const key = `${report.year}-${report.month}-${user.id}`;
       const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0, absentDays: 0 };
       
+      const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
       const hourlyDeduction = (diff < -0.01 && user.disableDeductions === false) ? Math.abs(diff) * grossHourlyRate : 0;
-      const absentDeduction = (adj.absentDays || 0) * dailyRate;
+      const absentDeduction = totalAbsentDays * dailyRate;
       const totalDeduction = hourlyDeduction + absentDeduction;
 
       const overtimePay = (diff > 0.01 && user.disableOvertime === false) ? diff * overtimeHourlyRate : 0;
       const otherDed = adj.otherDeductions;
       const reimb = adj.reimbursements;
-      const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
       const netSalary = grossSalary - totalDeduction + overtimePay - otherDed + reimb;
 
       return [
@@ -582,10 +582,13 @@ const AdminReports: React.FC = () => {
                               )}
                               <button 
                                 onClick={() => setEditingUser(user)}
-                                className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors cursor-pointer text-left"
+                                className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors cursor-pointer text-left no-print"
                               >
                                 {user.name}
                               </button>
+                              <span className="hidden print:inline font-bold text-slate-900 text-[10px]">
+                                {user.name}
+                              </span>
                             </div>
                           </td>
                           <td className="px-1 py-2 text-center font-bold text-slate-500 no-print">{stats.shiftCount}</td>
@@ -663,7 +666,10 @@ const AdminReports: React.FC = () => {
           .card { border: 1px solid #ddd !important; box-shadow: none !important; border-radius: 0 !important; }
           table { width: 100% !important; min-width: auto !important; table-layout: fixed !important; }
           .font-mono { font-family: Courier, monospace !important; }
+          .text-indigo-600, .text-rose-600, .text-emerald-600, .text-slate-600, .text-slate-900, .text-indigo-700, .text-rose-700, .text-emerald-700 { color: #000 !important; }
           .text-indigo-300, .text-rose-300, .text-emerald-300, .text-indigo-100 { color: #000 !important; }
+          button { color: inherit !important; text-decoration: none !important; border: none !important; background: none !important; padding: 0 !important; }
+          .truncate { overflow: visible !important; white-space: normal !important; }
         }
       `}</style>
       {editingUser && (
