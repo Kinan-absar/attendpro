@@ -83,7 +83,7 @@ const AdminLogExport: React.FC = () => {
       });
 
       // Format for CSV
-      const headers = ["Employee ID", "Name", "Clock In", "Clock Out", "Duration (Hours)"];
+      const headers = ["Employee/Database ID", "Check In", "Check Out", "Worked Hours"];
       const rows = filteredLogs.map(log => {
         const user = users.find(u => u.id === log.userId);
         const clockIn = log.checkIn ? formatDate(log.checkIn) : "";
@@ -92,7 +92,6 @@ const AdminLogExport: React.FC = () => {
         
         return [
           `"${user?.employeeId || ''}"`,
-          `"${user?.name || ''}"`,
           `"${clockIn}"`,
           `"${clockOut}"`,
           `"${durationHours}"`
