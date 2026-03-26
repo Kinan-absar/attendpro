@@ -495,29 +495,47 @@ class DataService {
     const users = await this.getUsers();
     const grouped: Record<string, MonthlyReport> = {};
 
+    const start = from ? new Date(from) : null;
+    if (start) start.setHours(0, 0, 0, 0);
+    const end = to ? new Date(to) : null;
+    if (end) end.setHours(23, 59, 59, 999);
+
     snap.docs.forEach(d => {
       const r = d.data();
       const cin = this.convertToDate(r.checkIn);
       const cout = this.convertToDate(r.checkOut);
-      if (!cin || !cout) return;
-      if (from && cin < from) return;
-      if (to && cin > to) return;
+      if (!cin) return;
+
+      const compareDate = new Date(cin);
+      compareDate.setHours(0, 0, 0, 0);
+
+      if (start && compareDate < start) return;
+      if (end && compareDate > end) return;
 
       let month = cin.getMonth();
       let year = cin.getFullYear();
       if (cin.getDate() >= 26) { month++; if (month === 12) { month = 0; year++; } }
       const key = `${year}-${month}`;
       grouped[key] ??= { month: new Date(year, month).toLocaleString('default', { month: 'long' }), year, employees: [] };
+      
       const user = users.find(u => u.id === r.userId);
       if (!user) return;
+      
       const pId = r.projectId || 'none';
       let emp = grouped[key].employees.find(e => e.userId === user.id && e.projectId === pId);
       if (!emp) {
         emp = { userId: user.id, name: user.name, totalHours: 0, shiftCount: 0, projectId: pId, flaggedCount: 0 };
         grouped[key].employees.push(emp);
       }
+      
       emp.shiftCount++;
-      emp.totalHours += (cout.getTime() - cin.getTime()) / 3600000;
+      
+      // Use stored duration if available, otherwise calculate
+      const rawDuration = Number(r.duration);
+      const calcDuration = cout ? (cout.getTime() - cin.getTime()) / 3600000 : 0;
+      const finalDuration = (!isNaN(rawDuration) && rawDuration > 0) ? (rawDuration / 60) : calcDuration;
+      
+      emp.totalHours += finalDuration;
       if (r.needsReview) emp.flaggedCount++;
     });
     return Object.values(grouped);

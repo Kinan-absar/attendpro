@@ -43,12 +43,12 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
       const recordDate = new Date(record.checkIn);
       recordDate.setHours(0, 0, 0, 0);
       if (startDate) {
-        const start = new Date(startDate);
+        const start = new Date(startDate + 'T00:00:00');
         start.setHours(0, 0, 0, 0);
         if (recordDate < start) return false;
       }
       if (endDate) {
-        const end = new Date(endDate);
+        const end = new Date(endDate + 'T23:59:59');
         end.setHours(23, 59, 59, 999);
         if (recordDate > end) return false;
       }

@@ -128,8 +128,8 @@ const AdminReports: React.FC = () => {
   const fetch = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const from = fromDate ? new Date(fromDate) : undefined;
-    const to = toDate ? new Date(toDate) : undefined;
+    const from = fromDate ? new Date(fromDate + 'T00:00:00') : undefined;
+    const to = toDate ? new Date(toDate + 'T23:59:59') : undefined;
     
     if (fromDate) localStorage.setItem('payroll_from_date', fromDate);
     else localStorage.removeItem('payroll_from_date');
@@ -326,7 +326,7 @@ const AdminReports: React.FC = () => {
                 </button>
                 <div className="h-px bg-slate-100"></div>
                 <button 
-                  onClick={() => reports[0] && handleExportExcel(reports[0], users)}
+                  onClick={() => reports.forEach(r => handleExportExcel(r, users))}
                   className="w-full text-left px-5 py-4 hover:bg-slate-50 flex items-center space-x-3 transition-colors"
                 >
                   <i className="fa-solid fa-file-excel text-emerald-500"></i>
