@@ -480,13 +480,33 @@ const AdminReports: React.FC = () => {
 
           if (visibleUsers.length === 0) return null;
 
-          let totalPeriodHours = 0;
-          let totalPeriodGross = 0;
-          let totalPeriodDeduc = 0;
-          let totalPeriodOT = 0;
-          let totalPeriodOtherDed = 0;
-          let totalPeriodReimb = 0;
-          let totalPeriodNet = 0;
+          let grandTotalHours = 0;
+          let grandTotalGross = 0;
+          let grandTotalDeduc = 0;
+          let grandTotalOT = 0;
+          let grandTotalOtherDed = 0;
+          let grandTotalReimb = 0;
+          let grandTotalNet = 0;
+
+          // Group users by their primary project in this report
+          const userPrimaryProject: Record<string, string> = {};
+          visibleUsers.forEach(user => {
+            const userEntries = report.employees.filter(e => e.userId === user.id);
+            if (userEntries.length > 0) {
+              const primary = userEntries.reduce((prev, curr) => (curr.totalHours > prev.totalHours ? curr : prev));
+              userPrimaryProject[user.id] = primary.projectId || 'none';
+            } else {
+              userPrimaryProject[user.id] = 'none';
+            }
+          });
+
+          const projectGroups = [...new Set(Object.values(userPrimaryProject))].sort((a, b) => {
+            if (a === 'none') return 1;
+            if (b === 'none') return -1;
+            const pA = projects.find(p => p.id === a)?.name || 'Unknown';
+            const pB = projects.find(p => p.id === b)?.name || 'Unknown';
+            return pA.localeCompare(pB);
+          });
 
           return (
             <div key={`${report.year}-${report.month}`} className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-12 card relative">
@@ -524,131 +544,182 @@ const AdminReports: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {visibleUsers.map((user) => {
-                      const stats = report.employees
-                        .filter(e => e.name === user.name)
-                        .reduce((acc, s) => ({
-                          totalHours: acc.totalHours + Number(s.totalHours || 0),
-                          shiftCount: acc.shiftCount + Number(s.shiftCount || 0),
-                          flaggedCount: acc.flaggedCount + (Number(s.flaggedCount) || 0),
-                          absentDays: acc.absentDays + (Number(s.absentDays) || 0)
-                        }), { totalHours: 0, shiftCount: 0, flaggedCount: 0, absentDays: 0 });
+                    {projectGroups.map(pId => {
+                      const groupUsers = visibleUsers.filter(u => userPrimaryProject[u.id] === pId);
+                      if (groupUsers.length === 0) return null;
 
-                      const grossSalary = Number(user.grossSalary) || 0;
-                      const basicSalary = grossSalary / 1.35;
-                      const userTarget = Number(user.standardHours);
-                      const targetHours = (userTarget > 0) ? userTarget : Number(globalRequiredHours);
-
-                      const grossHourlyRate = grossSalary / 240;
-                      const basicHourlyRate = basicSalary / 240;
-                      const overtimeHourlyRate = grossHourlyRate + (0.5 * basicHourlyRate);
-                      const dailyRate = grossSalary / 30;
-
-                      const diff = stats.totalHours - targetHours;
-                      const otEnabled = user.disableOvertime === false;
-                      const dedEnabled = user.disableDeductions === false;
-
-                      const key = `${report.year}-${report.month}-${user.id}`;
-                      const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0, absentDays: 0 };
+                      const projectName = pId === 'none' ? 'No Project Assigned' : (projects.find(p => p.id === pId)?.name || 'Unknown Project');
                       
-                      const hourlyDeduction = (diff < -0.01 && dedEnabled) ? Math.abs(diff) * grossHourlyRate : 0;
-                      const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
-                      const absentDeduction = totalAbsentDays * dailyRate;
-                      const totalDeduction = hourlyDeduction + absentDeduction;
-
-                      const overtimePay = (diff > 0.01 && otEnabled) ? diff * overtimeHourlyRate : 0;
-                      
-                      const otherDed = adj.otherDeductions;
-                      const reimb = adj.reimbursements;
-                      const netSalary = grossSalary - totalDeduction + overtimePay - otherDed + reimb;
-
-                      totalPeriodHours += stats.totalHours;
-                      totalPeriodGross += grossSalary;
-                      totalPeriodDeduc += totalDeduction;
-                      totalPeriodOT += overtimePay;
-                      totalPeriodOtherDed += otherDed;
-                      totalPeriodReimb += reimb;
-                      totalPeriodNet += netSalary;
+                      let groupHours = 0;
+                      let groupGross = 0;
+                      let groupDeduc = 0;
+                      let groupOT = 0;
+                      let groupOtherDed = 0;
+                      let groupReimb = 0;
+                      let groupNet = 0;
 
                       return (
-                        <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-2 py-2 truncate text-[10px]" title={user.name}>
-                            <div className="flex flex-col">
-                              {user.isOnLeave && (
-                                <div className="flex items-center gap-1 text-[8px] font-black text-indigo-500 uppercase tracking-tighter mb-0.5">
-                                  <i className="fa-solid fa-plane text-[7px]"></i>
-                                  <span>On Leave</span>
-                                </div>
-                              )}
-                              <button 
-                                onClick={() => setEditingUser(user)}
-                                className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors cursor-pointer text-left no-print"
-                              >
-                                {user.name}
-                              </button>
-                              <span className="hidden print:inline font-bold text-slate-900 text-[10px]">
-                                {user.name}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-1 py-2 text-center font-bold text-slate-500 no-print">{stats.shiftCount}</td>
-                          <td className="px-1 py-2 text-right font-mono font-bold no-print">{formatHoursToHHMM(stats.totalHours)}</td>
-                          <td className={`px-1 py-2 text-right font-mono font-bold no-print ${diff < -0.01 ? 'text-rose-500' : diff > 0.01 ? 'text-emerald-500' : 'text-slate-400'}`}>
-                            {diff > 0 ? '+' : ''}{formatHoursToHHMM(Math.abs(diff))}
-                          </td>
-                          <td className="px-1 py-2 text-center no-print">
-                            {stats.flaggedCount > 0 ? (
-                               <span className="px-1.5 py-0.5 bg-rose-500 text-white rounded text-[8px] font-black">{stats.flaggedCount}F</span>
-                            ) : <i className="fa-solid fa-circle-check text-emerald-400 text-[8px]"></i>}
-                          </td>
-                          <td className="px-2 py-2 text-right font-mono font-bold text-slate-600">{grossSalary.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                          <td className="px-2 py-2 text-right font-mono font-bold text-rose-600">
-                             {totalDeduction > 0 ? `-${totalDeduction.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
-                          </td>
-                          <td className="px-2 py-2 text-right font-mono font-bold text-emerald-600">
-                             {overtimePay > 0 ? `+${overtimePay.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
-                          </td>
-                          <td className="px-1 py-2 text-center">
-                            <div className="flex flex-col items-center">
-                              <span className="text-[9px] font-black text-rose-500 mb-0.5">{stats.absentDays}</span>
-                              <input type="number" step="0.5" value={payrollAdjustments[`${report.year}-${report.month}-${user.id}`]?.absentDays || ''} onChange={(e) => handleValueChange(user.id, report.year, report.month, 'absentDays', parseFloat(e.target.value) || 0)} className="w-10 px-1 py-0.5 bg-rose-50 border border-rose-100 rounded text-center font-mono text-[8px] font-bold text-rose-700 outline-none no-print-input" placeholder="Adj" />
-                            </div>
-                            <span className="hidden print:inline font-mono font-bold text-rose-700 text-[9px]">{totalAbsentDays || '-'}</span>
-                          </td>
-                          <td className="px-2 py-2 text-center">
-                            <input type="number" value={payrollAdjustments[`${report.year}-${report.month}-${user.id}`]?.otherDeductions || ''} onChange={(e) => handleValueChange(user.id, report.year, report.month, 'otherDeductions', parseFloat(e.target.value) || 0)} className="w-12 px-1 py-0.5 bg-rose-50 border border-rose-100 rounded text-right font-mono text-[9px] font-bold text-rose-700 outline-none no-print-input" />
-                            <span className="hidden print:inline font-mono font-bold text-rose-700 text-[9px]">{otherDed > 0 ? `-${otherDed}` : '-'}</span>
-                          </td>
-                          <td className="px-2 py-2 text-center">
-                            <input type="number" value={payrollAdjustments[`${report.year}-${report.month}-${user.id}`]?.reimbursements || ''} onChange={(e) => handleValueChange(user.id, report.year, report.month, 'reimbursements', parseFloat(e.target.value) || 0)} className="w-12 px-1 py-0.5 bg-emerald-50 border border-emerald-100 rounded text-right font-mono text-[9px] font-bold text-emerald-700 outline-none no-print-input" />
-                            <span className="hidden print:inline font-mono font-bold text-emerald-700 text-[9px]">{reimb > 0 ? `+${reimb}` : '-'}</span>
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                             <span className="font-mono font-black text-slate-900 bg-slate-100 px-1.5 py-1 rounded">
-                               {netSalary.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                             </span>
-                          </td>
-                          <td className="px-4 py-2 text-right no-print">
-                            <button onClick={() => handleViewEmployee(user.name)} className="w-6 h-6 rounded bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors" title="Logs"><i className="fa-solid fa-magnifying-glass-chart text-[8px]"></i></button>
-                          </td>
-                        </tr>
+                        <React.Fragment key={pId}>
+                          <tr className="bg-slate-100/50 hidden print:table-row">
+                            <td colSpan={13} className="px-4 py-2 font-black text-slate-900 uppercase tracking-widest text-[9px]">
+                              <i className="fa-solid fa-location-dot mr-2 text-indigo-500"></i>
+                              {projectName}
+                            </td>
+                          </tr>
+                          {groupUsers.map((user) => {
+                            const stats = report.employees
+                              .filter(e => e.name === user.name)
+                              .reduce((acc, s) => ({
+                                totalHours: acc.totalHours + Number(s.totalHours || 0),
+                                shiftCount: acc.shiftCount + Number(s.shiftCount || 0),
+                                flaggedCount: acc.flaggedCount + (Number(s.flaggedCount) || 0),
+                                absentDays: acc.absentDays + (Number(s.absentDays) || 0)
+                              }), { totalHours: 0, shiftCount: 0, flaggedCount: 0, absentDays: 0 });
+
+                            const grossSalary = Number(user.grossSalary) || 0;
+                            const basicSalary = grossSalary / 1.35;
+                            const userTarget = Number(user.standardHours);
+                            const targetHours = (userTarget > 0) ? userTarget : Number(globalRequiredHours);
+
+                            const grossHourlyRate = grossSalary / 240;
+                            const basicHourlyRate = basicSalary / 240;
+                            const overtimeHourlyRate = grossHourlyRate + (0.5 * basicHourlyRate);
+                            const dailyRate = grossSalary / 30;
+
+                            const diff = stats.totalHours - targetHours;
+                            const otEnabled = user.disableOvertime === false;
+                            const dedEnabled = user.disableDeductions === false;
+
+                            const key = `${report.year}-${report.month}-${user.id}`;
+                            const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0, absentDays: 0 };
+                            
+                            const hourlyDeduction = (diff < -0.01 && dedEnabled) ? Math.abs(diff) * grossHourlyRate : 0;
+                            const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
+                            const absentDeduction = totalAbsentDays * dailyRate;
+                            const totalDeduction = hourlyDeduction + absentDeduction;
+
+                            const overtimePay = (diff > 0.01 && otEnabled) ? diff * overtimeHourlyRate : 0;
+                            
+                            const otherDed = adj.otherDeductions;
+                            const reimb = adj.reimbursements;
+                            const netSalary = grossSalary - totalDeduction + overtimePay - otherDed + reimb;
+
+                            groupHours += stats.totalHours;
+                            groupGross += grossSalary;
+                            groupDeduc += totalDeduction;
+                            groupOT += overtimePay;
+                            groupOtherDed += otherDed;
+                            groupReimb += reimb;
+                            groupNet += netSalary;
+
+                            grandTotalHours += stats.totalHours;
+                            grandTotalGross += grossSalary;
+                            grandTotalDeduc += totalDeduction;
+                            grandTotalOT += overtimePay;
+                            grandTotalOtherDed += otherDed;
+                            grandTotalReimb += reimb;
+                            grandTotalNet += netSalary;
+
+                            return (
+                              <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="px-2 py-2 truncate text-[10px]" title={user.name}>
+                                  <div className="flex flex-col">
+                                    {user.isOnLeave && (
+                                      <div className="flex items-center gap-1 text-[8px] font-black text-indigo-500 uppercase tracking-tighter mb-0.5">
+                                        <i className="fa-solid fa-plane text-[7px]"></i>
+                                        <span>On Leave</span>
+                                      </div>
+                                    )}
+                                    <button 
+                                      onClick={() => setEditingUser(user)}
+                                      className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors cursor-pointer text-left no-print"
+                                    >
+                                      {user.name}
+                                    </button>
+                                    <span className="hidden print:inline font-bold text-slate-900 text-[10px]">
+                                      {user.name}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-1 py-2 text-center font-bold text-slate-500 no-print">{stats.shiftCount}</td>
+                                <td className="px-1 py-2 text-right font-mono font-bold no-print">{formatHoursToHHMM(stats.totalHours)}</td>
+                                <td className={`px-1 py-2 text-right font-mono font-bold no-print ${diff < -0.01 ? 'text-rose-500' : diff > 0.01 ? 'text-emerald-500' : 'text-slate-400'}`}>
+                                  {diff > 0 ? '+' : ''}{formatHoursToHHMM(Math.abs(diff))}
+                                </td>
+                                <td className="px-1 py-2 text-center no-print">
+                                  {stats.flaggedCount > 0 ? (
+                                     <span className="px-1.5 py-0.5 bg-rose-500 text-white rounded text-[8px] font-black">{stats.flaggedCount}F</span>
+                                  ) : <i className="fa-solid fa-circle-check text-emerald-400 text-[8px]"></i>}
+                                </td>
+                                <td className="px-2 py-2 text-right font-mono font-bold text-slate-600">{grossSalary.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                                <td className="px-2 py-2 text-right font-mono font-bold text-rose-600">
+                                   {totalDeduction > 0 ? `-${totalDeduction.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
+                                </td>
+                                <td className="px-2 py-2 text-right font-mono font-bold text-emerald-600">
+                                   {overtimePay > 0 ? `+${overtimePay.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
+                                </td>
+                                <td className="px-1 py-2 text-center">
+                                  <div className="flex flex-col items-center">
+                                    <span className="text-[9px] font-black text-rose-500 mb-0.5">{stats.absentDays}</span>
+                                    <input type="number" step="0.5" value={payrollAdjustments[`${report.year}-${report.month}-${user.id}`]?.absentDays || ''} onChange={(e) => handleValueChange(user.id, report.year, report.month, 'absentDays', parseFloat(e.target.value) || 0)} className="w-10 px-1 py-0.5 bg-rose-50 border border-rose-100 rounded text-center font-mono text-[8px] font-bold text-rose-700 outline-none no-print-input" placeholder="Adj" />
+                                  </div>
+                                  <span className="hidden print:inline font-mono font-bold text-rose-700 text-[9px]">{totalAbsentDays || '-'}</span>
+                                </td>
+                                <td className="px-2 py-2 text-center">
+                                  <input type="number" value={payrollAdjustments[`${report.year}-${report.month}-${user.id}`]?.otherDeductions || ''} onChange={(e) => handleValueChange(user.id, report.year, report.month, 'otherDeductions', parseFloat(e.target.value) || 0)} className="w-12 px-1 py-0.5 bg-rose-50 border border-rose-100 rounded text-right font-mono text-[9px] font-bold text-rose-700 outline-none no-print-input" />
+                                  <span className="hidden print:inline font-mono font-bold text-rose-700 text-[9px]">{otherDed > 0 ? `-${otherDed}` : '-'}</span>
+                                </td>
+                                <td className="px-2 py-2 text-center">
+                                  <input type="number" value={payrollAdjustments[`${report.year}-${report.month}-${user.id}`]?.reimbursements || ''} onChange={(e) => handleValueChange(user.id, report.year, report.month, 'reimbursements', parseFloat(e.target.value) || 0)} className="w-12 px-1 py-0.5 bg-emerald-50 border border-emerald-100 rounded text-right font-mono text-[9px] font-bold text-emerald-700 outline-none no-print-input" />
+                                  <span className="hidden print:inline font-mono font-bold text-emerald-700 text-[9px]">{reimb > 0 ? `+${reimb}` : '-'}</span>
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                   <span className="font-mono font-black text-slate-900 bg-slate-100 px-1.5 py-1 rounded">
+                                     {netSalary.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                   </span>
+                                </td>
+                                <td className="px-4 py-2 text-right no-print">
+                                  <button onClick={() => handleViewEmployee(user.name)} className="w-6 h-6 rounded bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors" title="Logs"><i className="fa-solid fa-magnifying-glass-chart text-[8px]"></i></button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="bg-slate-50 font-bold border-t border-slate-200 hidden print:table-row">
+                            <td className="px-2 py-2 uppercase text-[8px] tracking-widest text-slate-500">Project Subtotal</td>
+                            <td className="px-1 py-2 no-print"></td>
+                            <td className="px-1 py-2 text-right font-mono no-print text-[9px] text-slate-500">{formatHoursToHHMM(groupHours)}</td>
+                            <td className="px-1 py-2 no-print"></td>
+                            <td className="px-1 py-2 no-print"></td>
+                            <td className="px-2 py-2 text-right font-mono text-indigo-400 text-[9px]">{groupGross.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                            <td className="px-2 py-2 text-right font-mono text-rose-400 text-[9px]">-{groupDeduc.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                            <td className="px-2 py-2 text-right font-mono text-emerald-400 text-[9px]">+{groupOT.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                            <td className="px-1 py-2"></td>
+                            <td className="px-2 py-2 text-center font-mono text-rose-400 text-[9px]">-{groupOtherDed.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                            <td className="px-2 py-2 text-center font-mono text-emerald-400 text-[9px]">+{groupReimb.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                            <td className="px-3 py-2 text-right font-mono text-slate-900 text-[9px]">{groupNet.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                            <td className="px-4 py-2 no-print"></td>
+                          </tr>
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
                   <tfoot className="bg-slate-900 text-white font-black tfoot-print">
                     <tr>
-                      <td className="px-2 py-4 uppercase text-[8px] tracking-widest overflow-hidden whitespace-nowrap">Group Totals</td>
+                      <td className="px-2 py-4 uppercase text-[8px] tracking-widest overflow-hidden whitespace-nowrap">
+                        <span className="print:hidden">Group Totals</span>
+                        <span className="hidden print:inline">Grand Totals</span>
+                      </td>
                       <td className="px-1 py-4 no-print"></td>
-                      <td className="px-1 py-4 text-right font-mono no-print text-[9px]">{formatHoursToHHMM(totalPeriodHours)}</td>
+                      <td className="px-1 py-4 text-right font-mono no-print text-[9px]">{formatHoursToHHMM(grandTotalHours)}</td>
                       <td className="px-1 py-4 no-print"></td>
                       <td className="px-1 py-4 no-print"></td>
-                      <td className="px-2 py-4 text-right font-mono text-indigo-300 text-[9px]">SR {totalPeriodGross.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-2 py-4 text-right font-mono text-rose-300 text-[9px]">-SR {totalPeriodDeduc.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-2 py-4 text-right font-mono text-emerald-300 text-[9px]">+SR {totalPeriodOT.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-2 py-4 text-right font-mono text-indigo-300 text-[9px]">SR {grandTotalGross.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-2 py-4 text-right font-mono text-rose-300 text-[9px]">-SR {grandTotalDeduc.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-2 py-4 text-right font-mono text-emerald-300 text-[9px]">+SR {grandTotalOT.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
                       <td className="px-1 py-4 text-center font-mono text-rose-300 text-[9px]"></td>
-                      <td className="px-2 py-4 text-center font-mono text-rose-400 text-[9px]">-SR {totalPeriodOtherDed.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-2 py-4 text-center font-mono text-emerald-400 text-[9px]">+SR {totalPeriodReimb.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-3 py-4 text-right font-mono whitespace-nowrap text-[10px] print-black-text text-indigo-100">SR {totalPeriodNet.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-2 py-4 text-center font-mono text-rose-400 text-[9px]">-SR {grandTotalOtherDed.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-2 py-4 text-center font-mono text-emerald-400 text-[9px]">+SR {grandTotalReimb.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className="px-3 py-4 text-right font-mono whitespace-nowrap text-[10px] print-black-text text-indigo-100">SR {grandTotalNet.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
                       <td className="px-4 py-4 no-print"></td>
                     </tr>
                   </tfoot>
