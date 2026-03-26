@@ -525,21 +525,21 @@ const AdminReports: React.FC = () => {
               </div>
 
               <div className="overflow-x-auto no-scrollbar">
-                <table className="w-full text-[10px] table-fixed min-w-[850px]">
+                <table className="w-full text-[10px] table-auto print:table-auto min-w-[850px] print:min-w-full print:w-full">
                   <thead>
                     <tr className="bg-slate-50/50">
-                      <th className="px-2 py-4 text-left font-black text-slate-400 uppercase text-[9px] tracking-widest w-[14%]">Employee</th>
+                      <th className="px-2 py-4 text-left font-black text-slate-400 uppercase text-[9px] tracking-widest w-[14%] print:w-[25%]">Employee</th>
                       <th className="px-1 py-4 text-center font-black text-slate-400 uppercase text-[9px] tracking-widest no-print w-[6%]">Shifts</th>
                       <th className="px-1 py-4 text-right font-black text-slate-400 uppercase text-[9px] tracking-widest no-print w-[8%]">Hours</th>
                       <th className="px-1 py-4 text-right font-black text-slate-400 uppercase text-[9px] tracking-widest no-print w-[8%]">Diff</th>
                       <th className="px-1 py-4 text-center font-black text-rose-500 uppercase text-[9px] tracking-widest no-print w-[6%]">Flags</th>
-                      <th className="px-2 py-4 text-right font-black text-indigo-400 uppercase text-[9px] tracking-widest w-[10%]">Gross</th>
-                      <th className="px-2 py-4 text-right font-black text-rose-400 uppercase text-[9px] tracking-widest w-[8%]">Deduc.</th>
-                      <th className="px-2 py-4 text-right font-black text-emerald-400 uppercase text-[9px] tracking-widest w-[8%]">OT</th>
-                      <th className="px-1 py-4 text-center font-black text-rose-400 uppercase text-[9px] tracking-widest w-[6%]">Abs. Days</th>
-                      <th className="px-2 py-4 text-center font-black text-rose-600 uppercase text-[9px] tracking-widest w-[8%]">Other Ded.</th>
-                      <th className="px-2 py-4 text-center font-black text-emerald-600 uppercase text-[9px] tracking-widest w-[8%]">Reimb.</th>
-                      <th className="px-3 py-4 text-right font-black text-slate-900 uppercase text-[9px] tracking-widest w-[10%]">Net</th>
+                      <th className="px-2 py-4 text-right font-black text-indigo-400 uppercase text-[9px] tracking-widest w-[10%] print:w-[12%]">Gross</th>
+                      <th className="px-2 py-4 text-right font-black text-rose-400 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">Deduc.</th>
+                      <th className="px-2 py-4 text-right font-black text-emerald-400 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">OT</th>
+                      <th className="px-1 py-4 text-center font-black text-rose-400 uppercase text-[9px] tracking-widest w-[6%] print:w-[8%]">Abs. Days</th>
+                      <th className="px-2 py-4 text-center font-black text-rose-600 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">Other Ded.</th>
+                      <th className="px-2 py-4 text-center font-black text-emerald-600 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">Reimb.</th>
+                      <th className="px-3 py-4 text-right font-black text-slate-900 uppercase text-[9px] tracking-widest w-[10%] print:w-[15%]">Net</th>
                       <th className="px-4 py-4 text-right no-print w-[5%]"></th>
                     </tr>
                   </thead>
@@ -685,26 +685,23 @@ const AdminReports: React.FC = () => {
                             );
                           })}
                           <tr className="bg-slate-50 font-bold border-t border-slate-200 hidden print:table-row">
-                            <td className="px-2 py-2 uppercase text-[8px] tracking-widest text-slate-500">Project Subtotal</td>
-                            <td className="px-1 py-2 no-print"></td>
-                            <td className="px-1 py-2 text-right font-mono no-print text-[9px] text-slate-500">{formatHoursToHHMM(groupHours)}</td>
-                            <td className="px-1 py-2 no-print"></td>
-                            <td className="px-1 py-2 no-print"></td>
-                            <td className="px-2 py-2 text-right font-mono text-indigo-400 text-[9px]">{groupGross.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                            <td className="px-2 py-2 text-right font-mono text-rose-400 text-[9px]">-{groupDeduc.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                            <td className="px-2 py-2 text-right font-mono text-emerald-400 text-[9px]">+{groupOT.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                            <td className="px-1 py-2"></td>
-                            <td className="px-2 py-2 text-center font-mono text-rose-400 text-[9px]">-{groupOtherDed.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                            <td className="px-2 py-2 text-center font-mono text-emerald-400 text-[9px]">+{groupReimb.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                            <td className="px-3 py-2 text-right font-mono text-slate-900 text-[9px]">{groupNet.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                            <td className="px-4 py-2 no-print"></td>
+                            <td colSpan={13} className="px-2 py-2 print:hidden">
+                               <div className="flex justify-between items-center">
+                                 <span className="uppercase text-[8px] tracking-widest text-slate-500">Project Subtotal</span>
+                                 <span className="font-mono text-slate-900 text-[9px]">{groupNet.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+                               </div>
+                            </td>
+                            <td colSpan={8} className="px-2 py-2 hidden print:table-cell">
+                               <div className="flex justify-between items-center">
+                                 <span className="uppercase text-[8px] tracking-widest text-slate-500">Project Subtotal</span>
+                                 <span className="font-mono text-slate-900 text-[9px]">{groupNet.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+                               </div>
+                            </td>
                           </tr>
                         </React.Fragment>
                       );
                     })}
-                  </tbody>
-                  <tfoot className="bg-slate-900 text-white font-black tfoot-print">
-                    <tr>
+                    <tr className="bg-slate-900 text-white font-black tfoot-print">
                       <td className="px-2 py-4 uppercase text-[8px] tracking-widest overflow-hidden whitespace-nowrap">
                         <span className="print:hidden">Group Totals</span>
                         <span className="hidden print:inline">Grand Totals</span>
@@ -722,7 +719,7 @@ const AdminReports: React.FC = () => {
                       <td className="px-3 py-4 text-right font-mono whitespace-nowrap text-[10px] print-black-text text-indigo-100">SR {grandTotalNet.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
                       <td className="px-4 py-4 no-print"></td>
                     </tr>
-                  </tfoot>
+                  </tbody>
                 </table>
               </div>
             </div>
@@ -733,14 +730,16 @@ const AdminReports: React.FC = () => {
         @media print {
           .no-print-input { display: none !important; }
           .print-black-text { color: #000 !important; font-weight: 900 !important; }
-          .tfoot-print tr td { color: #000 !important; background-color: #f8fafc !important; border-top: 2px solid #000 !important; }
-          .card { border: 1px solid #ddd !important; box-shadow: none !important; border-radius: 0 !important; }
-          table { width: 100% !important; min-width: auto !important; table-layout: fixed !important; }
+          .tfoot-print td { color: #000 !important; background-color: #f8fafc !important; border-top: 2px solid #000 !important; }
+          tr { break-inside: avoid; }
+          .card { border: none !important; box-shadow: none !important; border-radius: 0 !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+          table { width: 100% !important; min-width: auto !important; table-layout: fixed !important; border-collapse: collapse !important; }
           .font-mono { font-family: Courier, monospace !important; }
           .text-indigo-600, .text-rose-600, .text-emerald-600, .text-slate-600, .text-slate-900, .text-indigo-700, .text-rose-700, .text-emerald-700 { color: #000 !important; }
           .text-indigo-300, .text-rose-300, .text-emerald-300, .text-indigo-100 { color: #000 !important; }
           button { color: inherit !important; text-decoration: none !important; border: none !important; background: none !important; padding: 0 !important; }
           .truncate { overflow: visible !important; white-space: normal !important; }
+          .overflow-x-auto { overflow: visible !important; width: 100% !important; }
         }
       `}</style>
       {editingUser && (
