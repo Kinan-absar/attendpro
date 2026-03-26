@@ -233,7 +233,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
             <i className={`fa-solid ${activeRecord ? 'fa-hourglass-start fa-spin' : 'fa-power-off'}`} />
           </div>
           <div className="text-7xl font-black mb-2 tracking-tighter text-slate-900">
-            {hours.toString().padStart(2, '0')}:{minutes.toString().padStart(2, '0')}
+            {hours.toString().padStart(2, '0')}.{minutes.toString().padStart(2, '0')}
           </div>
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-12">
             {activeRecord ? `Clocked in @ ${displayTime}` : 'Shift Inactive'}

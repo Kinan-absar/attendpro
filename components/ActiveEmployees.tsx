@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { dataService } from '../services/dataService';
+import { formatMinutesToHHMM } from '../utils/format';
 import { AttendanceRecord, User } from '../types';
 
 interface ActiveShift {
@@ -74,9 +75,7 @@ const ActiveEmployees: React.FC = () => {
 
   const getDuration = (start: Date) => {
     const diffMs = Math.max(0, now.getTime() - start.getTime());
-    const hours = Math.floor(diffMs / 3600000);
-    const minutes = Math.floor((diffMs % 3600000) / 60000);
-    return `${hours}h ${minutes}m`;
+    return formatMinutesToHHMM(diffMs / 60000);
   };
 
   if (loading && active.length === 0) return (

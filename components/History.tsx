@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { AttendanceRecord, User } from '../types';
 import { dataService } from '../services/dataService';
+import { formatMinutesToHHMM } from '../utils/format';
 
 interface Props {
   history: AttendanceRecord[];
@@ -87,7 +88,7 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
       return [
         formatDateTime(cinDate),
         coutDate ? formatDateTime(coutDate) : "Ongoing",
-        (finalDuration / 60).toFixed(2),
+        formatMinutesToHHMM(finalDuration),
         status
       ];
     });
@@ -191,7 +192,7 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <span className="font-mono font-black text-slate-700">
-                          {finalDuration > 0 ? `${(finalDuration / 60).toFixed(2)}h` : '--'}
+                          {finalDuration > 0 ? formatMinutesToHHMM(finalDuration) : '--'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
@@ -215,7 +216,7 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
               <tfoot className="bg-slate-900 text-white font-black">
                 <tr>
                   <td colSpan={3} className="px-6 py-4 uppercase text-[10px] tracking-widest">Total Billable Hours</td>
-                  <td className="px-6 py-4 text-right font-mono text-indigo-200">{totalHours.toFixed(2)}h</td>
+                  <td className="px-6 py-4 text-right font-mono text-indigo-200">{formatMinutesToHHMM(totalHours * 60)}</td>
                   <td className="px-6 py-4"></td>
                   <td className="px-6 py-4 no-print"></td>
                 </tr>

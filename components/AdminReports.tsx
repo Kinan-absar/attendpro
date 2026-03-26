@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { dataService } from '../services/dataService';
 import { MonthlyReport, AttendanceRecord, User, Project, Holiday } from '../types';
+import { formatHoursToHHMM } from '../utils/format';
 import History from './History';
 import UserEditModal from './UserEditModal';
 
@@ -67,7 +68,6 @@ const AdminReports: React.FC = () => {
   const handleExportExcel = (report: MonthlyReport, visibleUsers: User[]) => {
     setShowExportMenu(false);
     const filename = `Payroll_${report.month}_${report.year}.csv`;
-    const headers = ["Employee", "Gross Salary", "Deduction", "Overtime", "Other Ded.", "Reimb.", "Net Salary (SR)"];
     
     const rows = visibleUsers.map(user => {
       const stats = report.employees
@@ -100,10 +100,12 @@ const AdminReports: React.FC = () => {
         overtimePay.toFixed(2),
         otherDed.toFixed(2),
         reimb.toFixed(2),
-        netSalary.toFixed(2)
+        netSalary.toFixed(2),
+        formatHoursToHHMM(stats.totalHours)
       ];
     });
 
+    const headers = ["Employee", "Gross Salary", "Deduction", "Overtime", "Other Ded.", "Reimb.", "Net Salary (SR)", "Worked Hours"];
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
@@ -571,9 +573,9 @@ const AdminReports: React.FC = () => {
                             </div>
                           </td>
                           <td className="px-1 py-2 text-center font-bold text-slate-500 no-print">{stats.shiftCount}</td>
-                          <td className="px-1 py-2 text-right font-mono font-bold no-print">{stats.totalHours.toFixed(1)}</td>
+                          <td className="px-1 py-2 text-right font-mono font-bold no-print">{formatHoursToHHMM(stats.totalHours)}</td>
                           <td className={`px-1 py-2 text-right font-mono font-bold no-print ${diff < -0.01 ? 'text-rose-500' : diff > 0.01 ? 'text-emerald-500' : 'text-slate-400'}`}>
-                            {diff > 0 ? '+' : ''}{diff.toFixed(1)}
+                            {diff > 0 ? '+' : ''}{formatHoursToHHMM(Math.abs(diff))}
                           </td>
                           <td className="px-1 py-2 text-center no-print">
                             {stats.flaggedCount > 0 ? (
@@ -611,7 +613,7 @@ const AdminReports: React.FC = () => {
                     <tr>
                       <td className="px-2 py-4 uppercase text-[8px] tracking-widest overflow-hidden whitespace-nowrap">Group Totals</td>
                       <td className="px-1 py-4 no-print"></td>
-                      <td className="px-1 py-4 text-right font-mono no-print text-[9px]">{totalPeriodHours.toFixed(1)}h</td>
+                      <td className="px-1 py-4 text-right font-mono no-print text-[9px]">{formatHoursToHHMM(totalPeriodHours)}</td>
                       <td className="px-1 py-4 no-print"></td>
                       <td className="px-1 py-4 no-print"></td>
                       <td className="px-2 py-4 text-right font-mono text-indigo-300 text-[9px]">SR {totalPeriodGross.toLocaleString(undefined, {maximumFractionDigits:0})}</td>

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { dataService } from '../services/dataService';
 import { User, AttendanceRecord } from '../types';
+import { formatMinutesToHHMM } from '../utils/format';
 
 const AdminLogExport: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -88,7 +89,7 @@ const AdminLogExport: React.FC = () => {
         const user = users.find(u => u.id === log.userId);
         const clockIn = log.checkIn ? formatDate(log.checkIn) : "";
         const clockOut = log.checkOut ? formatDate(log.checkOut) : "STILL IN";
-        const durationHours = log.duration ? (log.duration / 60).toFixed(2) : "0.00";
+        const durationHours = log.duration ? formatMinutesToHHMM(log.duration) : "0.00";
         
         return [
           `"${user?.employeeId || ''}"`,
