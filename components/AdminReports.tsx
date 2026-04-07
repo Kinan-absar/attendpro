@@ -92,7 +92,7 @@ const AdminReports: React.FC = () => {
       
       const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
       const hourlyDeduction = (diff < -0.01 && user.disableDeductions === false) ? Math.abs(diff) * grossHourlyRate : 0;
-      const absentDeduction = totalAbsentDays * dailyRate;
+      const absentDeduction = (user.disableDeductions === false) ? totalAbsentDays * dailyRate : 0;
       const totalDeduction = hourlyDeduction + absentDeduction;
 
       const overtimePay = (diff > 0.01 && user.disableOvertime === false) ? diff * overtimeHourlyRate : 0;
@@ -537,7 +537,7 @@ const AdminReports: React.FC = () => {
             
             const hourlyDeduction = (diff < -0.01 && dedEnabled) ? Math.abs(diff) * grossHourlyRate : 0;
             const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
-            const absentDeduction = totalAbsentDays * dailyRate;
+            const absentDeduction = dedEnabled ? totalAbsentDays * dailyRate : 0;
             const totalDeduction = hourlyDeduction + absentDeduction;
 
             const overtimePay = (diff > 0.01 && otEnabled) ? diff * overtimeHourlyRate : 0;
@@ -644,7 +644,9 @@ const AdminReports: React.FC = () => {
                     <i className="fa-solid fa-calendar-check text-xl"></i>
                   </div>
                   <div>
-                    <h3 className="text-xl font-black text-slate-900 leading-none mb-1">{report.month} {report.year}</h3>
+                    <h3 className="text-xl font-black text-slate-900 leading-none mb-1">
+                      {new Date(report.year, new Date(`${report.month} 1, ${report.year}`).getMonth()).toLocaleString('default', { month: 'long' })} {report.year}
+                    </h3>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                       {selectedCompanyFilter !== 'all' ? selectedCompanyFilter : 'Payroll Analysis'}
                     </p>

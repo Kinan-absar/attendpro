@@ -524,7 +524,8 @@ class DataService {
       let year = cin.getFullYear();
       if (cin.getDate() >= 26) { month++; if (month === 12) { month = 0; year++; } }
       const key = `${year}-${month}`;
-      grouped[key] ??= { month: new Date(year, month).toLocaleString('default', { month: 'long' }), year, employees: [] };
+      const monthName = new Date(year, month).toLocaleString('en-US', { month: 'long' });
+      grouped[key] ??= { month: monthName, year, employees: [] };
       
       const user = users.find(u => u.id === r.userId);
       if (!user) return;
