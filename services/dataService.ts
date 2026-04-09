@@ -187,8 +187,12 @@ class DataService {
         const checkIn = this.convertToDate(data.checkIn);
         if (!checkIn) return;
 
-        const isFromPreviousDay = checkIn.toDateString() !== now.toDateString() && checkIn < now;
-        if (!isFromPreviousDay) return;
+        const isDifferentDay = checkIn.toDateString() !== now.toDateString();
+        const isPastGracePeriod = now.getHours() >= 6; // 6 AM grace period
+        const isVeryOld = (now.getTime() - checkIn.getTime()) > 16 * 3600000; // 16 hours old
+
+        const shouldAutoClose = isDifferentDay && (isPastGracePeriod || isVeryOld);
+        if (!shouldAutoClose) return;
 
         // Check if user has ANY shift schedule with midnight closure disabled
         const hasExemption = schedules.some(s => 
@@ -254,9 +258,13 @@ class DataService {
         const checkIn = this.convertToDate(data.checkIn);
         if (!checkIn) return;
 
-        const isFromPreviousDay = checkIn.toDateString() !== now.toDateString() && checkIn < now;
+        const isDifferentDay = checkIn.toDateString() !== now.toDateString();
+        const isPastGracePeriod = now.getHours() >= 6; // 6 AM grace period
+        const isVeryOld = (now.getTime() - checkIn.getTime()) > 16 * 3600000; // 16 hours old
 
-        if (isFromPreviousDay) {
+        const shouldAutoClose = isDifferentDay && (isPastGracePeriod || isVeryOld);
+
+        if (shouldAutoClose) {
           if (hasNightShiftExemption) {
             const diffHours = (now.getTime() - checkIn.getTime()) / 3600000;
             if (diffHours > 24) {

@@ -82,7 +82,9 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   const isInsideZone = useMemo(() => {
     if (!userProject?.geofence?.enabled) return true;
     if (currentDistance === null) return false;
-    return currentDistance <= userProject.geofence.radius;
+    // Add a 15-meter buffer to account for GPS jitter/accuracy
+    const buffer = 15;
+    return currentDistance <= (userProject.geofence.radius + buffer);
   }, [currentDistance, userProject]);
 
   const activeRecord = useMemo(() => {
