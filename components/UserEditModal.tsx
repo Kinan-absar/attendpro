@@ -234,7 +234,7 @@ const UserEditModal: React.FC<Props> = ({ user: initialUser, onClose, onSave }) 
                   <option value="ALBI">Bank Albilad (ALBI)</option>
                   <option value="ARNB">Arab National Bank (ARNB)</option>
                   <option value="BSFR">Banque Saudi Fransi (BSFR)</option>
-                  <option value="SABB">SABB / Alawwal (SABB)</option>
+                  <option value="SAB">SAB / Alawwal (SAB)</option>
                 </select>
               </div>
               <div className="md:col-span-2">
