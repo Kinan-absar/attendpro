@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { User } from '../types';
 import { dataService } from '../services/dataService';
@@ -198,6 +197,110 @@ const UserEditModal: React.FC<Props> = ({ user: initialUser, onClose, onSave }) 
                 </div>
               )}
             </div>
+          </div>
+
+
+          {/* SECTION 4: WPS / MUDAD BANKING */}
+          <div className="space-y-4">
+            <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest border-b border-emerald-50 pb-2 flex items-center gap-2">
+              <i className="fa-solid fa-building-columns"></i>
+              WPS / Mudad Banking Info
+            </h3>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest -mt-2">Required for Saudi Wage Protection System export</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Iqama / National ID <span className="text-rose-400">10 digits</span></label>
+                <input
+                  type="text"
+                  maxLength={10}
+                  value={editingUser.iqamaNumber || ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, iqamaNumber: e.target.value.replace(/\D/g, '') })}
+                  placeholder="1023456789"
+                  className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Bank Short Code</label>
+                <select
+                  value={editingUser.bankCode || ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, bankCode: e.target.value })}
+                  className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none cursor-pointer focus:ring-2 focus:ring-emerald-500 transition-all"
+                >
+                  <option value="">— Select Bank —</option>
+                  <option value="RJHI">Al Rajhi Bank (RJHI)</option>
+                  <option value="NCBK">Saudi National Bank (NCBK)</option>
+                  <option value="INMA">Alinma Bank (INMA)</option>
+                  <option value="RIBL">Riyad Bank (RIBL)</option>
+                  <option value="ALBI">Bank Albilad (ALBI)</option>
+                  <option value="ARNB">Arab National Bank (ARNB)</option>
+                  <option value="BSFR">Banque Saudi Fransi (BSFR)</option>
+                  <option value="SABB">SABB / Alawwal (SABB)</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">IBAN <span className="text-rose-400">24 chars starting with SA</span></label>
+                <input
+                  type="text"
+                  maxLength={24}
+                  value={editingUser.ibanNumber || ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, ibanNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+                  placeholder="SA1234567890123456789012"
+                  className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                />
+                {editingUser.ibanNumber && (editingUser.ibanNumber.length !== 24 || !editingUser.ibanNumber.startsWith('SA')) && (
+                  <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest ml-1 mt-1">⚠ Must be 24 characters and start with SA</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-1">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Basic Salary (SR)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editingUser.basicSalary ?? ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, basicSalary: parseFloat(e.target.value) || 0 })}
+                  placeholder="0.00"
+                  className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Housing Allowance (SR)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editingUser.housingAllowance ?? ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, housingAllowance: parseFloat(e.target.value) || 0 })}
+                  placeholder="0.00"
+                  className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Other Allowances (SR)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editingUser.otherAllowances ?? ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, otherAllowances: parseFloat(e.target.value) || 0 })}
+                  placeholder="0.00"
+                  className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            {/* WPS preview row */}
+            {(editingUser.iqamaNumber || editingUser.bankCode || editingUser.ibanNumber) && (
+              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 animate-fadeIn">
+                <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2">WPS File Preview (this employee)</p>
+                <code className="text-[10px] font-mono text-emerald-900 break-all">
+                  {editingUser.iqamaNumber || '??????????'},{editingUser.bankCode || '????'},{editingUser.ibanNumber || 'SA????????????????????????'},{(editingUser.basicSalary || 0).toFixed(2)},{(editingUser.housingAllowance || 0).toFixed(2)},{(editingUser.otherAllowances || 0).toFixed(2)},0.00,{((editingUser.basicSalary || 0) + (editingUser.housingAllowance || 0) + (editingUser.otherAllowances || 0)).toFixed(2)}
+                </code>
+              </div>
+            )}
           </div>
 
           {/* SAVE BUTTONS */}

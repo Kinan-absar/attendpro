@@ -1,4 +1,3 @@
-
 export type UserRole = 'admin' | 'employee';
 
 export interface User {
@@ -17,6 +16,17 @@ export interface User {
   isOnLeave?: boolean;
   leaveStartDate?: string; // ISO format YYYY-MM-DD
   leaveEndDate?: string;   // ISO format YYYY-MM-DD
+
+  // ── WPS / Mudad Fields ──────────────────────────────────────────────────────
+  iqamaNumber?: string;        // 10-digit national/iqama ID
+  bankCode?: string;           // 4-char bank short code e.g. RJHI
+  ibanNumber?: string;         // 24-char SA IBAN e.g. SA1234567890123456789012
+  basicSalary?: number;        // Basic salary component
+  housingAllowance?: number;   // Housing allowance (0 if none)
+  otherAllowances?: number;    // Other allowances (0 if none)
+  // Note: deductions are calculated dynamically from attendance; stored here as
+  // a manual override for fixed monthly deductions (e.g. GOSI employee share).
+  fixedDeductions?: number;
 }
 
 export interface Broadcast {

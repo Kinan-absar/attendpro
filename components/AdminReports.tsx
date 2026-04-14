@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { dataService } from '../services/dataService';
 import { MonthlyReport, AttendanceRecord, User, Project, Holiday } from '../types';
@@ -124,6 +123,98 @@ const AdminReports: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+
+  const handleExportMudad = (report: MonthlyReport, visibleUsers: User[]) => {
+    setShowExportMenu(false);
+
+    const warnings: string[] = [];
+    const lines: string[] = [];
+
+    visibleUsers.forEach(user => {
+      // ── Validate required WPS fields ──────────────────────────────────
+      const iqama = (user.iqamaNumber || '').trim();
+      const bankCode = (user.bankCode || '').trim();
+      const iban = (user.ibanNumber || '').trim();
+
+      if (!iqama || iqama.length !== 10 || !/^\d{10}$/.test(iqama)) {
+        warnings.push(`${user.name}: missing or invalid Iqama/ID (must be 10 digits)`);
+        return;
+      }
+      if (!bankCode || bankCode.length !== 4) {
+        warnings.push(`${user.name}: missing or invalid Bank Code (must be 4 chars)`);
+        return;
+      }
+      if (!iban || iban.length !== 24 || !iban.startsWith('SA')) {
+        warnings.push(`${user.name}: missing or invalid IBAN (must be 24 chars starting with SA)`);
+        return;
+      }
+
+      // ── Compute deductions from payroll engine ─────────────────────────
+      const stats = report.employees
+        .filter(e => e.name === user.name)
+        .reduce((acc, s) => ({
+          totalHours: acc.totalHours + Number(s.totalHours || 0),
+          absentDays: acc.absentDays + (Number(s.absentDays) || 0)
+        }), { totalHours: 0, absentDays: 0 });
+
+      const grossSalary = Number(user.grossSalary) || 0;
+      const userTarget = Number(user.standardHours);
+      const targetHours = (userTarget > 0) ? userTarget : Number(globalRequiredHours);
+      const grossHourlyRate = grossSalary / 240;
+      const dailyRate = grossSalary / 30;
+      const diff = stats.totalHours - targetHours;
+
+      const key = `${report.year}-${report.month}-${user.id}`;
+      const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0, absentDays: 0 };
+
+      const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
+      const hourlyDeduction = (diff < -0.01 && user.disableDeductions === false) ? Math.abs(diff) * grossHourlyRate : 0;
+      const absentDeduction = (user.disableDeductions === false) ? totalAbsentDays * dailyRate : 0;
+      const attendanceDeduction = hourlyDeduction + absentDeduction;
+      const otherDed = (adj.otherDeductions || 0) + (Number(user.fixedDeductions) || 0);
+      const totalDeductions = attendanceDeduction + otherDed;
+
+      // ── WPS salary components ──────────────────────────────────────────
+      const basic = Number(user.basicSalary) || 0;
+      const housing = Number(user.housingAllowance) || 0;
+      const others = Number(user.otherAllowances) || 0;
+      const net = (basic + housing + others) - totalDeductions;
+
+      lines.push([
+        iqama,
+        bankCode,
+        iban,
+        basic.toFixed(2),
+        housing.toFixed(2),
+        others.toFixed(2),
+        totalDeductions.toFixed(2),
+        net.toFixed(2)
+      ].join(','));
+    });
+
+    if (warnings.length > 0) {
+      const proceed = window.confirm(
+        `⚠️ The following employees were SKIPPED due to missing WPS data and will NOT appear in the file:\n\n` +
+        warnings.map(w => `• ${w}`).join('\n') +
+        `\n\nProceed with ${lines.length} valid employee(s)?`
+      );
+      if (!proceed) return;
+    }
+
+    if (lines.length === 0) {
+      alert('No valid employees to export. Please fill in Iqama, Bank Code, IBAN, and salary breakdown for each employee first.');
+      return;
+    }
+
+    // UTF-8 without BOM, LF line endings
+    const content = lines.join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Mudad_WPS_${report.month}_${report.year}.txt`;
+    link.click();
   };
 
   const handleGlobalHoursChange = async (val: number) => {
@@ -341,6 +432,14 @@ const AdminReports: React.FC = () => {
                 >
                   <i className="fa-solid fa-file-excel text-emerald-500"></i>
                   <span className="text-xs font-black uppercase tracking-widest text-slate-700">2. Excel / CSV</span>
+                </button>
+                <div className="h-px bg-slate-100"></div>
+                <button 
+                  onClick={() => reports.forEach(r => handleExportMudad(r, users))}
+                  className="w-full text-left px-5 py-4 hover:bg-slate-50 flex items-center space-x-3 transition-colors"
+                >
+                  <i className="fa-solid fa-file-lines text-emerald-600"></i>
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-700">3. Mudad WPS (.txt)</span>
                 </button>
               </div>
             )}
