@@ -228,12 +228,12 @@ const UserEditModal: React.FC<Props> = ({ user: initialUser, onClose, onSave }) 
                 >
                   <option value="">— Select Bank —</option>
                   <option value="RJHI">Al Rajhi Bank (RJHI)</option>
-                  <option value="NCBK">Saudi National Bank (NCBK)</option>
+                  <option value="SNB">Saudi National Bank (SNB)</option>
                   <option value="INMA">Alinma Bank (INMA)</option>
                   <option value="RIBL">Riyad Bank (RIBL)</option>
                   <option value="ALBI">Bank Albilad (ALBI)</option>
-                  <option value="ARNB">Arab National Bank (ARNB)</option>
-                  <option value="BSFR">Banque Saudi Fransi (BSFR)</option>
+                  <option value="ANB">Arab National Bank (ANB)</option>
+                  <option value="BSF">Banque Saudi Fransi (BSF)</option>
                   <option value="SAB">SAB / Alawwal (SAB)</option>
                 </select>
               </div>
