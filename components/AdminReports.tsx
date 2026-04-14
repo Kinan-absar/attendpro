@@ -179,7 +179,7 @@ const AdminReports: React.FC = () => {
       // ── WPS salary components ──────────────────────────────────────────
       const basic = Number(user.basicSalary) || 0;
       const housing = Number(user.housingAllowance) || 0;
-      const others = Number(user.otherAllowances) || 0;
+      const others = (Number(user.otherAllowances) || 0) + (adj.reimbursements || 0);
       const net = (basic + housing + others) - totalDeductions;
 
       lines.push([
