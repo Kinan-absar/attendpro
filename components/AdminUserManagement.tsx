@@ -195,8 +195,8 @@ const AdminUserManagement: React.FC = () => {
             errors.push('Iqama must be exactly 10 digits');
           if (data.ibanNumber && (data.ibanNumber.length !== 24 || !data.ibanNumber.startsWith('SA')))
             errors.push('IBAN must be 24 chars starting with SA');
-          if (data.bankCode && data.bankCode.length !== 3)
-            errors.push('Bank Code must be 3 characters');
+          if (data.bankCode && data.bankCode.length >= 3)
+            errors.push('Bank Code must be at least 3 characters');
 
           // Match to existing user
           const matchedUser = users.find(u =>
