@@ -188,7 +188,7 @@ class DataService {
         if (!checkIn) return;
 
         const isDifferentDay = checkIn.toDateString() !== now.toDateString();
-        const isPastGracePeriod = now.getHours() >= 6; // 6 AM grace period
+        const isPastGracePeriod = now.getHours() >= 10; // 10 AM grace period
         const isVeryOld = (now.getTime() - checkIn.getTime()) > 16 * 3600000; // 16 hours old
 
         const shouldAutoClose = isDifferentDay && (isPastGracePeriod || isVeryOld);
@@ -259,7 +259,7 @@ class DataService {
         if (!checkIn) return;
 
         const isDifferentDay = checkIn.toDateString() !== now.toDateString();
-        const isPastGracePeriod = now.getHours() >= 6; // 6 AM grace period
+        const isPastGracePeriod = now.getHours() >= 10; // 10 AM grace period
         const isVeryOld = (now.getTime() - checkIn.getTime()) > 16 * 3600000; // 16 hours old
 
         const shouldAutoClose = isDifferentDay && (isPastGracePeriod || isVeryOld);
@@ -420,7 +420,8 @@ class DataService {
       checkOut: serverTimestamp(),
       checkOutLocation: location || null,
       duration: duration > 0 ? duration : 0,
-      needsReview: outsideGeofence 
+      needsReview: outsideGeofence,
+      autoClosed: false // Explicitly clear if it was set by background agent
     }));
   }
 
