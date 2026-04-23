@@ -1,4 +1,3 @@
-
 import {
   collection,
   addDoc,
@@ -168,6 +167,20 @@ class DataService {
   }
 
   /* 🕒 AUTO-CLOSE ENGINE */
+
+  /**
+   * Returns true if a record was checked out recently enough (within the last
+   * 2 hours on the same calendar day as checkIn) that auto-close must NOT
+   * override it. This guards against the heartbeat racing with a legitimate
+   * checkout that hasn't propagated yet, or a Firestore listener firing before
+   * the checkOut field is visible to the query.
+   */
+  private isRecentlyCheckedOut(checkIn: Date, now: Date): boolean {
+    // If the employee checked in today, never auto-close — they may still be working
+    // or just checked out and the update hasn't propagated.
+    return checkIn.toDateString() === now.toDateString();
+  }
+
   async processAllAutoClosures(): Promise<boolean> {
     try {
       this.ensureAdmin();
@@ -187,15 +200,20 @@ class DataService {
         const checkIn = this.convertToDate(data.checkIn);
         if (!checkIn) return;
 
-        const isDifferentDay = checkIn.toDateString() !== now.toDateString();
+        // GUARD: never auto-close a record that started today —
+        // the employee may have checked out normally and the write
+        // just hasn't been reflected in this query yet.
+        if (this.isRecentlyCheckedOut(checkIn, now)) return;
+
         const isPastGracePeriod = now.getHours() >= 10; // 10 AM grace period
         const isVeryOld = (now.getTime() - checkIn.getTime()) > 16 * 3600000; // 16 hours old
 
-        const shouldAutoClose = isDifferentDay && (isPastGracePeriod || isVeryOld);
+        // Only auto-close records from a PREVIOUS day, past the grace period
+        const shouldAutoClose = isPastGracePeriod || isVeryOld;
         if (!shouldAutoClose) return;
 
         // Check if user has ANY shift schedule with midnight closure disabled
-        const hasExemption = schedules.some(s => 
+        const hasExemption = schedules.some(s =>
           s.assignedUserIds.includes(data.userId) && s.disableAutoClose === true
         );
 
@@ -211,6 +229,7 @@ class DataService {
             count++;
           }
         } else {
+          // Close at 23:59:59 of the check-in day (genuine forgotten checkout)
           const autoCloseTime = new Date(checkIn);
           autoCloseTime.setHours(23, 59, 59, 999);
           const duration = (autoCloseTime.getTime() - checkIn.getTime()) / 60000;
@@ -238,8 +257,8 @@ class DataService {
   async processAutoClosures(userId: string): Promise<boolean> {
     try {
       const q = query(
-        collection(db, ATTENDANCE), 
-        where('userId', '==', userId), 
+        collection(db, ATTENDANCE),
+        where('userId', '==', userId),
         where('checkOut', '==', null)
       );
       const snap = await getDocs(q);
@@ -258,11 +277,14 @@ class DataService {
         const checkIn = this.convertToDate(data.checkIn);
         if (!checkIn) return;
 
-        const isDifferentDay = checkIn.toDateString() !== now.toDateString();
-        const isPastGracePeriod = now.getHours() >= 10; // 10 AM grace period
-        const isVeryOld = (now.getTime() - checkIn.getTime()) > 16 * 3600000; // 16 hours old
+        // GUARD: never auto-close a record that started today —
+        // the employee may have just checked out and Firestore hasn't
+        // propagated the update to this query yet.
+        if (this.isRecentlyCheckedOut(checkIn, now)) return;
 
-        const shouldAutoClose = isDifferentDay && (isPastGracePeriod || isVeryOld);
+        const isPastGracePeriod = now.getHours() >= 10;
+        const isVeryOld = (now.getTime() - checkIn.getTime()) > 16 * 3600000;
+        const shouldAutoClose = isPastGracePeriod || isVeryOld;
 
         if (shouldAutoClose) {
           if (hasNightShiftExemption) {
@@ -277,6 +299,7 @@ class DataService {
               count++;
             }
           } else {
+            // Close at 23:59:59 of the check-in day (genuine forgotten checkout)
             const autoCloseTime = new Date(checkIn);
             autoCloseTime.setHours(23, 59, 59, 999);
             const duration = (autoCloseTime.getTime() - checkIn.getTime()) / 60000;
