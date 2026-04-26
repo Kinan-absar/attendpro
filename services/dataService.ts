@@ -540,6 +540,7 @@ class DataService {
     const end = to ? new Date(to) : null;
     if (end) end.setHours(23, 59, 59, 999);
 
+    // Initial pass to collect attendance data and identify months
     snap.docs.forEach(d => {
       const r = d.data();
       const cin = this.convertToDate(r.checkIn);
@@ -554,6 +555,7 @@ class DataService {
 
       let month = cin.getMonth();
       let year = cin.getFullYear();
+      // Payroll cycle 26 to 25
       if (cin.getDate() >= 26) { month++; if (month === 12) { month = 0; year++; } }
       const key = `${year}-${month}`;
       const monthName = new Date(year, month).toLocaleString('en-US', { month: 'long' });
@@ -574,8 +576,6 @@ class DataService {
       }
       
       emp.shiftCount++;
-      
-      // Use stored duration if available, otherwise calculate
       const rawDuration = Number(r.duration);
       const calcDuration = cout ? (cout.getTime() - cin.getTime()) / 3600000 : 0;
       const finalDuration = (!isNaN(rawDuration) && rawDuration > 0) ? (rawDuration / 60) : calcDuration;
@@ -584,50 +584,78 @@ class DataService {
       if (r.needsReview) emp.flaggedCount++;
     });
 
-    // Calculate absent days for each employee in each report
+    // Finalize report periods if data is sparse (ensure at least current/requested months exist)
+    if (start && end) {
+      let curr = new Date(start);
+      while (curr <= end) {
+        let m = curr.getMonth();
+        let y = curr.getFullYear();
+        if (curr.getDate() >= 26) { m++; if (m === 12) { m = 0; y++; } }
+        const key = `${y}-${m}`;
+        if (!grouped[key]) {
+          const monthName = new Date(y, m).toLocaleString('en-US', { month: 'long' });
+          grouped[key] = { month: monthName, year: y, employees: [] };
+        }
+        curr.setMonth(curr.getMonth() + 1);
+      }
+    }
+
+    // Now ensure EVERY user exists in every monthly report
     Object.entries(grouped).forEach(([key, report]) => {
       const [year, month] = key.split('-').map(Number);
-      
-      // Cycle: from (year, month-1, 26) to (year, month, 25)
       const cycleStart = new Date(year, month - 1, 26);
       const cycleEnd = new Date(year, month, 25);
-      
-      // If we have a global filter, respect it
       const actualStart = start && start > cycleStart ? start : cycleStart;
       const actualEnd = end && end < cycleEnd ? end : cycleEnd;
 
-      // Identify unique users in this report
-      const reportUserIds = [...new Set(report.employees.map(e => e.userId))];
+      users.forEach(user => {
+        let emp = report.employees.find(e => e.userId === user.id);
+        if (!emp) {
+          emp = { userId: user.id, name: user.name, totalHours: 0, shiftCount: 0, projectId: 'none', flaggedCount: 0, absentDays: 0, expectedDays: 0 };
+          report.employees.push(emp);
+        }
 
-      reportUserIds.forEach(userId => {
-        let absentCount = 0;
-        const userKey = `${key}-${userId}`;
+        const userKey = `${key}-${user.id}`;
         const workedDays = userWorkDays[userKey] || new Set();
-
         const current = new Date(actualStart);
+
+        let expectedDaysCount = 0;
+        let actualDaysWorkedCount = workedDays.size;
+
         while (current <= actualEnd) {
           const dateStr = this.toLocalDateString(current);
           const isFriday = current.getDay() === 5;
           const isHoliday = holidays.some(h => h.date === dateStr);
 
+          // We count all standard working days (not Fridays/Holidays) as expected days.
+          // Leave/Vacation days are not subtracted, so they will naturally result in
+          // absent days if not worked.
           if (!isFriday && !isHoliday) {
-            if (!workedDays.has(dateStr)) {
-              absentCount++;
-            }
+            expectedDaysCount++;
           }
           current.setDate(current.getDate() + 1);
         }
 
-        // Assign absentCount to the first entry for this user in the report
-        // (to avoid double-counting during aggregation in the UI)
-        const userEntries = report.employees.filter(e => e.userId === userId);
-        if (userEntries.length > 0) {
-          userEntries[0].absentDays = absentCount;
+        // Calculation Logic:
+        // 1. If zero presence for the entire report period, it's 30 days absence.
+        // 2. Otherwise, it's the shortfall in expected working days.
+        let absentCount = 0;
+        if (actualDaysWorkedCount === 0) {
+          absentCount = 30;
+        } else {
+          absentCount = Math.max(0, expectedDaysCount - actualDaysWorkedCount);
         }
+
+        // Only assign values to one entry per user per report to avoid duplicates in aggregation
+        const userEntries = report.employees.filter(e => e.userId === user.id);
+        userEntries.forEach((e, idx) => {
+          e.absentDays = (idx === 0) ? absentCount : 0;
+          e.expectedDays = (idx === 0) ? expectedDaysCount : 0;
+        });
       });
     });
 
-    return Object.values(grouped);
+    return Object.values(grouped).sort((a,b) => (a.year * 12 + new Date(`${a.month} 1`).getMonth()) - (b.year * 12 + new Date(`${b.month} 1`).getMonth()));
   }
 
   async saveUser(user: Partial<User>) {

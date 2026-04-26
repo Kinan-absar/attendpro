@@ -156,21 +156,32 @@ const AdminReports: React.FC = () => {
         .filter(e => e.name === user.name)
         .reduce((acc, s) => ({
           totalHours: acc.totalHours + Number(s.totalHours || 0),
-          absentDays: acc.absentDays + (Number(s.absentDays) || 0)
-        }), { totalHours: 0, absentDays: 0 });
+          absentDays: acc.absentDays + (Number(s.absentDays) || 0),
+          expectedDays: acc.expectedDays + (Number(s.expectedDays) || 0)
+        }), { totalHours: 0, absentDays: 0, expectedDays: 0 });
 
       const grossSalary = Number(user.grossSalary) || 0;
       const userTarget = Number(user.standardHours);
       const targetHours = (userTarget > 0) ? userTarget : Number(globalRequiredHours);
       const grossHourlyRate = grossSalary / 240;
       const dailyRate = grossSalary / 30;
-      const diff = stats.totalHours - targetHours;
+      const hourDiff = stats.totalHours - targetHours;
 
       const key = `${report.year}-${report.month}-${user.id}`;
       const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0, absentDays: 0 };
 
       const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
-      const hourlyDeduction = (diff < -0.01 && user.disableDeductions === false) ? Math.abs(diff) * grossHourlyRate : 0;
+
+      // Intelligent shortfall: Account for hours already "deducted" by absent days
+      const daysForCalc = stats.expectedDays > 0 ? stats.expectedDays : 26;
+      const hoursPerDay = targetHours / daysForCalc;
+      const hoursAccountedByAbsence = totalAbsentDays * hoursPerDay;
+      const remainingShortfall = hourDiff + hoursAccountedByAbsence;
+
+      const hourlyDeduction = (remainingShortfall < -0.01 && user.disableDeductions === false) 
+        ? Math.abs(remainingShortfall) * grossHourlyRate 
+        : 0;
+
       const absentDeduction = (user.disableDeductions === false) ? totalAbsentDays * dailyRate : 0;
       const attendanceDeduction = hourlyDeduction + absentDeduction;
       const otherDed = (adj.otherDeductions || 0) + (Number(user.fixedDeductions) || 0);
@@ -614,8 +625,9 @@ const AdminReports: React.FC = () => {
                 totalHours: acc.totalHours + Number(s.totalHours || 0),
                 shiftCount: acc.shiftCount + Number(s.shiftCount || 0),
                 flaggedCount: acc.flaggedCount + (Number(s.flaggedCount) || 0),
-                absentDays: acc.absentDays + (Number(s.absentDays) || 0)
-              }), { totalHours: 0, shiftCount: 0, flaggedCount: 0, absentDays: 0 });
+                absentDays: acc.absentDays + (Number(s.absentDays) || 0),
+                expectedDays: acc.expectedDays + (Number(s.expectedDays) || 0)
+              }), { totalHours: 0, shiftCount: 0, flaggedCount: 0, absentDays: 0, expectedDays: 0 });
 
             const grossSalary = Number(user.grossSalary) || 0;
             const basicSalary = grossSalary / 1.35;
@@ -634,9 +646,19 @@ const AdminReports: React.FC = () => {
             const key = `${report.year}-${report.month}-${user.id}`;
             const adj = payrollAdjustments[key] || { otherDeductions: 0, reimbursements: 0, absentDays: 0 };
             
-            const hourlyDeduction = (diff < -0.01 && dedEnabled) ? Math.abs(diff) * grossHourlyRate : 0;
             const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
             const absentDeduction = dedEnabled ? totalAbsentDays * dailyRate : 0;
+
+            // Intelligent shortfall: Only deduct hours that aren't explained by full-day absences
+            const daysForCalc = stats.expectedDays > 0 ? stats.expectedDays : 26;
+            const hoursPerDay = targetHours / daysForCalc;
+            const hoursAccountedByAbsence = totalAbsentDays * hoursPerDay;
+            const remainingShortfall = diff + hoursAccountedByAbsence;
+
+            const hourlyDeduction = (remainingShortfall < -0.01 && dedEnabled) 
+              ? Math.abs(remainingShortfall) * grossHourlyRate 
+              : 0;
+
             const totalDeduction = hourlyDeduction + absentDeduction;
 
             const overtimePay = (diff > 0.01 && otEnabled) ? diff * overtimeHourlyRate : 0;
@@ -657,6 +679,8 @@ const AdminReports: React.FC = () => {
               user,
               stats,
               grossSalary,
+              absentDeduction,
+              hourlyDeduction,
               totalDeduction,
               overtimePay,
               otherDed,
@@ -669,7 +693,7 @@ const AdminReports: React.FC = () => {
           });
 
           const renderUserRow = (data: any, isPrint: boolean) => {
-            const { user, stats, grossSalary, totalDeduction, overtimePay, otherDed, reimb, netSalary, totalAbsentDays, diff } = data;
+            const { user, stats, grossSalary, absentDeduction, hourlyDeduction, totalDeduction, overtimePay, otherDed, reimb, netSalary, totalAbsentDays, diff } = data;
             return (
               <tr key={isPrint ? `print-${user.id}` : `ui-${user.id}`} className={`${isPrint ? 'hidden print:table-row' : 'hover:bg-slate-50/50 transition-colors print:hidden'}`}>
                 <td className="px-2 py-2 truncate text-[10px]" title={user.name}>
@@ -702,8 +726,14 @@ const AdminReports: React.FC = () => {
                   ) : <i className="fa-solid fa-circle-check text-emerald-400 text-[8px]"></i>}
                 </td>
                 <td className="px-2 py-2 text-right font-mono font-bold text-slate-600">{grossSalary.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                <td className="px-2 py-2 text-right font-mono font-bold text-rose-400">
+                   {absentDeduction > 0 ? `-${absentDeduction.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
+                </td>
+                <td className="px-2 py-2 text-right font-mono font-bold text-rose-400">
+                   {hourlyDeduction > 0 ? `-${hourlyDeduction.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
+                </td>
                 <td className="px-2 py-2 text-right font-mono font-bold text-rose-600">
-                   {totalDeduction > 0 ? `-${totalDeduction.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
+                   {totalDeduction > 0 ? totalDeduction.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '-'}
                 </td>
                 <td className="px-2 py-2 text-right font-mono font-bold text-emerald-600">
                    {overtimePay > 0 ? `+${overtimePay.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
@@ -763,7 +793,9 @@ const AdminReports: React.FC = () => {
                       <th className="px-1 py-4 text-right font-black text-slate-400 uppercase text-[9px] tracking-widest no-print w-[8%]">Diff</th>
                       <th className="px-1 py-4 text-center font-black text-rose-500 uppercase text-[9px] tracking-widest no-print w-[6%]">Flags</th>
                       <th className="px-2 py-4 text-right font-black text-indigo-400 uppercase text-[9px] tracking-widest w-[10%] print:w-[12%]">Gross</th>
-                      <th className="px-2 py-4 text-right font-black text-rose-400 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">Deduc.</th>
+                      <th className="px-2 py-4 text-right font-black text-rose-400/70 uppercase text-[8px] tracking-widest w-[7%]">Day Ded.</th>
+                      <th className="px-2 py-4 text-right font-black text-rose-400/70 uppercase text-[8px] tracking-widest w-[7%]">Hour Ded.</th>
+                      <th className="px-2 py-4 text-right font-black text-rose-500 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">Total Ded.</th>
                       <th className="px-2 py-4 text-right font-black text-emerald-400 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">OT</th>
                       <th className="px-1 py-4 text-center font-black text-rose-400 uppercase text-[9px] tracking-widest w-[6%] print:w-[8%]">Abs. Days</th>
                       <th className="px-2 py-4 text-center font-black text-rose-600 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">Other Ded.</th>

@@ -111,6 +111,7 @@ export interface MonthlyReport {
     projectId?: string;
     flaggedCount: number;
     absentDays: number;
+    expectedDays?: number;
   }[];
 }
 
