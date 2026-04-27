@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { dataService } from '../services/dataService';
 import { MonthlyReport, AttendanceRecord, User, Project, Holiday } from '../types';
 import { formatHoursToHHMM } from '../utils/format';
@@ -6,11 +6,12 @@ import History from './History';
 import UserEditModal from './UserEditModal';
 
 const AdminReports: React.FC = () => {
-  const [reports, setReports] = useState<MonthlyReport[]>([]);
+  const [rawLogs, setRawLogs] = useState<AttendanceRecord[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
   
@@ -241,11 +242,17 @@ const AdminReports: React.FC = () => {
     }
   };
 
-  const fetch = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const reports = useMemo(() => {
+    if (!rawLogs.length || !users.length) return [];
     const from = fromDate ? new Date(fromDate + 'T00:00:00') : undefined;
     const to = toDate ? new Date(toDate + 'T23:59:59') : undefined;
+    return dataService.computeMonthlyReports(rawLogs, users, holidays, from, to);
+  }, [rawLogs, users, holidays, fromDate, toDate]);
+
+  const fetch = useCallback(async () => {
+    setIsSyncing(true);
+    if (!rawLogs.length) setLoading(true);
+    setError(null);
     
     if (fromDate) localStorage.setItem('payroll_from_date', fromDate);
     else localStorage.removeItem('payroll_from_date');
@@ -254,21 +261,26 @@ const AdminReports: React.FC = () => {
 
     try {
       const holidayData = await dataService.getHolidays();
-      const [reportData, userData, projectData, settings] = await Promise.all([
-        dataService.getMonthlyReports(from, to, holidayData),
+      const [logsData, userData, projectData, settings] = await Promise.all([
+        dataService.getAllAttendance(),
         dataService.getUsers(),
         dataService.getProjects(),
         dataService.getGlobalSettings()
       ]);
-      setReports(reportData);
+      setRawLogs(logsData);
       setUsers(userData);
       setProjects(projectData);
       setGlobalRequiredHours(settings.standardHours);
       setHolidays(holidayData.sort((a,b) => a.date.localeCompare(b.date)));
 
-      // Fetch adjustments for all months in the reports
+      // Fetch adjustments for currently computed reports
+      const tempReports = dataService.computeMonthlyReports(logsData, userData, holidayData, 
+        fromDate ? new Date(fromDate + 'T00:00:00') : undefined, 
+        toDate ? new Date(toDate + 'T23:59:59') : undefined
+      );
+
       const allAdjs: Record<string, { otherDeductions: number, reimbursements: number, absentDays: number }> = {};
-      await Promise.all(reportData.map(async (r) => {
+      await Promise.all(tempReports.map(async (r) => {
         const monthAdjs = await dataService.getPayrollAdjustments(r.year, r.month);
         Object.entries(monthAdjs).forEach(([uid, val]) => {
           allAdjs[`${r.year}-${r.month}-${uid}`] = val;
@@ -284,12 +296,13 @@ const AdminReports: React.FC = () => {
       }
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   }, [fromDate, toDate]);
 
   useEffect(() => {
     fetch();
-  }, [fetch]);
+  }, []); 
 
   const handleAddHoliday = async () => {
     if (!newHoliday.name || !newHoliday.date) return alert('Name and date required');
@@ -326,7 +339,7 @@ const AdminReports: React.FC = () => {
     setSelectedEmployee({ user, records: history });
   };
 
-  if (loading) {
+  if (loading && !rawLogs.length) {
     return (
       <div className="p-20 text-center space-y-4">
         <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -394,6 +407,16 @@ const AdminReports: React.FC = () => {
               className="px-3 py-2 w-20 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
             />
           </div>
+
+          <button 
+            onClick={fetch}
+            disabled={isSyncing}
+            className="px-4 py-2 bg-slate-50 text-slate-600 border border-slate-200 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center space-x-2"
+          >
+            {isSyncing ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-sync"></i>}
+            <span>{isSyncing ? 'Syncing...' : 'Refresh'}</span>
+          </button>
+
           <div className="flex flex-col">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">From</label>
             <input 

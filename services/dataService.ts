@@ -530,21 +530,25 @@ class DataService {
 
   async getMonthlyReports(from?: Date, to?: Date, holidays: Holiday[] = []): Promise<MonthlyReport[]> {
     this.ensureAdmin();
-    const snap = await getDocs(collection(db, ATTENDANCE));
-    const users = await this.getUsers();
+    const [allLogs, users] = await Promise.all([
+      this.getAllAttendance(),
+      this.getUsers()
+    ]);
+    return this.computeMonthlyReports(allLogs, users, holidays, from, to);
+  }
+
+  computeMonthlyReports(allLogs: AttendanceRecord[], users: User[], holidays: Holiday[] = [], from?: Date, to?: Date): MonthlyReport[] {
     const grouped: Record<string, MonthlyReport> = {};
-    const userWorkDays: Record<string, Set<string>> = {}; // key: "year-month-userId", value: Set of "YYYY-MM-DD"
+    const userWorkDays: Record<string, Set<string>> = {}; 
 
     const start = from ? new Date(from) : null;
     if (start) start.setHours(0, 0, 0, 0);
     const end = to ? new Date(to) : null;
     if (end) end.setHours(23, 59, 59, 999);
 
-    // Initial pass to collect attendance data and identify months
-    snap.docs.forEach(d => {
-      const r = d.data();
-      const cin = this.convertToDate(r.checkIn);
-      const cout = this.convertToDate(r.checkOut);
+    allLogs.forEach(r => {
+      const cin = r.checkIn;
+      const cout = r.checkOut;
       if (!cin) return;
 
       const compareDate = new Date(cin);
@@ -555,7 +559,6 @@ class DataService {
 
       let month = cin.getMonth();
       let year = cin.getFullYear();
-      // Payroll cycle 26 to 25
       if (cin.getDate() >= 26) { month++; if (month === 12) { month = 0; year++; } }
       const key = `${year}-${month}`;
       const monthName = new Date(year, month).toLocaleString('en-US', { month: 'long' });
@@ -571,7 +574,7 @@ class DataService {
       const pId = r.projectId || 'none';
       let emp = grouped[key].employees.find(e => e.userId === user.id && e.projectId === pId);
       if (!emp) {
-        emp = { userId: user.id, name: user.name, totalHours: 0, shiftCount: 0, projectId: pId, flaggedCount: 0, absentDays: 0 };
+        emp = { userId: user.id, name: user.name, totalHours: 0, shiftCount: 0, projectId: pId, flaggedCount: 0, absentDays: 0, daysWorked: 0 };
         grouped[key].employees.push(emp);
       }
       
@@ -584,7 +587,6 @@ class DataService {
       if (r.needsReview) emp.flaggedCount++;
     });
 
-    // Finalize report periods if data is sparse (ensure at least current/requested months exist)
     if (start && end) {
       let curr = new Date(start);
       while (curr <= end) {
@@ -600,7 +602,6 @@ class DataService {
       }
     }
 
-    // Now ensure EVERY user exists in every monthly report
     Object.entries(grouped).forEach(([key, report]) => {
       const [year, month] = key.split('-').map(Number);
       const cycleStart = new Date(year, month - 1, 26);
@@ -627,16 +628,12 @@ class DataService {
           const isFriday = current.getDay() === 5;
           const isHoliday = holidays.some(h => h.date === dateStr);
 
-          // We count all standard working days (not Fridays/Holidays) as expected days.
           if (!isFriday && !isHoliday) {
             expectedDaysCount++;
           }
           current.setDate(current.getDate() + 1);
         }
 
-        // Calculation Logic:
-        // 1. If zero presence for the entire report period, it's 30 days absence.
-        // 2. Otherwise, it's the shortfall in expected working days.
         let absentCount = 0;
         if (actualDaysWorkedCount === 0) {
           absentCount = 30;
@@ -644,7 +641,6 @@ class DataService {
           absentCount = Math.max(0, expectedDaysCount - actualDaysWorkedCount);
         }
 
-        // Only assign values to one entry per user per report to avoid duplicates in aggregation
         const userEntries = report.employees.filter(e => e.userId === user.id);
         userEntries.forEach((e, idx) => {
           e.absentDays = (idx === 0) ? absentCount : 0;
