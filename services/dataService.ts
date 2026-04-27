@@ -611,7 +611,7 @@ class DataService {
       users.forEach(user => {
         let emp = report.employees.find(e => e.userId === user.id);
         if (!emp) {
-          emp = { userId: user.id, name: user.name, totalHours: 0, shiftCount: 0, projectId: 'none', flaggedCount: 0, absentDays: 0, expectedDays: 0 };
+          emp = { userId: user.id, name: user.name, totalHours: 0, shiftCount: 0, projectId: 'none', flaggedCount: 0, absentDays: 0, expectedDays: 0, daysWorked: 0 };
           report.employees.push(emp);
         }
 
@@ -628,8 +628,6 @@ class DataService {
           const isHoliday = holidays.some(h => h.date === dateStr);
 
           // We count all standard working days (not Fridays/Holidays) as expected days.
-          // Leave/Vacation days are not subtracted, so they will naturally result in
-          // absent days if not worked.
           if (!isFriday && !isHoliday) {
             expectedDaysCount++;
           }
@@ -651,6 +649,7 @@ class DataService {
         userEntries.forEach((e, idx) => {
           e.absentDays = (idx === 0) ? absentCount : 0;
           e.expectedDays = (idx === 0) ? expectedDaysCount : 0;
+          e.daysWorked = (idx === 0) ? actualDaysWorkedCount : 0;
         });
       });
     });

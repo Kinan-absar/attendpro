@@ -157,8 +157,9 @@ const AdminReports: React.FC = () => {
         .reduce((acc, s) => ({
           totalHours: acc.totalHours + Number(s.totalHours || 0),
           absentDays: acc.absentDays + (Number(s.absentDays) || 0),
-          expectedDays: acc.expectedDays + (Number(s.expectedDays) || 0)
-        }), { totalHours: 0, absentDays: 0, expectedDays: 0 });
+          expectedDays: acc.expectedDays + (Number(s.expectedDays) || 0),
+          daysWorked: acc.daysWorked + (Number(s.daysWorked) || 0)
+        }), { totalHours: 0, absentDays: 0, expectedDays: 0, daysWorked: 0 });
 
       const grossSalary = Number(user.grossSalary) || 0;
       const userTarget = Number(user.standardHours);
@@ -172,14 +173,17 @@ const AdminReports: React.FC = () => {
 
       const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
 
-      // Intelligent shortfall: Account for hours already "deducted" by absent days
+      // Revised Hourly Deduction Logic:
+      // Calculate shortfall ONLY on days the employee actually showed up.
+      // This prevents manual adjustments to absent days from triggering hour deductions.
       const daysForCalc = stats.expectedDays > 0 ? stats.expectedDays : 26;
-      const hoursPerDay = targetHours / daysForCalc;
-      const hoursAccountedByAbsence = totalAbsentDays * hoursPerDay;
-      const remainingShortfall = hourDiff + hoursAccountedByAbsence;
+      const theoreticalHoursPerDay = targetHours / daysForCalc;
+      const expectedHoursForDaysWorked = stats.daysWorked * theoreticalHoursPerDay;
+      
+      const hourlyShortfall = Math.max(0, expectedHoursForDaysWorked - stats.totalHours);
 
-      const hourlyDeduction = (remainingShortfall < -0.01 && user.disableDeductions === false) 
-        ? Math.abs(remainingShortfall) * grossHourlyRate 
+      const hourlyDeduction = (hourlyShortfall > 0.01 && user.disableDeductions === false) 
+        ? hourlyShortfall * grossHourlyRate 
         : 0;
 
       const absentDeduction = (user.disableDeductions === false) ? totalAbsentDays * dailyRate : 0;
@@ -626,8 +630,9 @@ const AdminReports: React.FC = () => {
                 shiftCount: acc.shiftCount + Number(s.shiftCount || 0),
                 flaggedCount: acc.flaggedCount + (Number(s.flaggedCount) || 0),
                 absentDays: acc.absentDays + (Number(s.absentDays) || 0),
-                expectedDays: acc.expectedDays + (Number(s.expectedDays) || 0)
-              }), { totalHours: 0, shiftCount: 0, flaggedCount: 0, absentDays: 0, expectedDays: 0 });
+                expectedDays: acc.expectedDays + (Number(s.expectedDays) || 0),
+                daysWorked: acc.daysWorked + (Number(s.daysWorked) || 0)
+              }), { totalHours: 0, shiftCount: 0, flaggedCount: 0, absentDays: 0, expectedDays: 0, daysWorked: 0 });
 
             const grossSalary = Number(user.grossSalary) || 0;
             const basicSalary = grossSalary / 1.35;
@@ -649,14 +654,17 @@ const AdminReports: React.FC = () => {
             const totalAbsentDays = stats.absentDays + (adj.absentDays || 0);
             const absentDeduction = dedEnabled ? totalAbsentDays * dailyRate : 0;
 
-            // Intelligent shortfall: Only deduct hours that aren't explained by full-day absences
+            // Hourly Deduction Refactor:
+            // Calculate shortfall ONLY for the days attended. 
+            // If they didn't show up at all, shortfall is 0.
             const daysForCalc = stats.expectedDays > 0 ? stats.expectedDays : 26;
-            const hoursPerDay = targetHours / daysForCalc;
-            const hoursAccountedByAbsence = totalAbsentDays * hoursPerDay;
-            const remainingShortfall = diff + hoursAccountedByAbsence;
+            const theoreticalHoursPerDay = targetHours / daysForCalc;
+            const expectedHoursForDaysWorked = stats.daysWorked * theoreticalHoursPerDay;
+            
+            const hourlyShortfall = Math.max(0, expectedHoursForDaysWorked - stats.totalHours);
 
-            const hourlyDeduction = (remainingShortfall < -0.01 && dedEnabled) 
-              ? Math.abs(remainingShortfall) * grossHourlyRate 
+            const hourlyDeduction = (hourlyShortfall > 0.01 && dedEnabled) 
+              ? hourlyShortfall * grossHourlyRate 
               : 0;
 
             const totalDeduction = hourlyDeduction + absentDeduction;

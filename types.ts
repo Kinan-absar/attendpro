@@ -112,6 +112,7 @@ export interface MonthlyReport {
     flaggedCount: number;
     absentDays: number;
     expectedDays?: number;
+    daysWorked?: number;
   }[];
 }
 
