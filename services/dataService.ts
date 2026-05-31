@@ -387,17 +387,37 @@ class DataService {
   }
 
   /* ⚙️ GLOBAL SETTINGS & HOLIDAYS */
-  async getGlobalSettings(): Promise<{ standardHours: number }> {
+  async getGlobalSettings(): Promise<{ standardHours: number; reportFromDate?: string; reportToDate?: string }> {
     try {
       const snap = await getDoc(doc(db, SETTINGS, 'global_config'));
-      if (snap.exists()) return { standardHours: Number(snap.data().standardHours) || 240 };
+      if (snap.exists()) {
+        const data = snap.data();
+        return {
+          standardHours: Number(data.standardHours) || 240,
+          reportFromDate: data.reportFromDate || '',
+          reportToDate: data.reportToDate || ''
+        };
+      }
     } catch (e) {}
-    return { standardHours: 240 };
+    return { standardHours: 240, reportFromDate: '', reportToDate: '' };
   }
 
-  async saveGlobalSettings(settings: { standardHours: number }) {
+  async saveGlobalSettings(settings: { standardHours?: number; reportFromDate?: string; reportToDate?: string }) {
     this.ensureAdmin();
-    await setDoc(doc(db, SETTINGS, 'global_config'), this.sanitize({ standardHours: Number(settings.standardHours), updatedAt: serverTimestamp(), updatedBy: this.currentUser?.id }), { merge: true });
+    const updateData: any = {};
+    if (settings.standardHours !== undefined) {
+      updateData.standardHours = Number(settings.standardHours);
+    }
+    if (settings.reportFromDate !== undefined) {
+      updateData.reportFromDate = settings.reportFromDate;
+    }
+    if (settings.reportToDate !== undefined) {
+      updateData.reportToDate = settings.reportToDate;
+    }
+    updateData.updatedAt = serverTimestamp();
+    updateData.updatedBy = this.currentUser?.id;
+
+    await setDoc(doc(db, SETTINGS, 'global_config'), this.sanitize(updateData), { merge: true });
   }
 
   async getHolidays(): Promise<Holiday[]> {

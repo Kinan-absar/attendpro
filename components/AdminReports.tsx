@@ -249,6 +249,61 @@ const AdminReports: React.FC = () => {
     return dataService.computeMonthlyReports(rawLogs, users, holidays, from, to);
   }, [rawLogs, users, holidays, fromDate, toDate]);
 
+  const handleFromDateChange = async (val: string) => {
+    setFromDate(val);
+    if (val) localStorage.setItem('payroll_from_date', val);
+    else localStorage.removeItem('payroll_from_date');
+    try {
+      await dataService.saveGlobalSettings({ reportFromDate: val });
+    } catch (err) {
+      console.error("Failed to save report from date globally:", err);
+    }
+  };
+
+  const handleToDateChange = async (val: string) => {
+    setToDate(val);
+    if (val) localStorage.setItem('payroll_to_date', val);
+    else localStorage.removeItem('payroll_to_date');
+    try {
+      await dataService.saveGlobalSettings({ reportToDate: val });
+    } catch (err) {
+      console.error("Failed to save report to date globally:", err);
+    }
+  };
+
+  // Compute a stable key representing the years and months currently computed/visible
+  const reportsKey = useMemo(() => {
+    return reports.map(r => `${r.year}-${r.month}`).sort().join(',');
+  }, [reports]);
+
+  // Synchronously load/sync actual payroll adjustment fields whenever reports key boundaries shift
+  useEffect(() => {
+    if (!reports.length) return;
+
+    let active = true;
+    const loadAdjustments = async () => {
+      try {
+        const allAdjs: Record<string, { otherDeductions: number, reimbursements: number, absentDays: number }> = {};
+        await Promise.all(reports.map(async (r) => {
+          const monthAdjs = await dataService.getPayrollAdjustments(r.year, r.month);
+          Object.entries(monthAdjs).forEach(([uid, val]) => {
+            allAdjs[`${r.year}-${r.month}-${uid}`] = val;
+          });
+        }));
+        if (active) {
+          setPayrollAdjustments(allAdjs);
+        }
+      } catch (err) {
+        console.error("Failed to load adjustments dynamically:", err);
+      }
+    };
+
+    loadAdjustments();
+    return () => {
+      active = false;
+    };
+  }, [reportsKey]);
+
   const fetch = useCallback(async () => {
     setIsSyncing(true);
     if (!rawLogs.length) setLoading(true);
@@ -273,10 +328,20 @@ const AdminReports: React.FC = () => {
       setGlobalRequiredHours(settings.standardHours);
       setHolidays(holidayData.sort((a,b) => a.date.localeCompare(b.date)));
 
+      const activeFromDate = settings.reportFromDate || fromDate;
+      const activeToDate = settings.reportToDate || toDate;
+
+      if (settings.reportFromDate) {
+        setFromDate(settings.reportFromDate);
+      }
+      if (settings.reportToDate) {
+        setToDate(settings.reportToDate);
+      }
+
       // Fetch adjustments for currently computed reports
       const tempReports = dataService.computeMonthlyReports(logsData, userData, holidayData, 
-        fromDate ? new Date(fromDate + 'T00:00:00') : undefined, 
-        toDate ? new Date(toDate + 'T23:59:59') : undefined
+        activeFromDate ? new Date(activeFromDate + 'T00:00:00') : undefined, 
+        activeToDate ? new Date(activeToDate + 'T23:59:59') : undefined
       );
 
       const allAdjs: Record<string, { otherDeductions: number, reimbursements: number, absentDays: number }> = {};
@@ -422,7 +487,7 @@ const AdminReports: React.FC = () => {
             <input 
               type="date" 
               value={fromDate} 
-              onChange={(e) => setFromDate(e.target.value)} 
+              onChange={(e) => handleFromDateChange(e.target.value)} 
               className="px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
             />
           </div>
@@ -431,7 +496,7 @@ const AdminReports: React.FC = () => {
             <input 
               type="date" 
               value={toDate} 
-              onChange={(e) => setToDate(e.target.value)} 
+              onChange={(e) => handleToDateChange(e.target.value)} 
               className="px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
             />
           </div>
