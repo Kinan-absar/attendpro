@@ -144,7 +144,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
       <div className="flex flex-col md:flex-row justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-            {activeRecord ? 'Shift Active' : `Hello, ${user.name.split(' ')[0]}!`}
+            {activeRecord ? 'Shift Active' : `Hello, ${(user?.name || '').split(' ')[0]}!`}
           </h1>
           <p className="text-slate-500">Attendance tracked via geofencing site boundaries</p>
         </div>
@@ -156,7 +156,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
               onChange={(e) => setUserProject(allProjects.find(p => p.id === e.target.value) || null)}
               className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black uppercase tracking-wider text-slate-600 outline-none shadow-sm cursor-pointer"
             >
-              <option value="">Monitoring Site: Select...</option>
+              <option key="default" value="">Monitoring Site: Select...</option>
               {allProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}

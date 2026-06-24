@@ -69,6 +69,7 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
     filteredHistory.forEach(record => {
       const rawDuration = Number(record.duration);
       const cinDate = new Date(record.checkIn);
+      if (isNaN(cinDate.getTime())) return;
       const calcDuration = record.checkOut ? (new Date(record.checkOut).getTime() - cinDate.getTime()) / 60000 : 0;
       const finalDurationMinutes = (!isNaN(rawDuration) && rawDuration > 0) ? rawDuration : calcDuration;
       
@@ -120,7 +121,7 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Attendance_Logs_${user.name}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `Attendance_Logs_${user?.name || 'User'}_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
 

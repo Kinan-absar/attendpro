@@ -25,7 +25,7 @@ export const formatHoursToHHMM = (decimalHours: number): string => {
  * Otherwise, return only full hours (minutes discarded).
  */
 export const calculateEffectiveMinutes = (actualMinutes: number, shift?: ShiftSchedule): number => {
-  if (!shift) return actualMinutes;
+  if (!shift || !shift.startTime || !shift.endTime) return actualMinutes;
   
   const [startH, startM] = shift.startTime.split(':').map(Number);
   const [endH, endM] = shift.endTime.split(':').map(Number);

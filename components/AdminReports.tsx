@@ -27,8 +27,8 @@ const AdminReports: React.FC = () => {
   const [isDeletingHoliday, setIsDeletingHoliday] = useState(false);
   const [isSavingHoliday, setIsSavingHoliday] = useState(false);
   
-  const [fromDate, setFromDate] = useState(localStorage.getItem('payroll_from_date') || '');
-  const [toDate, setToDate] = useState(localStorage.getItem('payroll_to_date') || '');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   
   const [globalRequiredHours, setGlobalRequiredHours] = useState<number>(240); 
   const [payrollAdjustments, setPayrollAdjustments] = useState<Record<string, { otherDeductions: number, reimbursements: number, absentDays: number }>>({});
@@ -251,8 +251,6 @@ const AdminReports: React.FC = () => {
 
   const handleFromDateChange = async (val: string) => {
     setFromDate(val);
-    if (val) localStorage.setItem('payroll_from_date', val);
-    else localStorage.removeItem('payroll_from_date');
     try {
       await dataService.saveGlobalSettings({ reportFromDate: val });
     } catch (err) {
@@ -262,8 +260,6 @@ const AdminReports: React.FC = () => {
 
   const handleToDateChange = async (val: string) => {
     setToDate(val);
-    if (val) localStorage.setItem('payroll_to_date', val);
-    else localStorage.removeItem('payroll_to_date');
     try {
       await dataService.saveGlobalSettings({ reportToDate: val });
     } catch (err) {
@@ -308,11 +304,6 @@ const AdminReports: React.FC = () => {
     setIsSyncing(true);
     if (!rawLogs.length) setLoading(true);
     setError(null);
-    
-    if (fromDate) localStorage.setItem('payroll_from_date', fromDate);
-    else localStorage.removeItem('payroll_from_date');
-    if (toDate) localStorage.setItem('payroll_to_date', toDate);
-    else localStorage.removeItem('payroll_to_date');
 
     try {
       const holidayData = await dataService.getHolidays();
@@ -328,15 +319,11 @@ const AdminReports: React.FC = () => {
       setGlobalRequiredHours(settings.standardHours);
       setHolidays(holidayData.sort((a,b) => a.date.localeCompare(b.date)));
 
-      const activeFromDate = settings.reportFromDate || fromDate;
-      const activeToDate = settings.reportToDate || toDate;
+      const activeFromDate = settings.reportFromDate || '';
+      const activeToDate = settings.reportToDate || '';
 
-      if (settings.reportFromDate) {
-        setFromDate(settings.reportFromDate);
-      }
-      if (settings.reportToDate) {
-        setToDate(settings.reportToDate);
-      }
+      setFromDate(activeFromDate);
+      setToDate(activeToDate);
 
       // Fetch adjustments for currently computed reports
       const tempReports = dataService.computeMonthlyReports(logsData, userData, holidayData, 
@@ -635,7 +622,7 @@ const AdminReports: React.FC = () => {
          <div className="flex flex-col min-w-[150px]">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Company</label>
             <select value={selectedCompanyFilter} onChange={(e) => setSelectedCompanyFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-              <option value="all">All Companies</option>
+              <option key="all" value="all">All Companies</option>
               {[...new Set(users.map(u => u.company || 'Absar Alomran'))].sort().map(company => (
                 <option key={company} value={company}>{company}</option>
               ))}
@@ -644,17 +631,17 @@ const AdminReports: React.FC = () => {
          <div className="flex flex-col min-w-[150px]">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Project / Site</label>
             <select value={selectedProjectFilter} onChange={(e) => setSelectedProjectFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-              <option value="all">All Projects</option>
+              <option key="all" value="all">All Projects</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
-              <option value="none">Unassigned Site</option>
+              <option key="none" value="none">Unassigned Site</option>
             </select>
          </div>
          <div className="flex flex-col min-w-[150px]">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Staff Member</label>
             <select value={selectedEmployeeFilter} onChange={(e) => setSelectedEmployeeFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-              <option value="all">All Employees</option>
+              <option key="all" value="all">All Employees</option>
               {[...new Set(users.map(u => u.name))].sort().map(name => (
                 <option key={name} value={name}>{name}</option>
               ))}

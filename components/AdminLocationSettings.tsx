@@ -11,6 +11,41 @@ const AdminLocationSettings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [permissionError, setPermissionError] = useState(false);
   const [userSearch, setUserSearch] = useState('');
+  const [resetting, setResetting] = useState(false);
+
+  const handleSystemReset = async () => {
+    const confirm1 = confirm(
+      "⚠️ CRITICAL SYSTEM RESET WARNING ⚠️\n\n" +
+      "Are you absolutely sure you want to delete all data and start fresh?\n\n" +
+      "This action will permanently delete:\n" +
+      "• All attendance logs and punch histories\n" +
+      "• All registered employee/staff accounts (except yours)\n" +
+      "• All active worksites and geofencing limits\n" +
+      "• All holidays and announcements\n" +
+      "• All payroll adjustments\n\n" +
+      "This action IS IRREVERSIBLE. Press OK to verify."
+    );
+    if (!confirm1) return;
+
+    const confirm2 = confirm(
+      "FINAL CONFIRMATION:\n\n" +
+      "Are you 100% sure? All users and history will be permanently deleted and the app will reload fresh.\n\n" +
+      "Click OK to execute the purge."
+    );
+    if (!confirm2) return;
+
+    setResetting(true);
+    try {
+      await dataService.resetAllSystemData();
+      alert("Database Reset Complete! All records have been successfully purged, and your settings have been restored to default. Your admin account is fully retained.");
+      window.location.reload();
+    } catch (err: any) {
+      console.error(err);
+      alert("Database Purge Failed: " + (err.message || err));
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const fetch = async () => {
     setLoading(true);
@@ -232,39 +267,77 @@ const AdminLocationSettings: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects.map(project => (
-            <div key={project.id} className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-              <div className="flex justify-between items-start mb-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${project.geofence.enabled ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                  <i className={`fa-solid ${project.geofence.enabled ? 'fa-building-shield' : 'fa-globe'} text-xl`}></i>
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {projects.map(project => (
+              <div key={project.id} className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                <div className="flex justify-between items-start mb-4">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${project.geofence.enabled ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                    <i className={`fa-solid ${project.geofence.enabled ? 'fa-building-shield' : 'fa-globe'} text-xl`}></i>
+                  </div>
+                  <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button onClick={() => setEditingProject(project)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors">
+                      <i className="fa-solid fa-pen-to-square text-xs"></i>
+                    </button>
+                    <button onClick={() => handleDelete(project.id)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-rose-600 transition-colors">
+                      <i className="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                  </div>
                 </div>
-                <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-all">
-                  <button onClick={() => setEditingProject(project)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors">
-                    <i className="fa-solid fa-pen-to-square text-xs"></i>
-                  </button>
-                  <button onClick={() => handleDelete(project.id)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-rose-600 transition-colors">
-                    <i className="fa-solid fa-trash-can text-xs"></i>
-                  </button>
+                <h3 className="text-xl font-black text-slate-900 mb-1">{project.name}</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">
+                  {project.geofence.enabled ? `${project.geofence.radius}m Safe Zone` : 'Flexible Site'}
+                </p>
+                <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
+                  <div className="flex -space-x-2">
+                    {(project.assignedUserIds || []).slice(0, 4).map(uid => {
+                      const u = users.find(user => user.id === uid);
+                      return u ? <img key={uid} src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} className="w-6 h-6 rounded-full border-2 border-white shadow-sm" /> : null;
+                    })}
+                  </div>
+                  <span className="text-[10px] font-black text-slate-300 uppercase">
+                    {(project.assignedUserIds || []).length} Personnel
+                  </span>
                 </div>
               </div>
-              <h3 className="text-xl font-black text-slate-900 mb-1">{project.name}</h3>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">
-                {project.geofence.enabled ? `${project.geofence.radius}m Safe Zone` : 'Flexible Site'}
+            ))}
+          </div>
+
+          {/* 🚨 DANGER ZONE */}
+          <div className="mt-12 p-8 bg-rose-50/40 border border-rose-100 rounded-[2rem] space-y-6">
+            <div>
+              <h2 className="text-xl font-black text-rose-900 tracking-tight flex items-center gap-2">
+                <i className="fa-solid fa-triangle-exclamation"></i>
+                Danger Zone
+              </h2>
+              <p className="text-rose-700/80 text-xs font-semibold mt-1">
+                Perform system-wide resets and destructive administrative tasks. These actions cannot be undone.
               </p>
-              <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
-                <div className="flex -space-x-2">
-                  {(project.assignedUserIds || []).slice(0, 4).map(uid => {
-                    const u = users.find(user => user.id === uid);
-                    return u ? <img key={uid} src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} className="w-6 h-6 rounded-full border-2 border-white shadow-sm" /> : null;
-                  })}
-                </div>
-                <span className="text-[10px] font-black text-slate-300 uppercase">
-                  {(project.assignedUserIds || []).length} Personnel
-                </span>
-              </div>
             </div>
-          ))}
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-white border border-rose-100 rounded-2xl gap-4 shadow-sm">
+              <div className="space-y-1">
+                <h3 className="font-bold text-slate-950 text-sm">Reset All System Data & Start Fresh</h3>
+                <p className="text-slate-500 text-xs max-w-xl">
+                  This will permanently purge all attendance records, holidays, announcements, assigned worksites, and registered employee profiles. Your administrator account is fully preserved.
+                </p>
+              </div>
+              <button
+                onClick={handleSystemReset}
+                disabled={resetting}
+                className="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-rose-100 transition-all flex-shrink-0 disabled:opacity-50"
+              >
+                {resetting ? (
+                  <span className="flex items-center gap-2">
+                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                    Resetting...
+                  </span>
+                ) : (
+                  'Reset Database'
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -33,9 +33,23 @@ const ReloadPrompt: React.FC = () => {
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        navigator.serviceWorker?.getRegistration().then(reg => {
-          reg?.update();
-        });
+        try {
+          if (navigator.serviceWorker && typeof navigator.serviceWorker.getRegistration === 'function') {
+            navigator.serviceWorker.getRegistration()
+              .then(reg => {
+                if (reg && typeof reg.update === 'function') {
+                  reg.update().catch(err => {
+                    console.warn('SW update check failed (non-fatal):', err);
+                  });
+                }
+              })
+              .catch(err => {
+                console.warn('SW getRegistration failed (non-fatal):', err);
+              });
+          }
+        } catch (e) {
+          console.warn('SW registration access blocked (non-fatal):', e);
+        }
       }
     };
     window.addEventListener('visibilitychange', handleVisibility);

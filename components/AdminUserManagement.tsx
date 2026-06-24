@@ -354,7 +354,7 @@ const AdminUserManagement: React.FC = () => {
             onChange={(e) => setProjectFilter(e.target.value)}
             className="w-full md:w-56 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
           >
-            <option value="all">All Worksites</option>
+            <option key="all" value="all">All Worksites</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>

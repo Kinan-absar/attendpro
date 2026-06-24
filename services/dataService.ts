@@ -249,7 +249,7 @@ class DataService {
       }
       return false;
     } catch (err) {
-      console.error("Global auto-close failed:", err);
+      console.warn("Global auto-close warning (non-fatal):", err);
       return false;
     }
   }
@@ -320,7 +320,7 @@ class DataService {
       }
       return false;
     } catch (err) {
-      console.error("User auto-close failed:", err);
+      console.warn("User auto-close warning (non-fatal):", err);
       return false;
     }
   }
@@ -742,6 +742,55 @@ class DataService {
     }), { merge: true });
   }
 
+  async resetAllSystemData(): Promise<void> {
+    this.ensureAdmin();
+    const adminId = this.currentUser?.id;
+    if (!adminId) throw new Error("Current admin session is invalid.");
+
+    const collectionsToClear = [
+      ATTENDANCE,
+      PROJECTS,
+      SHIFTS,
+      HOLIDAYS,
+      BROADCASTS,
+      PAYROLL_ADJUSTMENTS
+    ];
+
+    for (const collName of collectionsToClear) {
+      const snap = await getDocs(collection(db, collName));
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.docs.forEach(docSnap => {
+          batch.delete(docSnap.ref);
+        });
+        await batch.commit();
+      }
+    }
+
+    const userSnap = await getDocs(collection(db, USERS));
+    if (!userSnap.empty) {
+      const batch = writeBatch(db);
+      let count = 0;
+      userSnap.docs.forEach(docSnap => {
+        if (docSnap.id !== adminId) {
+          batch.delete(docSnap.ref);
+          count++;
+        }
+      });
+      if (count > 0) {
+        await batch.commit();
+      }
+    }
+
+    await setDoc(doc(db, SETTINGS, 'global_config'), {
+      standardHours: 240,
+      reportFromDate: '',
+      reportToDate: '',
+      updatedAt: serverTimestamp(),
+      updatedBy: adminId
+    });
+  }
+
   getRecommendedRules(): string {
     return `rules_version = '2';
 service cloud.firestore {
@@ -750,7 +799,7 @@ service cloud.firestore {
       return request.auth != null && (
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-        (request.auth.token.email == "kinan88m@gmail.com" && request.auth.token.email_verified == true)
+        request.auth.token.email == "kinan88m@gmail.com"
       );
     }
     match /users/{id} {

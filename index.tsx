@@ -4,12 +4,20 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 
 // Register Service Worker manually
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
-      .then(reg => console.log('SW registered'))
-      .catch(err => console.log('SW registration failed', err));
-  });
+try {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      try {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('SW registered'))
+          .catch(err => console.warn('SW registration failed (non-fatal):', err));
+      } catch (err) {
+        console.warn('SW registration failed synchronously (non-fatal):', err);
+      }
+    });
+  }
+} catch (e) {
+  console.warn('Service worker is not supported or accessible (non-fatal):', e);
 }
 
 const rootElement = document.getElementById('root');
