@@ -76,9 +76,9 @@ const AdminShiftManagement: React.FC = () => {
   const filteredUsers = useMemo(() => {
     const s = userSearch.toLowerCase();
     return users.filter(u => 
-      u.name.toLowerCase().includes(s) || 
-      u.employeeId.toLowerCase().includes(s)
-    ).sort((a, b) => a.name.localeCompare(b.name));
+      (u?.name || '').toLowerCase().includes(s) || 
+      (u?.employeeId || '').toLowerCase().includes(s)
+    ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [users, userSearch]);
 
   if (loading) return (
