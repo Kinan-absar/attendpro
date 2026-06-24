@@ -10,6 +10,7 @@ export interface User {
   avatar?: string;
   grossSalary?: number;
   company?: string;
+  companyId?: string; // Unique identifier of the company
   standardHours?: number; 
   disableOvertime?: boolean;
   disableDeductions?: boolean;
@@ -27,6 +28,12 @@ export interface User {
   // Note: deductions are calculated dynamically from attendance; stored here as
   // a manual override for fixed monthly deductions (e.g. GOSI employee share).
   fixedDeductions?: number;
+}
+
+export interface Company {
+  id: string;
+  name: string;
+  createdAt: Date;
 }
 
 export interface Broadcast {

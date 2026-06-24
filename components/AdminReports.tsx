@@ -317,7 +317,7 @@ const AdminReports: React.FC = () => {
       setUsers(userData);
       setProjects(projectData);
       setGlobalRequiredHours(settings.standardHours);
-      setHolidays(holidayData.sort((a,b) => a.date.localeCompare(b.date)));
+      setHolidays(holidayData.sort((a,b) => (a.date || '').localeCompare(b.date || '')));
 
       const activeFromDate = settings.reportFromDate || '';
       const activeToDate = settings.reportToDate || '';
@@ -622,28 +622,28 @@ const AdminReports: React.FC = () => {
          <div className="flex flex-col min-w-[150px]">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Company</label>
             <select value={selectedCompanyFilter} onChange={(e) => setSelectedCompanyFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-              <option key="all" value="all">All Companies</option>
-              {[...new Set(users.map(u => u.company || 'Absar Alomran'))].sort().map(company => (
-                <option key={company} value={company}>{company}</option>
+              <option value="all">All Companies</option>
+              {[...new Set(users.map(u => u.company || 'Absar Alomran'))].sort().map((company, idx) => (
+                <option key={`company-${company || idx}`} value={company}>{company}</option>
               ))}
             </select>
          </div>
          <div className="flex flex-col min-w-[150px]">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Project / Site</label>
             <select value={selectedProjectFilter} onChange={(e) => setSelectedProjectFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-              <option key="all" value="all">All Projects</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              <option value="all">All Projects</option>
+              {projects.map((p, idx) => (
+                <option key={`project-${p.id || idx}`} value={p.id}>{p.name}</option>
               ))}
-              <option key="none" value="none">Unassigned Site</option>
+              <option value="none">Unassigned Site</option>
             </select>
          </div>
          <div className="flex flex-col min-w-[150px]">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Staff Member</label>
             <select value={selectedEmployeeFilter} onChange={(e) => setSelectedEmployeeFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-              <option key="all" value="all">All Employees</option>
-              {[...new Set(users.map(u => u.name))].sort().map(name => (
-                <option key={name} value={name}>{name}</option>
+              <option value="all">All Employees</option>
+              {[...new Set(users.map(u => u.name))].sort().map((name, idx) => (
+                <option key={`employee-${name || idx}`} value={name}>{name}</option>
               ))}
             </select>
          </div>
@@ -665,7 +665,7 @@ const AdminReports: React.FC = () => {
             else if (selectedProjectFilter === 'none') matchesProject = userAssignedProjectIds.length === 0;
             else matchesProject = userAssignedProjectIds.includes(selectedProjectFilter) || report.employees.some(emp => emp.name === u.name && emp.projectId === selectedProjectFilter);
             return matchesEmployee && matchesCompany && matchesProject;
-          }).sort((a, b) => a.name.localeCompare(b.name));
+          }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
           if (visibleUsers.length === 0) return null;
 
@@ -686,7 +686,7 @@ const AdminReports: React.FC = () => {
             if (b === 'none') return -1;
             const pA = projects.find(p => p.id === a)?.name || 'Unknown';
             const pB = projects.find(p => p.id === b)?.name || 'Unknown';
-            return pA.localeCompare(pB);
+            return (pA || '').localeCompare(pB || '');
           });
 
           let grandTotalHours = 0;

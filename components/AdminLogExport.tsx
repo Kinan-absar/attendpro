@@ -24,7 +24,7 @@ const AdminLogExport: React.FC = () => {
     setLoading(true);
     try {
       const u = await dataService.getUsers();
-      setUsers(u.sort((a, b) => a.name.localeCompare(b.name)));
+      setUsers(u.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
       setSelectedUserIds(u.map(user => user.id)); // Default select all
     } catch (err) {
       console.error(err);

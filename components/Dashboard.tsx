@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Linkify from './Linkify';
 import { AttendanceRecord, User, Project, Broadcast } from '../types';
 import { dataService } from '../services/dataService';
+import { useLanguage } from '../utils/LanguageContext';
 
 interface Props {
   user: User;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
+  const { t } = useLanguage();
   const [processing, setProcessing] = useState(false);
   const [now, setNow] = useState(new Date());
   const [userProject, setUserProject] = useState<Project | null>(null);
@@ -107,7 +109,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
     if (processing) return;
 
     if (!activeRecord && !isInsideZone && userProject?.geofence?.enabled) {
-      return alert("Geofence Restriction: You must be at the worksite to Clock In.");
+      return alert(t('geofenceError'));
     }
 
     setProcessing(true);
@@ -119,14 +121,14 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
       } else {
         if (!userProject) {
             setProcessing(false);
-            return alert("Please select a worksite first.");
+            return alert(t('selectWorksiteError'));
         }
         await dataService.checkIn(user, loc, userProject.id);
       }
       await onAction();
     } catch (err: any) {
       console.error("Action Error:", err);
-      alert("Shift action failed: " + (err.message || "Unknown error"));
+      alert(t('shiftActionFailed') + (err.message || ""));
     } finally {
       setProcessing(false);
     }
@@ -137,16 +139,16 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   const hours = Math.floor(safeActiveMs / 3600000);
   const minutes = Math.floor((safeActiveMs % 3600000) / 60000);
 
-  const displayTime = activeRecord ? new Date(activeRecord.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Shift Inactive';
+  const displayTime = activeRecord ? new Date(activeRecord.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : t('shiftInactive');
 
   return (
     <div className="space-y-8 animate-fadeIn pb-12">
       <div className="flex flex-col md:flex-row justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-            {activeRecord ? 'Shift Active' : `Hello, ${(user?.name || '').split(' ')[0]}!`}
+            {activeRecord ? t('shiftActive') : `${t('hello')}, ${(user?.name || '').split(' ')[0]}!`}
           </h1>
-          <p className="text-slate-500">Attendance tracked via geofencing site boundaries</p>
+          <p className="text-slate-500">{t('dbSub')}</p>
         </div>
 
         <div className="flex flex-col md:items-end gap-2">
@@ -156,7 +158,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
               onChange={(e) => setUserProject(allProjects.find(p => p.id === e.target.value) || null)}
               className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black uppercase tracking-wider text-slate-600 outline-none shadow-sm cursor-pointer"
             >
-              <option key="default" value="">Monitoring Site: Select...</option>
+              <option key="default" value="">{t('dbSelectMonitoringSite')}</option>
               {allProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
@@ -209,21 +211,21 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest opacity-70">{userProject.name}</p>
               <p className="text-sm font-bold">
-                {isInsideZone ? 'You are inside the site zone' : 'Warning: Outside site boundary'}
+                {isInsideZone ? t('insideSiteZone') : t('outsideSiteZone')}
               </p>
             </div>
           </div>
           {currentDistance !== null && (
             <div className="text-right">
               <p className="font-black text-lg">{Math.round(currentDistance)}m</p>
-              <p className="text-[9px] font-black uppercase opacity-60">Distance</p>
+              <p className="text-[9px] font-black uppercase opacity-60">{t('distanceLabel')}</p>
             </div>
           )}
         </div>
       ) : (
         <div className="p-5 bg-slate-100 border border-slate-200 rounded-3xl flex items-center gap-4 text-slate-500">
           <i className="fa-solid fa-circle-info text-lg"></i>
-          <p className="text-xs font-black uppercase tracking-widest">No worksite selected for check-in.</p>
+          <p className="text-xs font-black uppercase tracking-widest">{t('dbNoWorksiteSelected')}</p>
         </div>
       )}
 
@@ -238,7 +240,7 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
             {hours.toString().padStart(2, '0')}.{minutes.toString().padStart(2, '0')}
           </div>
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-12">
-            {activeRecord ? `Clocked in @ ${displayTime}` : 'Shift Inactive'}
+            {activeRecord ? `${t('clockedInTime')} ${displayTime}` : t('shiftInactive')}
           </p>
           <button
             onClick={handleToggle}
@@ -247,11 +249,11 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
               activeRecord ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'
             } text-white disabled:opacity-30 disabled:grayscale`}
           >
-            {processing ? <i className="fa-solid fa-circle-notch fa-spin" /> : (activeRecord ? 'Clock Out' : 'Clock In')}
+            {processing ? <i className="fa-solid fa-circle-notch fa-spin" /> : (activeRecord ? t('clockOutBtn') : t('clockInBtn'))}
           </button>
           {!activeRecord && !userProject && (
              <p className="text-indigo-600 text-[10px] font-black uppercase mt-4">
-               <i className="fa-solid fa-hand-pointer mr-1"></i> Choose a site to begin
+               <i className="fa-solid fa-hand-pointer mr-1"></i> {t('dbChooseSite')}
              </p>
           )}
         </div>
@@ -259,20 +261,20 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
         <div className="space-y-6">
           <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-xl">
             <h3 className="text-indigo-400 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center">
-              <i className="fa-solid fa-shield-halved mr-2"></i> Attendance Policy
+              <i className="fa-solid fa-shield-halved mr-2"></i> {t('policyTitle')}
             </h3>
             <ul className="space-y-4">
               <li className="flex items-start space-x-3 text-xs">
                 <i className="fa-solid fa-check text-indigo-500 mt-1"></i>
-                <p>Clock-in requires <strong>physical presence</strong> on site.</p>
+                <p>{t('policyRule1')}</p>
               </li>
               <li className="flex items-start space-x-3 text-xs">
                 <i className="fa-solid fa-check text-indigo-500 mt-1"></i>
-                <p>Clock-out anywhere; flagged if outside zone.</p>
+                <p>{t('policyRule2')}</p>
               </li>
               <li className="flex items-start space-x-3 text-xs">
                 <i className="fa-solid fa-check text-indigo-500 mt-1"></i>
-                <p>Unclosed shifts auto-terminate at <strong>23:59</strong> unless exempt.</p>
+                <p>{t('policyRule3')}</p>
               </li>
             </ul>
           </div>

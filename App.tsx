@@ -13,77 +13,102 @@ import AdminUserManagement from './components/AdminUserManagement';
 import AdminShiftManagement from './components/AdminShiftManagement';
 import AdminBroadcastManagement from './components/AdminBroadcastManagement';
 import AdminLogExport from './components/AdminLogExport';
+import Settings from './components/Settings';
+import { useLanguage } from './utils/LanguageContext';
+import { LanguageSelector } from './components/LanguageSelector';
 
 const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDOM as any;
 
 const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
   const location = useLocation();
   const navRef = useRef<HTMLDivElement>(null);
+  const { t } = useLanguage();
 
   const links = [
-    { path: '/', label: 'Home', icon: 'fa-house' },
-    { path: '/history', label: 'My Logs', icon: 'fa-list' },
+    { path: '/', label: t('navHome'), icon: 'fa-house' },
+    { path: '/history', label: t('navMyLogs'), icon: 'fa-list' },
   ];
 
   if (user.role === 'admin') {
-    links.push({ path: '/admin', label: 'Reports', icon: 'fa-chart-pie' });
-    links.push({ path: '/admin/logs-export', label: 'Log Export', icon: 'fa-file-export' });
-    links.push({ path: '/admin/active', label: 'Active', icon: 'fa-user-clock' });
-    links.push({ path: '/admin/broadcasts', label: 'Notices', icon: 'fa-bullhorn' });
-    links.push({ path: '/admin/users', label: 'Staff', icon: 'fa-users-gear' });
-    links.push({ path: '/admin/shifts', label: 'Schedules', icon: 'fa-calendar-day' });
-    links.push({ path: '/admin/location', label: 'Worksite', icon: 'fa-location-dot' });
+    links.push({ path: '/admin', label: t('navReports'), icon: 'fa-chart-pie' });
+    links.push({ path: '/admin/logs-export', label: t('navLogExport'), icon: 'fa-file-export' });
+    links.push({ path: '/admin/active', label: t('navActive'), icon: 'fa-user-clock' });
+    links.push({ path: '/admin/broadcasts', label: t('navNotices'), icon: 'fa-bullhorn' });
+    links.push({ path: '/admin/users', label: t('navStaff'), icon: 'fa-users-gear' });
+    links.push({ path: '/admin/shifts', label: t('navSchedules'), icon: 'fa-calendar-day' });
+    links.push({ path: '/admin/location', label: t('navWorksite'), icon: 'fa-location-dot' });
   }
 
+  // Settings is always the very last tab
+  links.push({ path: '/settings', label: t('navSettings'), icon: 'fa-gears' });
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-[100] md:top-0 md:bottom-auto md:flex-col md:w-64 md:h-screen md:border-r md:border-t-0 md:justify-start md:py-8 md:z-50 print:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.05)] md:shadow-none pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
-      <div className="hidden md:flex flex-col px-6 mb-10">
-        <div className="flex items-center space-x-3 mb-8">
-          <div className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-            <i className="fa-solid fa-clock text-xl"></i>
+    <>
+      {/* Mobile Top Bar */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white/95 backdrop-blur-md border-b border-slate-200 z-[90] flex items-center justify-between px-4 print:hidden shadow-sm">
+        <div className="flex items-center space-x-2">
+          <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md">
+            <i className="fa-solid fa-clock text-sm"></i>
           </div>
-          <span className="font-black text-2xl tracking-tighter text-slate-900">AttendancePro</span>
+          <span className="font-black text-lg tracking-tighter text-slate-900">AttendancePro</span>
         </div>
-        <div className="p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 flex items-center space-x-3">
-          <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}`} className="w-9 h-9 rounded-full border-2 border-white shadow-sm" alt="U" />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-black text-slate-900 truncate">{user.name || 'User'}</p>
-            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{user.role || 'Employee'}</p>
-          </div>
-        </div>
+        <LanguageSelector />
       </div>
 
-      <div 
-        ref={navRef}
-        className="flex flex-row md:flex-col overflow-x-auto overflow-y-hidden md:overflow-y-visible no-scrollbar flex-nowrap items-center md:items-stretch px-2 md:px-3 py-1 md:py-0 w-full"
-        style={{ WebkitOverflowScrolling: 'touch', justifyContent: 'flex-start' }}
-      >
-        {links.map((link) => (
-          <Link
-            key={link.path}
-            to={link.path}
-            className={`flex flex-col md:flex-row items-center justify-center space-y-1 md:space-y-0 md:space-x-4 px-4 py-2.5 md:px-5 md:py-3.5 rounded-2xl transition-all duration-300 flex-shrink-0 md:flex-shrink-1 min-w-[80px] md:min-w-0 ${
-              location.pathname === link.path ? 'text-indigo-600 md:bg-indigo-50/80 font-bold scale-105 md:scale-100' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
-            }`}
-          >
-            <i className={`fa-solid ${link.icon} text-lg md:text-xl`}></i>
-            <span className="text-[10px] md:text-[15px] font-bold md:font-semibold whitespace-nowrap tracking-tight">{link.label}</span>
-          </Link>
-        ))}
-        
-        <button onClick={onLogout} className="flex flex-col md:hidden items-center justify-center space-y-1 px-4 py-2.5 rounded-2xl text-rose-500 flex-shrink-0 min-w-[80px]">
-          <i className="fa-solid fa-right-from-bracket text-lg"></i>
-          <span className="text-[10px] font-bold whitespace-nowrap tracking-tight">Logout</span>
-        </button>
-      </div>
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-[100] md:top-0 md:bottom-auto md:flex-col md:w-64 md:h-screen md:border-r md:border-t-0 md:justify-start md:py-8 md:z-50 print:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.05)] md:shadow-none pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] flex">
+        <div className="hidden md:flex flex-col px-6 mb-6 flex-shrink-0">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+                <i className="fa-solid fa-clock text-lg"></i>
+              </div>
+              <span className="font-black text-xl tracking-tighter text-slate-900">AttendancePro</span>
+            </div>
+          </div>
+          <div className="mb-4">
+            <LanguageSelector />
+          </div>
+          <div className="p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 flex items-center space-x-3">
+            <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}`} className="w-9 h-9 rounded-full border-2 border-white shadow-sm object-cover" alt="U" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black text-slate-900 truncate">{user.name || 'User'}</p>
+              <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{user.role === 'admin' ? t('admin') : t('employee')}</p>
+            </div>
+          </div>
+        </div>
 
-      <div className="hidden md:block mt-auto px-6 pt-4 border-t border-slate-50">
-        <button onClick={onLogout} className="w-full flex items-center space-x-4 px-5 py-3.5 rounded-2xl text-rose-500 hover:bg-rose-50 transition-all font-bold">
-          <i className="fa-solid fa-right-from-bracket text-xl"></i>
-          <span className="text-[15px] tracking-tight">Sign Out</span>
-        </button>
-      </div>
-    </nav>
+        <div 
+          ref={navRef}
+          className="flex flex-row md:flex-col overflow-x-auto overflow-y-hidden md:overflow-y-auto md:overflow-x-hidden md:flex-1 no-scrollbar flex-nowrap items-center md:items-stretch px-2 md:px-3 py-1 md:py-0 w-full"
+          style={{ WebkitOverflowScrolling: 'touch', justifyContent: 'flex-start' }}
+        >
+          {links.map((link) => (
+            <Link
+              key={link.path}
+              to={link.path}
+              className={`flex flex-col md:flex-row items-center justify-center space-y-1 md:space-y-0 md:space-x-4 px-4 py-2.5 md:px-5 md:py-3.5 rounded-2xl transition-all duration-300 flex-shrink-0 md:flex-shrink-1 min-w-[80px] md:min-w-0 ${
+                location.pathname === link.path ? 'text-indigo-600 md:bg-indigo-50/80 font-bold scale-105 md:scale-100' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
+              }`}
+            >
+              <i className={`fa-solid ${link.icon} text-lg md:text-xl`}></i>
+              <span className="text-[10px] md:text-[15px] font-bold md:font-semibold whitespace-nowrap tracking-tight">{link.label}</span>
+            </Link>
+          ))}
+          
+          <button onClick={onLogout} className="flex flex-col md:hidden items-center justify-center space-y-1 px-4 py-2.5 rounded-2xl text-rose-500 flex-shrink-0 min-w-[80px]">
+            <i className="fa-solid fa-right-from-bracket text-lg"></i>
+            <span className="text-[10px] font-bold whitespace-nowrap tracking-tight">{t('navSignOut')}</span>
+          </button>
+        </div>
+
+        <div className="hidden md:block mt-auto px-6 pt-4 border-t border-slate-50 flex-shrink-0">
+          <button onClick={onLogout} className="w-full flex items-center space-x-4 px-5 py-3.5 rounded-2xl text-rose-500 hover:bg-rose-50 transition-all font-bold">
+            <i className="fa-solid fa-right-from-bracket text-xl"></i>
+            <span className="text-[15px] tracking-tight">{t('navSignOut')}</span>
+          </button>
+        </div>
+      </nav>
+    </>
   );
 };
 
@@ -101,6 +126,18 @@ const App: React.FC = () => {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  }, [user]);
+
+  const refreshUser = useCallback(async () => {
+    if (!user) return;
+    try {
+      const updatedUser = await dataService.getCurrentUserDoc(user.id);
+      if (updatedUser) {
+        setUser(updatedUser);
+      }
+    } catch (err) {
+      console.error("Failed to refresh user:", err);
     }
   }, [user]);
 
@@ -157,11 +194,12 @@ const App: React.FC = () => {
     <HashRouter>
       <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
         <Navigation user={user} onLogout={handleLogout} />
-        <main className="flex-1 pb-24 md:pb-8 md:pl-64 min-w-0 md:min-h-screen">
+        <main className="flex-1 pb-24 pt-16 md:pt-0 md:pb-8 md:pl-64 min-w-0 md:min-h-screen">
           <div className="max-w-5xl mx-auto px-4 pt-6 md:pt-12">
             <Routes>
               <Route path="/" element={<Dashboard user={user} history={history} onAction={refreshData} />} />
               <Route path="/history" element={<History history={history} user={user} onRefresh={refreshData} />} />
+              <Route path="/settings" element={<Settings user={user} onRefreshUser={refreshUser} />} />
               {user.role === 'admin' && (
                 <>
                   <Route path="/admin" element={<AdminReports />} />
