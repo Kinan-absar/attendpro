@@ -86,7 +86,10 @@ class DataService {
     const sanitized: any = {};
     for (const key in data) {
       if (Object.prototype.hasOwnProperty.call(data, key)) {
-        sanitized[key] = this.sanitize(data[key]);
+        const val = this.sanitize(data[key]);
+        if (val !== undefined) {
+          sanitized[key] = val;
+        }
       }
     }
     return sanitized;
@@ -441,7 +444,7 @@ class DataService {
     this.ensureAuth();
     const docData = {
       userId: user.id,
-      userName: user.name,
+      userName: user.name || user.email || 'Unknown User',
       checkIn: serverTimestamp(),
       checkOut: null, 
       projectId: projectId || null,
