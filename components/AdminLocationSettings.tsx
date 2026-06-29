@@ -2,9 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { dataService } from '../services/dataService';
 import { Project, User } from '../types';
 import { useLanguage } from '../utils/LanguageContext';
+import { useDialog } from '../utils/DialogContext';
 
 const AdminLocationSettings: React.FC = () => {
   const { t, isRtl } = useLanguage();
+  const { showAlert, showConfirm } = useDialog();
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +38,10 @@ const AdminLocationSettings: React.FC = () => {
   }, []);
 
   const handleSave = async () => {
-    if (!editingProject?.name) return alert(t('provideValidName'));
+    if (!editingProject?.name) {
+      await showAlert(t('provideValidName'), t('warning'), 'warning');
+      return;
+    }
     setSaving(true);
     try {
       const projectToSave = {
@@ -47,24 +52,28 @@ const AdminLocationSettings: React.FC = () => {
       await fetch();
       setEditingProject(null);
     } catch (err: any) {
-      alert('Failed to save project');
+      await showAlert('Failed to save project', t('error'), 'error');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('confirmDeleteWorksite'))) return;
+    const isConfirmed = await showConfirm(t('confirmDeleteWorksite'), t('warning'), 'warning');
+    if (!isConfirmed) return;
     try {
       await dataService.deleteProject(id);
       setProjects(projects.filter(p => p.id !== id));
     } catch (err: any) {
-      alert('Delete failed');
+      await showAlert('Delete failed', t('error'), 'error');
     }
   };
 
-  const captureLocation = () => {
-    if (!navigator.geolocation) return alert("Geolocation not supported");
+  const captureLocation = async () => {
+    if (!navigator.geolocation) {
+      await showAlert("Geolocation not supported", t('error'), 'error');
+      return;
+    }
     navigator.geolocation.getCurrentPosition((pos) => {
       setEditingProject(prev => ({
         ...prev,

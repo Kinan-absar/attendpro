@@ -4,6 +4,7 @@ import Linkify from './Linkify';
 import { AttendanceRecord, User, Project, Broadcast } from '../types';
 import { dataService } from '../services/dataService';
 import { useLanguage } from '../utils/LanguageContext';
+import { useDialog } from '../utils/DialogContext';
 
 interface Props {
   user: User;
@@ -13,6 +14,7 @@ interface Props {
 
 const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
   const { t } = useLanguage();
+  const { showAlert } = useDialog();
   const [processing, setProcessing] = useState(false);
   const [now, setNow] = useState(new Date());
   const [userProject, setUserProject] = useState<Project | null>(null);
@@ -109,7 +111,8 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
     if (processing) return;
 
     if (!activeRecord && !isInsideZone && userProject?.geofence?.enabled) {
-      return alert(t('geofenceError'));
+      await showAlert(t('geofenceError'), t('warning'), 'warning');
+      return;
     }
 
     setProcessing(true);
@@ -121,14 +124,15 @@ const Dashboard: React.FC<Props> = ({ user, history, onAction }) => {
       } else {
         if (!userProject) {
             setProcessing(false);
-            return alert(t('selectWorksiteError'));
+            await showAlert(t('selectWorksiteError'), t('warning'), 'warning');
+            return;
         }
         await dataService.checkIn(user, loc, userProject.id);
       }
       await onAction();
     } catch (err: any) {
       console.error("Action Error:", err);
-      alert(t('shiftActionFailed') + (err.message || ""));
+      await showAlert(t('shiftActionFailed') + (err.message || ""), t('error'), 'error');
     } finally {
       setProcessing(false);
     }

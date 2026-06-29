@@ -3,6 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { LanguageProvider } from './utils/LanguageContext';
+import { DialogProvider } from './utils/DialogContext';
 
 // Register Service Worker manually
 try {
@@ -30,7 +31,9 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <LanguageProvider>
-      <App />
+      <DialogProvider>
+        <App />
+      </DialogProvider>
     </LanguageProvider>
   </React.StrictMode>
 );

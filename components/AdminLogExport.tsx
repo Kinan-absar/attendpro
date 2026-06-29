@@ -3,9 +3,11 @@ import { dataService } from '../services/dataService';
 import { User, AttendanceRecord } from '../types';
 import { formatMinutesToHHMM } from '../utils/format';
 import { useLanguage } from '../utils/LanguageContext';
+import { useDialog } from '../utils/DialogContext';
 
 const AdminLogExport: React.FC = () => {
   const { t, isRtl } = useLanguage();
+  const { showAlert } = useDialog();
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [fromDate, setFromDate] = useState<string>(
@@ -47,7 +49,7 @@ const AdminLogExport: React.FC = () => {
 
   const handleExport = async () => {
     if (selectedUserIds.length === 0) {
-      alert(t('pleaseSelectEmployee'));
+      await showAlert(t('pleaseSelectEmployee'), t('warning'), 'warning');
       return;
     }
 
@@ -69,7 +71,7 @@ const AdminLogExport: React.FC = () => {
       });
 
       if (filteredLogs.length === 0) {
-        alert(t('noLogsFoundCriteria'));
+        await showAlert(t('noLogsFoundCriteria'), t('info'), 'info');
         return;
       }
 
@@ -112,7 +114,7 @@ const AdminLogExport: React.FC = () => {
       document.body.removeChild(link);
 
     } catch (err: any) {
-      alert(t('exportFailed') + err.message);
+      await showAlert(t('exportFailed') + err.message, t('error'), 'error');
     } finally {
       setExporting(false);
     }

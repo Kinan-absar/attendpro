@@ -38,6 +38,10 @@ const translations: Record<LanguageType, Record<string, string>> = {
     delete: "Delete",
     all: "All",
     warning: "Warning",
+    ok: "OK",
+    confirm: "Confirm",
+    error: "Error",
+    success: "Success",
 
     // Login / Sign Up
     loginTitle: "Access Your Workspace",
@@ -510,6 +514,10 @@ const translations: Record<LanguageType, Record<string, string>> = {
     delete: "حذف",
     all: "الكل",
     warning: "تحذير",
+    ok: "موافق",
+    confirm: "تأكيد",
+    error: "خطأ",
+    success: "نجاح",
 
     // Login / Register
     loginTitle: "الدخول إلى مساحة العمل",
@@ -982,6 +990,11 @@ const translations: Record<LanguageType, Record<string, string>> = {
     delete: "Löschen",
     all: "Alle",
     warning: "Warnung",
+    ok: "OK",
+    confirm: "Bestätigen",
+    error: "Fehler",
+    success: "Erfolg",
+    info: "Info",
 
     // Login
     loginTitle: "Workspace betreten",
@@ -1200,6 +1213,11 @@ const translations: Record<LanguageType, Record<string, string>> = {
     delete: "Supprimer",
     all: "Tous",
     warning: "Avertissement",
+    ok: "OK",
+    confirm: "Confirmer",
+    error: "Erreur",
+    success: "Succès",
+    info: "Info",
 
     // Login
     loginTitle: "Accéder à l'espace",
@@ -1418,6 +1436,11 @@ const translations: Record<LanguageType, Record<string, string>> = {
     delete: "Eliminar",
     all: "Todos",
     warning: "Advertencia",
+    ok: "Aceptar",
+    confirm: "Confirmar",
+    error: "Error",
+    success: "Éxito",
+    info: "Info",
 
     // Login
     loginTitle: "Acceso a su Área",
@@ -1636,6 +1659,11 @@ const translations: Record<LanguageType, Record<string, string>> = {
     delete: "Sil",
     all: "Tümü",
     warning: "Uyarı",
+    ok: "Tamam",
+    confirm: "Onayla",
+    error: "Hata",
+    success: "Başarılı",
+    info: "Bilgi",
 
     // Login
     loginTitle: "Çalışma Alanına Giriş",

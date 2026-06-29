@@ -2,9 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { dataService } from '../services/dataService';
 import { ShiftSchedule, User } from '../types';
 import { useLanguage } from '../utils/LanguageContext';
+import { useDialog } from '../utils/DialogContext';
 
 const AdminShiftManagement: React.FC = () => {
   const { t, isRtl } = useLanguage();
+  const { showAlert, showConfirm } = useDialog();
   const [shifts, setShifts] = useState<ShiftSchedule[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,26 +37,30 @@ const AdminShiftManagement: React.FC = () => {
   }, []);
 
   const handleSave = async () => {
-    if (!editingShift?.name) return alert(t('shiftNameRequired'));
+    if (!editingShift?.name) {
+      await showAlert(t('shiftNameRequired'), t('warning'), 'warning');
+      return;
+    }
     setSaving(true);
     try {
       await dataService.saveShiftSchedule(editingShift);
       await fetchData();
       setEditingShift(null);
     } catch (err) {
-      alert('Save failed');
+      await showAlert('Save failed', t('error'), 'error');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('deleteScheduleConfirm'))) return;
+    const isConfirmed = await showConfirm(t('deleteScheduleConfirm'), t('warning'), 'warning');
+    if (!isConfirmed) return;
     try {
       await dataService.deleteShiftSchedule(id);
       setShifts(shifts.filter(s => s.id !== id));
     } catch (err) {
-      alert('Delete failed');
+      await showAlert('Delete failed', t('error'), 'error');
     }
   };
 

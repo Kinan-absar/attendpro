@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import { dataService } from '../services/dataService';
 import { useLanguage } from '../utils/LanguageContext';
+import { useDialog } from '../utils/DialogContext';
 
 interface Props {
   user: User;
@@ -10,6 +11,7 @@ interface Props {
 
 const Settings: React.FC<Props> = ({ user, onRefreshUser }) => {
   const { t, isRtl } = useLanguage();
+  const { showAlert, showConfirm } = useDialog();
   
   const [name, setName] = useState(user.name || '');
   const [department] = useState(user.department || 'Operations');
@@ -60,17 +62,18 @@ const Settings: React.FC<Props> = ({ user, onRefreshUser }) => {
       await dataService.switchActiveCompany(cid);
       onRefreshUser();
     } catch (err: any) {
-      alert(err.message || 'Failed to switch company context.');
+      await showAlert(err.message || 'Failed to switch company context.', t('error'), 'error');
     }
   };
 
   const handleUnlinkCompany = async (cid: string) => {
-    if (!confirm(t('unlinkConfirm') || "Are you sure you want to unlink this company?")) return;
+    const isConfirmed = await showConfirm(t('unlinkConfirm') || "Are you sure you want to unlink this company?", t('warning'), 'warning');
+    if (!isConfirmed) return;
     try {
       await dataService.unlinkCompany(cid);
       onRefreshUser();
     } catch (err: any) {
-      alert(err.message || 'Failed to unlink company.');
+      await showAlert(err.message || 'Failed to unlink company.', t('error'), 'error');
     }
   };
 
@@ -84,7 +87,7 @@ const Settings: React.FC<Props> = ({ user, onRefreshUser }) => {
   const [resetting, setResetting] = useState(false);
 
   const handleSystemReset = async () => {
-    const confirm1 = confirm(
+    const confirm1 = await showConfirm(
       "⚠️ CRITICAL SYSTEM RESET WARNING ⚠️\n\n" +
       "Are you absolutely sure you want to delete all data and start fresh?\n\n" +
       "This action will permanently delete:\n" +
@@ -93,25 +96,29 @@ const Settings: React.FC<Props> = ({ user, onRefreshUser }) => {
       "• All active worksites and geofencing limits\n" +
       "• All holidays and announcements\n" +
       "• All payroll adjustments\n\n" +
-      "This action IS IRREVERSIBLE. Press OK to verify."
+      "This action IS IRREVERSIBLE. Press OK to verify.",
+      "SYSTEM PURGE",
+      "error"
     );
     if (!confirm1) return;
 
-    const confirm2 = confirm(
+    const confirm2 = await showConfirm(
       "FINAL CONFIRMATION:\n\n" +
       "Are you 100% sure? All users and history will be permanently deleted and the app will reload fresh.\n\n" +
-      "Click OK to execute the purge."
+      "Click OK to execute the purge.",
+      "EXECUTE PURGE",
+      "error"
     );
     if (!confirm2) return;
 
     setResetting(true);
     try {
       await dataService.resetAllSystemData();
-      alert("Database Reset Complete! All records have been successfully purged, and your settings have been restored to default. Your admin account is fully retained.");
+      await showAlert("Database Reset Complete! All records have been successfully purged, and your settings have been restored to default. Your admin account is fully retained.", "SUCCESS", "success");
       window.location.reload();
     } catch (err: any) {
       console.error(err);
-      alert("Database Purge Failed: " + (err.message || err));
+      await showAlert("Database Purge Failed: " + (err.message || err), "ERROR", "error");
     } finally {
       setResetting(false);
     }

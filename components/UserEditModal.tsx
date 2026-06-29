@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import { dataService } from '../services/dataService';
 import { useLanguage } from '../utils/LanguageContext';
+import { useDialog } from '../utils/DialogContext';
 
 interface Props {
   user: Partial<User>;
@@ -11,21 +12,25 @@ interface Props {
 
 const UserEditModal: React.FC<Props> = ({ user: initialUser, onClose, onSave }) => {
   const { t, isRtl } = useLanguage();
+  const { showAlert } = useDialog();
   const [editingUser, setEditingUser] = useState<Partial<User>>(initialUser);
   const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     if (!editingUser?.name || !editingUser?.email || !editingUser?.employeeId) {
-      return alert(t('mandatoryFieldsError'));
+      await showAlert(t('mandatoryFieldsError'), t('warning'), 'warning');
+      return;
     }
 
     if (!editingUser.id) {
       if (!password) {
-        return alert(t('securityKeyError'));
+        await showAlert(t('securityKeyError'), t('warning'), 'warning');
+        return;
       }
       if (password.length < 6) {
-        return alert(t('securityKeyLengthError'));
+        await showAlert(t('securityKeyLengthError'), t('warning'), 'warning');
+        return;
       }
     }
 
@@ -46,7 +51,7 @@ const UserEditModal: React.FC<Props> = ({ user: initialUser, onClose, onSave }) 
       onClose();
     } catch (err: any) {
       console.error("Staff update error:", err);
-      alert(err.message || t('updateFailed'));
+      await showAlert(err.message || t('updateFailed'), t('error'), 'error');
     } finally {
       setSaving(false);
     }

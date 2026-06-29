@@ -5,9 +5,11 @@ import { formatHoursToHHMM } from '../utils/format';
 import History from './History';
 import UserEditModal from './UserEditModal';
 import { useLanguage } from '../utils/LanguageContext';
+import { useDialog } from '../utils/DialogContext';
 
 const AdminReports: React.FC = () => {
   const { t, isRtl } = useLanguage();
+  const { showAlert, showConfirm } = useDialog();
   const [rawLogs, setRawLogs] = useState<AttendanceRecord[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -129,7 +131,7 @@ const AdminReports: React.FC = () => {
   };
 
 
-  const handleExportMudad = (report: MonthlyReport, visibleUsers: User[]) => {
+  const handleExportMudad = async (report: MonthlyReport, visibleUsers: User[]) => {
     setShowExportMenu(false);
 
     const warnings: string[] = [];
@@ -213,16 +215,18 @@ const AdminReports: React.FC = () => {
     });
 
     if (warnings.length > 0) {
-      const proceed = window.confirm(
+      const proceed = await showConfirm(
         `⚠️ The following employees were SKIPPED due to missing WPS data and will NOT appear in the file:\n\n` +
         warnings.map(w => `• ${w}`).join('\n') +
-        `\n\nProceed with ${lines.length} valid employee(s)?`
+        `\n\nProceed with ${lines.length} valid employee(s)?`,
+        t('warning'),
+        'warning'
       );
       if (!proceed) return;
     }
 
     if (lines.length === 0) {
-      alert('No valid employees to export. Please fill in Iqama, Bank Code, IBAN, and salary breakdown for each employee first.');
+      await showAlert('No valid employees to export. Please fill in Iqama, Bank Code, IBAN, and salary breakdown for each employee first.', t('error'), 'error');
       return;
     }
 
@@ -359,14 +363,17 @@ const AdminReports: React.FC = () => {
   }, []); 
 
   const handleAddHoliday = async () => {
-    if (!newHoliday.name || !newHoliday.date) return alert('Name and date required');
+    if (!newHoliday.name || !newHoliday.date) {
+      await showAlert('Name and date required', t('warning'), 'warning');
+      return;
+    }
     setIsSavingHoliday(true);
     try {
       await dataService.saveHoliday(newHoliday);
       setNewHoliday({ name: '', date: '' });
       await fetch();
     } catch (err) { 
-      alert('Failed to save holiday'); 
+      await showAlert('Failed to save holiday', t('error'), 'error'); 
     } finally {
       setIsSavingHoliday(false);
     }
@@ -380,7 +387,7 @@ const AdminReports: React.FC = () => {
       setHolidayToDelete(null);
       await fetch();
     } catch (err) { 
-      alert('Failed to delete holiday'); 
+      await showAlert('Failed to delete holiday', t('error'), 'error'); 
     } finally {
       setIsDeletingHoliday(false);
     }

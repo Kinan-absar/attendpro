@@ -3,9 +3,11 @@ import { dataService } from '../services/dataService';
 import Linkify from './Linkify';
 import { Broadcast, Project, User } from '../types';
 import { useLanguage } from '../utils/LanguageContext';
+import { useDialog } from '../utils/DialogContext';
 
 const AdminBroadcastManagement: React.FC = () => {
   const { t, isRtl } = useLanguage();
+  const { showAlert, showConfirm } = useDialog();
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -38,7 +40,8 @@ const AdminBroadcastManagement: React.FC = () => {
 
   const handleSave = async () => {
     if (!editing?.title || !editing?.message) {
-      return alert(t('headlineMessageRequired'));
+      await showAlert(t('headlineMessageRequired'), t('warning'), 'warning');
+      return;
     }
     setSaving(true);
     try {
@@ -46,21 +49,22 @@ const AdminBroadcastManagement: React.FC = () => {
       await fetchData();
       setEditing(null);
     } catch (err: any) {
-      alert(`Save failed: ${err.message || 'Check Firestore permissions'}`);
+      await showAlert(`Save failed: ${err.message || 'Check Firestore permissions'}`, t('error'), 'error');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('confirmDeleteNotice'))) return;
+    const isConfirmed = await showConfirm(t('confirmDeleteNotice'), t('warning'), 'warning');
+    if (!isConfirmed) return;
     setDeletingId(id);
     try {
       await dataService.deleteBroadcast(id);
       await fetchData();
     } catch (err: any) {
       console.error("Delete failed:", err);
-      alert(`Delete failed: ${err.message || 'Check Firestore rules'}`);
+      await showAlert(`Delete failed: ${err.message || 'Check Firestore rules'}`, t('error'), 'error');
     } finally {
       setDeletingId(null);
     }
@@ -71,7 +75,7 @@ const AdminBroadcastManagement: React.FC = () => {
       await dataService.saveBroadcast({ ...broadcast, active: !broadcast.active });
       await fetchData();
     } catch (err: any) {
-      alert(`Update failed: ${err.message}`);
+      await showAlert(`Update failed: ${err.message}`, t('error'), 'error');
     }
   };
 

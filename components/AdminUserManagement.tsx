@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { dataService } from '../services/dataService';
 import { User } from '../types';
 import { useLanguage } from '../utils/LanguageContext';
+import { useDialog } from '../utils/DialogContext';
 import UserEditModal from './UserEditModal';
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 
 const AdminUserManagement: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
   const { t, isRtl } = useLanguage();
+  const { showAlert, showConfirm } = useDialog();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
@@ -33,12 +35,13 @@ const AdminUserManagement: React.FC<Props> = ({ currentUser, onRefreshUser }) =>
   }, []);
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('confirmDeleteUser'))) return;
+    const isConfirmed = await showConfirm(t('confirmDeleteUser'), t('warning'), 'warning');
+    if (!isConfirmed) return;
     try {
       await dataService.deleteUser(id);
       setUsers(users.filter(u => u.id !== id));
     } catch (err) {
-      alert('Delete failed');
+      await showAlert('Delete failed', t('error'), 'error');
     }
   };
 

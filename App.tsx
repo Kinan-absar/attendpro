@@ -16,6 +16,7 @@ import AdminLogExport from './components/AdminLogExport';
 import Settings from './components/Settings';
 import { useLanguage } from './utils/LanguageContext';
 import { LanguageSelector } from './components/LanguageSelector';
+import { useDialog } from './utils/DialogContext';
 
 const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDOM as any;
 
@@ -23,6 +24,7 @@ const Navigation = ({ user, onLogout, onRefreshUser }: { user: User; onLogout: (
   const location = useLocation();
   const navRef = useRef<HTMLDivElement>(null);
   const { t, isRtl } = useLanguage();
+  const { showAlert } = useDialog();
 
   const handleCompanySwitch = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const cid = e.target.value;
@@ -31,7 +33,7 @@ const Navigation = ({ user, onLogout, onRefreshUser }: { user: User; onLogout: (
       await dataService.switchActiveCompany(cid);
       if (onRefreshUser) onRefreshUser();
     } catch (err: any) {
-      alert(err.message || 'Failed to switch company');
+      await showAlert(err.message || 'Failed to switch company', t('error'), 'error');
     }
   };
 

@@ -4,6 +4,7 @@ import { AttendanceRecord, User, ShiftSchedule } from '../types';
 import { dataService } from '../services/dataService';
 import { formatMinutesToHHMM, calculateEffectiveMinutes } from '../utils/format';
 import { useLanguage } from '../utils/LanguageContext';
+import { useDialog } from '../utils/DialogContext';
 
 interface Props {
   history: AttendanceRecord[];
@@ -13,6 +14,7 @@ interface Props {
 
 const History: React.FC<Props> = ({ history, user, onRefresh }) => {
   const { t } = useLanguage();
+  const { showAlert } = useDialog();
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
   const [saving, setSaving] = useState(false);
   const [startDate, setStartDate] = useState<string>('');
@@ -35,7 +37,7 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
       setEditingRecord(null);
       if (onRefresh) onRefresh();
     } catch (err) { 
-      alert(t('updateFailed')); 
+      await showAlert(t('updateFailed'), t('error'), 'error'); 
     } finally { 
       setSaving(false); 
     }
