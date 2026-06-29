@@ -11,6 +11,7 @@ export interface User {
   grossSalary?: number;
   company?: string;
   companyId?: string; // Unique identifier of the company
+  allowedCompanies?: string[]; // Multiple companies for admin switching
   standardHours?: number; 
   disableOvertime?: boolean;
   disableDeductions?: boolean;

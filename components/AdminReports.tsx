@@ -4,8 +4,10 @@ import { MonthlyReport, AttendanceRecord, User, Project, Holiday } from '../type
 import { formatHoursToHHMM } from '../utils/format';
 import History from './History';
 import UserEditModal from './UserEditModal';
+import { useLanguage } from '../utils/LanguageContext';
 
 const AdminReports: React.FC = () => {
+  const { t, isRtl } = useLanguage();
   const [rawLogs, setRawLogs] = useState<AttendanceRecord[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -317,7 +319,7 @@ const AdminReports: React.FC = () => {
       setUsers(userData);
       setProjects(projectData);
       setGlobalRequiredHours(settings.standardHours);
-      setHolidays(holidayData.sort((a,b) => (a.date || '').localeCompare(b.date || '')));
+      setHolidays(holidayData.sort((a,b) => String(a?.date || '').localeCompare(String(b?.date || ''))));
 
       const activeFromDate = settings.reportFromDate || '';
       const activeToDate = settings.reportToDate || '';
@@ -395,7 +397,7 @@ const AdminReports: React.FC = () => {
     return (
       <div className="p-20 text-center space-y-4">
         <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-        <p className="text-slate-500 font-medium tracking-tight">Syncing Payroll Data...</p>
+        <p className="text-slate-500 font-medium tracking-tight">{t('syncingPayrollData')}</p>
       </div>
     );
   }
@@ -406,9 +408,9 @@ const AdminReports: React.FC = () => {
         <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4">
            <i className="fa-solid fa-shield-halved text-2xl"></i>
         </div>
-        <h2 className="text-xl font-black text-slate-900 uppercase">Access Denied</h2>
+        <h2 className="text-xl font-black text-slate-900 uppercase">{t('accessDenied')}</h2>
         <p className="text-slate-500 text-sm font-medium leading-relaxed">{error}</p>
-        <button onClick={fetch} className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg">Retry Sync</button>
+        <button onClick={fetch} className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg">{t('activeRetrySync')}</button>
       </div>
     );
   }
@@ -418,10 +420,10 @@ const AdminReports: React.FC = () => {
       <div className="space-y-6">
         <button
           onClick={() => setSelectedEmployee(null)}
-          className="flex items-center text-indigo-600 font-bold hover:text-indigo-800 transition-colors no-print"
+          className={`flex items-center text-indigo-600 font-bold hover:text-indigo-800 transition-colors no-print ${isRtl ? 'space-x-reverse' : ''} space-x-2`}
         >
-          <i className="fa-solid fa-arrow-left mr-2"></i>
-          Back to Reports
+          <i className={`fa-solid ${isRtl ? 'fa-arrow-right' : 'fa-arrow-left'}`}></i>
+          <span>{t('backToReports')}</span>
         </button>
         <History history={selectedEmployee.records} user={selectedEmployee.user} onRefresh={async () => {
           const logs = await dataService.getAttendanceHistory(selectedEmployee.user.id);
@@ -436,100 +438,100 @@ const AdminReports: React.FC = () => {
       {/* HEADER SECTION */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Payroll Oversight</h1>
-          <p className="text-slate-500">Review billable hours and shift flags</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight text-start">{t('payrollOversight')}</h1>
+          <p className="text-slate-500 text-start">{t('payrollOversightSub')}</p>
         </div>
         
         <div className="flex flex-wrap items-end gap-3 no-print bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
            <button 
             onClick={() => setShowHolidayModal(true)}
-            className="px-4 py-2.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all flex items-center space-x-2"
+            className="h-10 px-4 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all flex items-center justify-center gap-2"
           >
             <i className="fa-solid fa-calendar-star"></i>
-            <span>Manage Holidays</span>
+            <span>{t('manageHolidaysBtn')}</span>
           </button>
           <div className="flex flex-col">
-            <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-1.5 ml-1 flex items-center">
-              <i className="fa-solid fa-clock-rotate-left mr-1"></i> Std. Hours
+            <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-1.5 ml-1 flex items-center gap-1 text-start">
+              <i className="fa-solid fa-clock-rotate-left"></i> {t('stdHoursLabel')}
             </span>
             <input
               type="number"
               value={globalRequiredHours}
               onChange={(e) => handleGlobalHoursChange(parseFloat(e.target.value) || 0)}
-              className="px-3 py-2 w-20 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              className="h-10 px-3 w-20 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none text-center transition-all"
             />
           </div>
 
           <button 
             onClick={fetch}
             disabled={isSyncing}
-            className="px-4 py-2 bg-slate-50 text-slate-600 border border-slate-200 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center space-x-2"
+            className="h-10 px-4 bg-slate-50 text-slate-600 border border-slate-200 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
           >
             {isSyncing ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-sync"></i>}
-            <span>{isSyncing ? 'Syncing...' : 'Refresh'}</span>
+            <span>{isSyncing ? t('syncing') : t('refresh')}</span>
           </button>
 
           <div className="flex flex-col">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">From</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1 text-start">{t('fromDate')}</label>
             <input 
               type="date" 
               value={fromDate} 
               onChange={(e) => handleFromDateChange(e.target.value)} 
-              className="px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+              className="h-10 px-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
             />
           </div>
           <div className="flex flex-col">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">To</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1 text-start">{t('toDate')}</label>
             <input 
               type="date" 
               value={toDate} 
               onChange={(e) => handleToDateChange(e.target.value)} 
-              className="px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+              className="h-10 px-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
             />
           </div>
           
           <button 
             onClick={handlePrint} 
-            className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2 active:scale-95 transition-all"
+            className="h-10 px-5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 hover:bg-indigo-700 transition-all"
           >
             <i className="fa-solid fa-print"></i>
-            <span>Print</span>
+            <span>{t('printBtn')}</span>
           </button>
 
           <div className="relative" ref={exportMenuRef}>
             <button 
               onClick={() => setShowExportMenu(!showExportMenu)} 
-              className="px-5 py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2 active:scale-95 transition-all"
+              className="h-10 px-5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 hover:bg-slate-800 transition-all"
             >
               <i className="fa-solid fa-file-export"></i>
-              <span>Export</span>
-              <i className={`fa-solid fa-chevron-down ml-1 transition-transform ${showExportMenu ? 'rotate-180' : ''}`}></i>
+              <span>{t('exportBtn')}</span>
+              <i className={`fa-solid fa-chevron-down transition-transform ${showExportMenu ? 'rotate-180' : ''}`}></i>
             </button>
             
             {showExportMenu && (
               <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[150] overflow-hidden animate-fadeIn">
                 <button 
                   onClick={handlePrint}
-                  className="w-full text-left px-5 py-4 hover:bg-slate-50 flex items-center space-x-3 transition-colors"
+                  className={`w-full text-start px-5 py-4 hover:bg-slate-50 flex items-center ${isRtl ? 'space-x-reverse' : ''} space-x-3 transition-colors`}
                 >
                   <i className="fa-solid fa-file-pdf text-rose-500"></i>
-                  <span className="text-xs font-black uppercase tracking-widest text-slate-700">1. PDF Report</span>
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-700">{t('pdfReportOption')}</span>
                 </button>
                 <div className="h-px bg-slate-100"></div>
                 <button 
                   onClick={() => reports.forEach(r => handleExportExcel(r, users))}
-                  className="w-full text-left px-5 py-4 hover:bg-slate-50 flex items-center space-x-3 transition-colors"
+                  className={`w-full text-start px-5 py-4 hover:bg-slate-50 flex items-center ${isRtl ? 'space-x-reverse' : ''} space-x-3 transition-colors`}
                 >
                   <i className="fa-solid fa-file-excel text-emerald-500"></i>
-                  <span className="text-xs font-black uppercase tracking-widest text-slate-700">2. Excel / CSV</span>
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-700">{t('excelOption')}</span>
                 </button>
                 <div className="h-px bg-slate-100"></div>
                 <button 
                   onClick={() => reports.forEach(r => handleExportMudad(r, users))}
-                  className="w-full text-left px-5 py-4 hover:bg-slate-50 flex items-center space-x-3 transition-colors"
+                  className={`w-full text-start px-5 py-4 hover:bg-slate-50 flex items-center ${isRtl ? 'space-x-reverse' : ''} space-x-3 transition-colors`}
                 >
                   <i className="fa-solid fa-file-lines text-emerald-600"></i>
-                  <span className="text-xs font-black uppercase tracking-widest text-slate-700">3. Mudad WPS (.txt)</span>
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-700">{t('mudadOption')}</span>
                 </button>
               </div>
             )}
@@ -542,50 +544,50 @@ const AdminReports: React.FC = () => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-6">
            <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full overflow-hidden animate-fadeIn relative">
              {holidayToDelete && (
-               <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-[210] flex items-center justify-center p-8 animate-fadeIn">
-                 <div className="text-center space-y-6 max-w-xs">
-                    <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <i className="fa-solid fa-calendar-xmark text-2xl"></i>
-                    </div>
-                    <h3 className="text-xl font-black text-slate-900 leading-tight">Delete Official Holiday?</h3>
-                    <p className="text-xs font-bold text-slate-500 leading-relaxed uppercase tracking-wide">
-                      This will remove <span className="text-rose-600">"{holidayToDelete.name}"</span> from the global calendar.
-                    </p>
-                    <div className="flex gap-3">
-                      <button onClick={() => setHolidayToDelete(null)} disabled={isDeletingHoliday} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>
-                      <button onClick={handleConfirmDeleteHoliday} disabled={isDeletingHoliday} className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-rose-700 transition-all">
-                        {isDeletingHoliday ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Confirm Delete'}
-                      </button>
-                    </div>
-                 </div>
-               </div>
+                <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-[210] flex items-center justify-center p-8 animate-fadeIn">
+                  <div className="text-center space-y-6 max-w-xs">
+                     <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                       <i className="fa-solid fa-calendar-xmark text-2xl"></i>
+                     </div>
+                     <h3 className="text-xl font-black text-slate-900 leading-tight">{t('deleteOfficialHoliday')}</h3>
+                     <p className="text-xs font-bold text-slate-500 leading-relaxed uppercase tracking-wide">
+                       {t('removeHolidayConfirm1') || "This will remove"} <span className="text-rose-600">"{holidayToDelete.name}"</span> {t('removeHolidayConfirm2') || "from the global calendar."}
+                     </p>
+                     <div className="flex gap-3">
+                       <button onClick={() => setHolidayToDelete(null)} disabled={isDeletingHoliday} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">{t('cancel')}</button>
+                       <button onClick={handleConfirmDeleteHoliday} disabled={isDeletingHoliday} className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-rose-700 transition-all">
+                         {isDeletingHoliday ? <i className="fa-solid fa-circle-notch fa-spin"></i> : t('confirmDelete')}
+                       </button>
+                     </div>
+                  </div>
+                </div>
              )}
 
              <div className="bg-rose-500 p-8 text-white flex justify-between items-center">
-               <div>
-                  <h2 className="text-xl font-black">Official Holidays</h2>
-                  <p className="text-[10px] font-bold text-rose-100 uppercase tracking-widest mt-1">Non-Working Date Management</p>
-               </div>
-               <button onClick={() => setShowHolidayModal(false)} className="text-white/60 hover:text-white transition-colors">
-                  <i className="fa-solid fa-circle-xmark text-2xl"></i>
-               </button>
+                <div className="text-start">
+                   <h2 className="text-xl font-black">{t('officialHolidays') || "Official Holidays"}</h2>
+                   <p className="text-[10px] font-bold text-rose-100 uppercase tracking-widest mt-1">{t('nonWorkingDateMgmt') || "Non-Working Date Management"}</p>
+                </div>
+                <button onClick={() => setShowHolidayModal(false)} className="text-white/60 hover:text-white transition-colors">
+                   <i className="fa-solid fa-circle-xmark text-2xl"></i>
+                </button>
              </div>
              
              <div className="p-8 space-y-6">
                 <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Holiday Name</label>
-                        <input type="text" value={newHoliday.name} onChange={e => setNewHoliday({...newHoliday, name: e.target.value})} placeholder="e.g. Eid Al-Fitr" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1 text-start">{t('holidayName') || "Holiday Name"}</label>
+                        <input type="text" value={newHoliday.name} onChange={e => setNewHoliday({...newHoliday, name: e.target.value})} placeholder="e.g. Eid Al-Fitr" className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 text-start" />
                       </div>
                       <div>
-                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Date</label>
-                        <input type="date" value={newHoliday.date} onChange={e => setNewHoliday({...newHoliday, date: e.target.value})} className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1 text-start">{t('date') || "Date"}</label>
+                        <input type="date" value={newHoliday.date} onChange={e => setNewHoliday({...newHoliday, date: e.target.value})} className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 text-start" />
                       </div>
                    </div>
                    <button onClick={handleAddHoliday} disabled={isSavingHoliday} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all disabled:opacity-50">
                       {isSavingHoliday ? <i className="fa-solid fa-circle-notch fa-spin mr-2"></i> : <i className="fa-solid fa-plus mr-2"></i>}
-                      Add to Calendar
+                      {t('addToCalendar') || "Add to Calendar"}
                    </button>
                 </div>
 
@@ -593,15 +595,15 @@ const AdminReports: React.FC = () => {
                    {holidays.length === 0 ? (
                       <div className="text-center py-10">
                         <i className="fa-solid fa-calendar-day text-3xl text-slate-100 mb-3 block"></i>
-                        <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">No holidays scheduled.</p>
+                        <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">{t('noHolidaysScheduled') || "No holidays scheduled."}</p>
                       </div>
                    ) : holidays.map(h => (
-                      <div key={h.id} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl shadow-sm group hover:border-rose-100 transition-all">
-                        <div className="flex items-center space-x-4">
+                      <div key={h.id} className={`flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl shadow-sm group hover:border-rose-100 transition-all ${isRtl ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center ${isRtl ? 'space-x-reverse' : ''} space-x-4`}>
                           <div className="w-10 h-10 bg-rose-50 text-rose-500 rounded-xl flex items-center justify-center">
                             <i className="fa-solid fa-gift"></i>
                           </div>
-                          <div>
+                          <div className="text-start">
                             <p className="font-black text-slate-900 text-xs">{h.name}</p>
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{new Date(h.date).toLocaleDateString()}</p>
                           </div>
@@ -618,30 +620,30 @@ const AdminReports: React.FC = () => {
       )}
 
       {/* FILTER CONTROLS */}
-      <div className="flex flex-wrap gap-4 no-print p-6 bg-slate-50 rounded-[1.5rem] border border-slate-200">
+      <div className={`flex flex-wrap ${isRtl ? 'flex-row-reverse' : ''} gap-4 no-print p-6 bg-slate-50 rounded-[1.5rem] border border-slate-200`}>
          <div className="flex flex-col min-w-[150px]">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Company</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1 text-start">{t('company') || "Company"}</label>
             <select value={selectedCompanyFilter} onChange={(e) => setSelectedCompanyFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-              <option value="all">All Companies</option>
+              <option value="all">{t('allCompanies') || "All Companies"}</option>
               {[...new Set(users.map(u => u.company || 'Absar Alomran'))].sort().map((company, idx) => (
                 <option key={`company-${company || idx}`} value={company}>{company}</option>
               ))}
             </select>
          </div>
          <div className="flex flex-col min-w-[150px]">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Project / Site</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1 text-start">{t('projectSite') || "Project / Site"}</label>
             <select value={selectedProjectFilter} onChange={(e) => setSelectedProjectFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-              <option value="all">All Projects</option>
+              <option value="all">{t('allProjects') || "All Projects"}</option>
               {projects.map((p, idx) => (
                 <option key={`project-${p.id || idx}`} value={p.id}>{p.name}</option>
               ))}
-              <option value="none">Unassigned Site</option>
+              <option value="none">{t('unassignedSite') || "Unassigned Site"}</option>
             </select>
          </div>
          <div className="flex flex-col min-w-[150px]">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Staff Member</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1 text-start">{t('staffMember') || "Staff Member"}</label>
             <select value={selectedEmployeeFilter} onChange={(e) => setSelectedEmployeeFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
-              <option value="all">All Employees</option>
+              <option value="all">{t('allEmployees') || "All Employees"}</option>
               {[...new Set(users.map(u => u.name))].sort().map((name, idx) => (
                 <option key={`employee-${name || idx}`} value={name}>{name}</option>
               ))}
@@ -652,7 +654,7 @@ const AdminReports: React.FC = () => {
       {reports.length === 0 ? (
         <div className="bg-white p-20 rounded-3xl border border-dashed border-slate-300 text-center">
           <i className="fa-solid fa-file-invoice-dollar text-4xl text-slate-200 mb-4"></i>
-          <p className="text-slate-400 font-medium tracking-tight">No attendance data found.</p>
+          <p className="text-slate-400 font-medium tracking-tight">{t('noAttendanceDataFound') || "No attendance data found."}</p>
         </div>
       ) : (
         reports.map((report) => {
@@ -665,7 +667,7 @@ const AdminReports: React.FC = () => {
             else if (selectedProjectFilter === 'none') matchesProject = userAssignedProjectIds.length === 0;
             else matchesProject = userAssignedProjectIds.includes(selectedProjectFilter) || report.employees.some(emp => emp.name === u.name && emp.projectId === selectedProjectFilter);
             return matchesEmployee && matchesCompany && matchesProject;
-          }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+          }).sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
 
           if (visibleUsers.length === 0) return null;
 
@@ -686,7 +688,7 @@ const AdminReports: React.FC = () => {
             if (b === 'none') return -1;
             const pA = projects.find(p => p.id === a)?.name || 'Unknown';
             const pB = projects.find(p => p.id === b)?.name || 'Unknown';
-            return (pA || '').localeCompare(pB || '');
+            return String(pA || '').localeCompare(String(pB || ''));
           });
 
           let grandTotalHours = 0;
@@ -778,29 +780,29 @@ const AdminReports: React.FC = () => {
           const renderUserRow = (data: any, isPrint: boolean) => {
             const { user, stats, grossSalary, absentDeduction, hourlyDeduction, totalDeduction, overtimePay, otherDed, reimb, netSalary, totalAbsentDays, diff } = data;
             return (
-              <tr key={isPrint ? `print-${user.id}` : `ui-${user.id}`} className={`${isPrint ? 'hidden print:table-row' : 'hover:bg-slate-50/50 transition-colors print:hidden'}`}>
-                <td className="px-2 py-2 truncate text-[10px]" title={user.name}>
+              <tr key={isPrint ? `print-${user.id}` : `ui-${user.id}`} className={`${isPrint ? 'hidden print:table-row' : 'hover:bg-slate-50/50 transition-colors print:hidden'} ${isRtl ? 'text-right' : 'text-left'}`}>
+                <td className={`px-2 py-2 truncate text-[10px] ${isRtl ? 'text-right' : 'text-left'}`} title={user.name}>
                   <div className="flex flex-col">
                     {user.isOnLeave && (
                       <div className="flex items-center gap-1 text-[8px] font-black text-indigo-500 uppercase tracking-tighter mb-0.5">
                         <i className="fa-solid fa-plane text-[7px]"></i>
-                        <span>On Leave</span>
+                        <span>{t('onLeave') || "On Leave"}</span>
                       </div>
                     )}
                     <button 
                       onClick={() => setEditingUser(user)}
-                      className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors cursor-pointer text-left no-print"
+                      className={`font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors cursor-pointer ${isRtl ? 'text-right' : 'text-left'} no-print`}
                     >
                       {user.name}
                     </button>
-                    <span className="hidden print:inline font-bold text-slate-900 text-[10px]">
+                    <span className={`hidden print:inline font-bold text-slate-900 text-[10px] ${isRtl ? 'text-right' : 'text-left'}`}>
                       {user.name}
                     </span>
                   </div>
                 </td>
                 <td className="px-1 py-2 text-center font-bold text-slate-500 no-print">{stats.shiftCount}</td>
-                <td className="px-1 py-2 text-right font-mono font-bold no-print">{formatHoursToHHMM(stats.totalHours)}</td>
-                <td className={`px-1 py-2 text-right font-mono font-bold no-print ${diff < -0.01 ? 'text-rose-500' : diff > 0.01 ? 'text-emerald-500' : 'text-slate-400'}`}>
+                <td className={`px-1 py-2 font-mono font-bold no-print ${isRtl ? 'text-left' : 'text-right'}`}>{formatHoursToHHMM(stats.totalHours)}</td>
+                <td className={`px-1 py-2 font-mono font-bold no-print ${isRtl ? 'text-left' : 'text-right'} ${diff < -0.01 ? 'text-rose-500' : diff > 0.01 ? 'text-emerald-500' : 'text-slate-400'}`}>
                   {diff > 0 ? '+' : ''}{formatHoursToHHMM(Math.abs(diff))}
                 </td>
                 <td className="px-1 py-2 text-center no-print">
@@ -808,17 +810,17 @@ const AdminReports: React.FC = () => {
                      <span className="px-1.5 py-0.5 bg-rose-500 text-white rounded text-[8px] font-black">{stats.flaggedCount}F</span>
                   ) : <i className="fa-solid fa-circle-check text-emerald-400 text-[8px]"></i>}
                 </td>
-                <td className="px-2 py-2 text-right font-mono font-bold text-slate-600">{grossSalary.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                <td className="px-2 py-2 text-right font-mono font-bold text-rose-400">
+                <td className={`px-2 py-2 font-mono font-bold text-slate-600 ${isRtl ? 'text-left' : 'text-right'}`}>{grossSalary.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                <td className={`px-2 py-2 font-mono font-bold text-rose-400 ${isRtl ? 'text-left' : 'text-right'}`}>
                    {absentDeduction > 0 ? `-${absentDeduction.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
                 </td>
-                <td className="px-2 py-2 text-right font-mono font-bold text-rose-400">
+                <td className={`px-2 py-2 font-mono font-bold text-rose-400 ${isRtl ? 'text-left' : 'text-right'}`}>
                    {hourlyDeduction > 0 ? `-${hourlyDeduction.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
                 </td>
-                <td className="px-2 py-2 text-right font-mono font-bold text-rose-600">
+                <td className={`px-2 py-2 font-mono font-bold text-rose-600 ${isRtl ? 'text-left' : 'text-right'}`}>
                    {totalDeduction > 0 ? totalDeduction.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '-'}
                 </td>
-                <td className="px-2 py-2 text-right font-mono font-bold text-emerald-600">
+                <td className={`px-2 py-2 font-mono font-bold text-emerald-600 ${isRtl ? 'text-left' : 'text-right'}`}>
                    {overtimePay > 0 ? `+${overtimePay.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
                 </td>
                 <td className="px-1 py-2 text-center">
@@ -836,13 +838,13 @@ const AdminReports: React.FC = () => {
                   <input type="number" value={payrollAdjustments[`${report.year}-${report.month}-${user.id}`]?.reimbursements || ''} onChange={(e) => handleValueChange(user.id, report.year, report.month, 'reimbursements', parseFloat(e.target.value) || 0)} className="w-12 px-1 py-0.5 bg-emerald-50 border border-emerald-100 rounded text-right font-mono text-[9px] font-bold text-emerald-700 outline-none no-print-input" />
                   <span className="hidden print:inline font-mono font-bold text-emerald-700 text-[9px]">{reimb > 0 ? `+${reimb}` : '-'}</span>
                 </td>
-                <td className="px-3 py-2 text-right">
+                <td className={`px-3 py-2 ${isRtl ? 'text-left' : 'text-right'}`}>
                    <span className="font-mono font-black text-slate-900 bg-slate-100 px-1.5 py-1 rounded">
                      {netSalary.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                    </span>
                 </td>
                 <td className="px-4 py-2 text-right no-print">
-                  <button onClick={() => handleViewEmployee(user.name)} className="w-6 h-6 rounded bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors" title="Logs"><i className="fa-solid fa-magnifying-glass-chart text-[8px]"></i></button>
+                  <button onClick={() => handleViewEmployee(user.name)} className="w-6 h-6 rounded bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors" title={t('logs') || "Logs"}><i className="fa-solid fa-magnifying-glass-chart text-[8px]"></i></button>
                 </td>
               </tr>
             );
@@ -850,17 +852,17 @@ const AdminReports: React.FC = () => {
 
           return (
             <div key={`${report.year}-${report.month}`} className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-12 card relative">
-              <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-6 items-center justify-between no-print">
-                <div className="flex items-center space-x-4">
+              <div className={`px-8 py-6 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-6 items-center justify-between no-print ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center ${isRtl ? 'space-x-reverse' : ''} space-x-4`}>
                   <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
                     <i className="fa-solid fa-calendar-check text-xl"></i>
                   </div>
-                  <div>
+                  <div className="text-start">
                     <h3 className="text-xl font-black text-slate-900 leading-none mb-1">
                       {new Date(report.year, new Date(`${report.month} 1, ${report.year}`).getMonth()).toLocaleString('default', { month: 'long' })} {report.year}
                     </h3>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                      {selectedCompanyFilter !== 'all' ? selectedCompanyFilter : 'Payroll Analysis'}
+                      {selectedCompanyFilter !== 'all' ? selectedCompanyFilter : (t('payrollAnalysis') || 'Payroll Analysis')}
                     </p>
                   </div>
                 </div>
@@ -870,20 +872,20 @@ const AdminReports: React.FC = () => {
                 <table className="w-full text-[10px] table-auto print:table-auto min-w-[850px] print:min-w-full print:w-full">
                   <thead>
                     <tr className="bg-slate-50/50">
-                      <th className="px-2 py-4 text-left font-black text-slate-400 uppercase text-[9px] tracking-widest w-[14%] print:w-[25%]">Employee</th>
-                      <th className="px-1 py-4 text-center font-black text-slate-400 uppercase text-[9px] tracking-widest no-print w-[6%]">Shifts</th>
-                      <th className="px-1 py-4 text-right font-black text-slate-400 uppercase text-[9px] tracking-widest no-print w-[8%]">Hours</th>
-                      <th className="px-1 py-4 text-right font-black text-slate-400 uppercase text-[9px] tracking-widest no-print w-[8%]">Diff</th>
-                      <th className="px-1 py-4 text-center font-black text-rose-500 uppercase text-[9px] tracking-widest no-print w-[6%]">Flags</th>
-                      <th className="px-2 py-4 text-right font-black text-indigo-400 uppercase text-[9px] tracking-widest w-[10%] print:w-[12%]">Gross</th>
-                      <th className="px-2 py-4 text-right font-black text-rose-400/70 uppercase text-[8px] tracking-widest w-[7%]">Day Ded.</th>
-                      <th className="px-2 py-4 text-right font-black text-rose-400/70 uppercase text-[8px] tracking-widest w-[7%]">Hour Ded.</th>
-                      <th className="px-2 py-4 text-right font-black text-rose-500 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">Total Ded.</th>
-                      <th className="px-2 py-4 text-right font-black text-emerald-400 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">OT</th>
-                      <th className="px-1 py-4 text-center font-black text-rose-400 uppercase text-[9px] tracking-widest w-[6%] print:w-[8%]">Abs. Days</th>
-                      <th className="px-2 py-4 text-center font-black text-rose-600 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">Other Ded.</th>
-                      <th className="px-2 py-4 text-center font-black text-emerald-600 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">Reimb.</th>
-                      <th className="px-3 py-4 text-right font-black text-slate-900 uppercase text-[9px] tracking-widest w-[10%] print:w-[15%]">Net</th>
+                      <th className={`px-2 py-4 font-black text-slate-400 uppercase text-[9px] tracking-widest w-[14%] print:w-[25%] ${isRtl ? 'text-right' : 'text-left'}`}>{t('activeColEmployee') || "Employee"}</th>
+                      <th className="px-1 py-4 text-center font-black text-slate-400 uppercase text-[9px] tracking-widest no-print w-[6%]">{t('shiftsHeader') || "Shifts"}</th>
+                      <th className={`px-1 py-4 font-black text-slate-400 uppercase text-[9px] tracking-widest no-print w-[8%] ${isRtl ? 'text-left' : 'text-right'}`}>{t('hoursHeader') || "Hours"}</th>
+                      <th className={`px-1 py-4 font-black text-slate-400 uppercase text-[9px] tracking-widest no-print w-[8%] ${isRtl ? 'text-left' : 'text-right'}`}>{t('diffHeader') || "Diff"}</th>
+                      <th className="px-1 py-4 text-center font-black text-rose-500 uppercase text-[9px] tracking-widest no-print w-[6%]">{t('flagsHeader') || "Flags"}</th>
+                      <th className={`px-2 py-4 font-black text-indigo-400 uppercase text-[9px] tracking-widest w-[10%] print:w-[12%] ${isRtl ? 'text-left' : 'text-right'}`}>{t('grossHeader') || "Gross"}</th>
+                      <th className={`px-2 py-4 font-black text-rose-400/70 uppercase text-[8px] tracking-widest w-[7%] ${isRtl ? 'text-left' : 'text-right'}`}>{t('dayDedHeader') || "Day Ded."}</th>
+                      <th className={`px-2 py-4 font-black text-rose-400/70 uppercase text-[8px] tracking-widest w-[7%] ${isRtl ? 'text-left' : 'text-right'}`}>{t('hourDedHeader') || "Hour Ded."}</th>
+                      <th className={`px-2 py-4 font-black text-rose-500 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%] ${isRtl ? 'text-left' : 'text-right'}`}>{t('totalDedHeader') || "Total Ded."}</th>
+                      <th className={`px-2 py-4 font-black text-emerald-400 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%] ${isRtl ? 'text-left' : 'text-right'}`}>{t('otHeader') || "OT"}</th>
+                      <th className="px-1 py-4 text-center font-black text-rose-400 uppercase text-[9px] tracking-widest w-[6%] print:w-[8%]">{t('absDaysHeader') || "Abs. Days"}</th>
+                      <th className="px-2 py-4 text-center font-black text-rose-600 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">{t('otherDedHeader') || "Other Ded."}</th>
+                      <th className="px-2 py-4 text-center font-black text-emerald-600 uppercase text-[9px] tracking-widest w-[8%] print:w-[10%]">{t('reimbHeader') || "Reimb."}</th>
+                      <th className={`px-3 py-4 font-black text-slate-900 uppercase text-[9px] tracking-widest w-[10%] print:w-[15%] ${isRtl ? 'text-left' : 'text-right'}`}>{t('netHeader') || "Net"}</th>
                       <th className="px-4 py-4 text-right no-print w-[5%]"></th>
                     </tr>
                   </thead>
@@ -896,13 +898,13 @@ const AdminReports: React.FC = () => {
                       const groupUsers = calculatedUsers.filter(d => d.pId === pId);
                       if (groupUsers.length === 0) return null;
 
-                      const projectName = pId === 'none' ? 'No Project Assigned' : (projects.find(p => p.id === pId)?.name || 'Unknown Project');
+                      const projectName = pId === 'none' ? (t('noProjectAssigned') || 'No Project Assigned') : (projects.find(p => p.id === pId)?.name || t('unknownProject') || 'Unknown Project');
                       const groupNet = groupUsers.reduce((sum, d) => sum + d.netSalary, 0);
 
                       return (
                         <React.Fragment key={pId}>
                           <tr className="bg-slate-100/50 hidden print:table-row">
-                            <td colSpan={13} className="px-4 py-2 font-black text-slate-900 uppercase tracking-widest text-[9px]">
+                            <td colSpan={13} className={`px-4 py-2 font-black text-slate-900 uppercase tracking-widest text-[9px] ${isRtl ? 'text-right' : 'text-left'}`}>
                               <i className="fa-solid fa-location-dot mr-2 text-indigo-500"></i>
                               {projectName}
                             </td>
@@ -910,14 +912,14 @@ const AdminReports: React.FC = () => {
                           {groupUsers.map(data => renderUserRow(data, true))}
                           <tr className="bg-slate-50 font-bold border-t border-slate-200 hidden print:table-row">
                             <td colSpan={13} className="px-2 py-2 print:hidden">
-                               <div className="flex justify-between items-center">
-                                 <span className="uppercase text-[8px] tracking-widest text-slate-500">Project Subtotal</span>
+                               <div className={`flex justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                 <span className="uppercase text-[8px] tracking-widest text-slate-500">{t('projectSubtotal') || "Project Subtotal"}</span>
                                  <span className="font-mono text-slate-900 text-[9px]">{groupNet.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
                                </div>
                             </td>
                             <td colSpan={8} className="px-2 py-2 hidden print:table-cell">
-                               <div className="flex justify-between items-center">
-                                 <span className="uppercase text-[8px] tracking-widest text-slate-500">Project Subtotal</span>
+                               <div className={`flex justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                 <span className="uppercase text-[8px] tracking-widest text-slate-500">{t('projectSubtotal') || "Project Subtotal"}</span>
                                  <span className="font-mono text-slate-900 text-[9px]">{groupNet.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
                                </div>
                             </td>
@@ -926,21 +928,21 @@ const AdminReports: React.FC = () => {
                       );
                     })}
                     <tr className="bg-slate-900 text-white font-black tfoot-print">
-                      <td className="px-2 py-4 uppercase text-[8px] tracking-widest overflow-hidden whitespace-nowrap">
-                        <span className="print:hidden">Group Totals</span>
-                        <span className="hidden print:inline">Grand Totals</span>
+                      <td className={`px-2 py-4 uppercase text-[8px] tracking-widest overflow-hidden whitespace-nowrap ${isRtl ? 'text-right' : 'text-left'}`}>
+                        <span className="print:hidden">{t('groupTotals') || "Group Totals"}</span>
+                        <span className="hidden print:inline">{t('grandTotals') || "Grand Totals"}</span>
                       </td>
                       <td className="px-1 py-4 no-print"></td>
-                      <td className="px-1 py-4 text-right font-mono no-print text-[9px]">{formatHoursToHHMM(grandTotalHours)}</td>
+                      <td className={`px-1 py-4 font-mono no-print text-[9px] ${isRtl ? 'text-left' : 'text-right'}`}>{formatHoursToHHMM(grandTotalHours)}</td>
                       <td className="px-1 py-4 no-print"></td>
                       <td className="px-1 py-4 no-print"></td>
-                      <td className="px-2 py-4 text-right font-mono text-indigo-300 text-[9px]">SR {grandTotalGross.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-2 py-4 text-right font-mono text-rose-300 text-[9px]">-SR {grandTotalDeduc.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-2 py-4 text-right font-mono text-emerald-300 text-[9px]">+SR {grandTotalOT.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className={`px-2 py-4 font-mono text-indigo-300 text-[9px] ${isRtl ? 'text-left' : 'text-right'}`}>SR {grandTotalGross.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className={`px-2 py-4 font-mono text-rose-300 text-[9px] ${isRtl ? 'text-left' : 'text-right'}`}>-SR {grandTotalDeduc.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className={`px-2 py-4 font-mono text-emerald-300 text-[9px] ${isRtl ? 'text-left' : 'text-right'}`}>+SR {grandTotalOT.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
                       <td className="px-1 py-4 text-center font-mono text-rose-300 text-[9px]"></td>
                       <td className="px-2 py-4 text-center font-mono text-rose-400 text-[9px]">-SR {grandTotalOtherDed.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
                       <td className="px-2 py-4 text-center font-mono text-emerald-400 text-[9px]">+SR {grandTotalReimb.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                      <td className="px-3 py-4 text-right font-mono whitespace-nowrap text-[10px] print-black-text text-indigo-100">SR {grandTotalNet.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                      <td className={`px-3 py-4 font-mono whitespace-nowrap text-[10px] print-black-text text-indigo-100 ${isRtl ? 'text-left' : 'text-right'}`}>SR {grandTotalNet.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
                       <td className="px-4 py-4 no-print"></td>
                     </tr>
                   </tbody>

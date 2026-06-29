@@ -47,7 +47,11 @@ class DataService {
   }
 
   private ensureAdmin() {
-    if (!this.currentUser || this.currentUser.role !== 'admin') {
+    if (!this.currentUser) {
+      throw new Error("PERMISSION_DENIED: Admin privileges required.");
+    }
+    const isSuperAdmin = this.currentUser.email === "kinan88m@gmail.com";
+    if (this.currentUser.role !== 'admin' && !isSuperAdmin) {
       throw new Error("PERMISSION_DENIED: Admin privileges required.");
     }
   }
@@ -953,10 +957,18 @@ class DataService {
       ...user, 
       grossSalary: Number(user.grossSalary || 0), 
       standardHours: Number(user.standardHours || 0),
-      companyId: this.currentUser?.companyId || 'ABSAR',
-      company: this.currentUser?.company || 'Absar Alomran Co.'
+      companyId: user.companyId || this.currentUser?.companyId || 'ABSAR',
+      company: user.company || this.currentUser?.company || 'Absar Alomran Co.'
     };
     await setDoc(doc(db, USERS, user.id!), this.sanitize(sanitizedUser), { merge: true });
+    
+    // Update current in-memory session user if they edited themselves
+    if (this.currentUser && user.id === this.currentUser.id) {
+      this.currentUser = {
+        ...this.currentUser,
+        ...sanitizedUser
+      };
+    }
   }
 
   async updateOwnProfile(userId: string, updates: Partial<User>) {
@@ -1104,6 +1116,102 @@ class DataService {
       this.currentUser.companyId = newCid;
       this.currentUser.company = cleanName;
     }
+  }
+
+  async linkAdditionalCompany(companyId: string): Promise<void> {
+    this.ensureAdmin();
+    const cid = companyId.trim().toUpperCase();
+    if (!cid) throw new Error("Company ID cannot be empty.");
+
+    const exists = await this.verifyCompanyExists(cid);
+    if (!exists) {
+      throw new Error(`Company ID "${cid}" does not exist in the database.`);
+    }
+
+    if (!this.currentUser) throw new Error("No active user session found.");
+
+    const currentAllowed = this.currentUser.allowedCompanies || [];
+    // Always include the current/original companyId
+    const originalCompanyId = (this.currentUser.companyId || '').trim().toUpperCase();
+    
+    const uniqueAllowed = new Set([originalCompanyId, ...currentAllowed]);
+    uniqueAllowed.add(cid);
+
+    const updatedList = Array.from(uniqueAllowed);
+    
+    await updateDoc(doc(db, USERS, this.currentUser.id), {
+      allowedCompanies: updatedList
+    });
+
+    this.currentUser.allowedCompanies = updatedList;
+  }
+
+  async unlinkCompany(companyId: string): Promise<void> {
+    this.ensureAdmin();
+    const cid = companyId.trim().toUpperCase();
+    if (!cid) throw new Error("Company ID cannot be empty.");
+
+    if (!this.currentUser) throw new Error("No active user session found.");
+
+    const originalCompanyId = (this.currentUser.companyId || '').trim().toUpperCase();
+    if (cid === originalCompanyId) {
+      throw new Error("You cannot unlink your primary active company context. Switch to another company first.");
+    }
+
+    const currentAllowed = this.currentUser.allowedCompanies || [];
+    const updatedList = currentAllowed.filter(c => c !== cid);
+
+    await updateDoc(doc(db, USERS, this.currentUser.id), {
+      allowedCompanies: updatedList
+    });
+
+    this.currentUser.allowedCompanies = updatedList;
+  }
+
+  async switchActiveCompany(companyId: string): Promise<void> {
+    this.ensureAdmin();
+    const cid = companyId.trim().toUpperCase();
+    if (!cid) throw new Error("Company ID cannot be empty.");
+
+    if (!this.currentUser) throw new Error("No active user session found.");
+
+    // Verify it's either their current company or in their allowed list
+    const originalCompanyId = (this.currentUser.companyId || '').trim().toUpperCase();
+    const allowed = this.currentUser.allowedCompanies || [];
+    if (cid !== originalCompanyId && !allowed.includes(cid)) {
+      throw new Error("You do not have access to switch to this Company ID.");
+    }
+
+    // Try to get the company name
+    let targetCompanyName = 'Corporate';
+    if (cid === 'ABSAR') {
+      targetCompanyName = 'Absar Alomran Co.';
+    } else if (cid === '1') {
+      targetCompanyName = 'Corporate Group 1';
+    }
+
+    try {
+      const snap = await getDoc(doc(db, COMPANIES, cid));
+      if (snap.exists()) {
+        targetCompanyName = snap.data()?.name || targetCompanyName;
+      }
+    } catch (e) {
+      console.warn("Permission or read error fetching target company name, using fallback.", e);
+    }
+
+    const currentAllowed = this.currentUser.allowedCompanies || [];
+    const uniqueAllowed = new Set([originalCompanyId, ...currentAllowed]);
+    const updatedList = Array.from(uniqueAllowed);
+
+    await updateDoc(doc(db, USERS, this.currentUser.id), {
+      companyId: cid,
+      company: targetCompanyName,
+      allowedCompanies: updatedList
+    });
+
+    this.currentUser.companyId = cid;
+    this.currentUser.company = targetCompanyName;
+    this.currentUser.allowedCompanies = updatedList;
   }
 
   async changeOwnPassword(newPassword: string) {

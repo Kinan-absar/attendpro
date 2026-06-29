@@ -19,10 +19,21 @@ import { LanguageSelector } from './components/LanguageSelector';
 
 const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDOM as any;
 
-const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
+const Navigation = ({ user, onLogout, onRefreshUser }: { user: User; onLogout: () => void; onRefreshUser?: () => void }) => {
   const location = useLocation();
   const navRef = useRef<HTMLDivElement>(null);
-  const { t } = useLanguage();
+  const { t, isRtl } = useLanguage();
+
+  const handleCompanySwitch = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const cid = e.target.value;
+    if (!cid || cid === user.companyId) return;
+    try {
+      await dataService.switchActiveCompany(cid);
+      if (onRefreshUser) onRefreshUser();
+    } catch (err: any) {
+      alert(err.message || 'Failed to switch company');
+    }
+  };
 
   const links = [
     { path: '/', label: t('navHome'), icon: 'fa-house' },
@@ -46,7 +57,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
     <>
       {/* Mobile Top Bar */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white/95 backdrop-blur-md border-b border-slate-200 z-[90] flex items-center justify-between px-4 print:hidden shadow-sm">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md">
             <i className="fa-solid fa-clock text-sm"></i>
           </div>
@@ -55,10 +66,14 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
         <LanguageSelector />
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-[100] md:top-0 md:bottom-auto md:flex-col md:w-64 md:h-screen md:border-r md:border-t-0 md:justify-start md:py-8 md:z-50 print:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.05)] md:shadow-none pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] flex">
+      <nav className={`fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-[100] md:top-0 md:bottom-auto md:flex-col md:w-64 md:h-screen md:border-t-0 md:justify-start md:py-8 md:z-50 print:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.05)] md:shadow-none pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] flex ${
+        isRtl 
+          ? 'md:right-0 md:left-auto md:border-l' 
+          : 'md:left-0 md:right-auto md:border-r'
+      }`}>
         <div className="hidden md:flex flex-col px-6 mb-6 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
                 <i className="fa-solid fa-clock text-lg"></i>
               </div>
@@ -68,13 +83,28 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
           <div className="mb-4">
             <LanguageSelector />
           </div>
-          <div className="p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 flex items-center space-x-3">
+          <div className="p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 flex items-center gap-3">
             <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}`} className="w-9 h-9 rounded-full border-2 border-white shadow-sm object-cover" alt="U" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-black text-slate-900 truncate">{user.name || 'User'}</p>
               <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{user.role === 'admin' ? t('admin') : t('employee')}</p>
             </div>
           </div>
+          {user.role === 'admin' && (
+            <div className="mt-3 px-1 text-start">
+              <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">{t('activeCompany') || "Active Company"}</label>
+              <select
+                value={user.companyId || 'ABSAR'}
+                onChange={handleCompanySwitch}
+                className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 outline-none cursor-pointer transition-all"
+              >
+                <option value={user.companyId}>{user.company || user.companyId}</option>
+                {(user.allowedCompanies || []).filter(c => c !== user.companyId).map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div 
@@ -86,7 +116,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
             <Link
               key={link.path}
               to={link.path}
-              className={`flex flex-col md:flex-row items-center justify-center space-y-1 md:space-y-0 md:space-x-4 px-4 py-2.5 md:px-5 md:py-3.5 rounded-2xl transition-all duration-300 flex-shrink-0 md:flex-shrink-1 min-w-[80px] md:min-w-0 ${
+              className={`flex flex-col md:flex-row items-center justify-center md:justify-start space-y-1 md:space-y-0 md:gap-4 px-4 py-2.5 md:px-5 md:py-3.5 rounded-2xl transition-all duration-300 flex-shrink-0 md:flex-shrink-1 min-w-[80px] md:min-w-0 md:w-full ${
                 location.pathname === link.path ? 'text-indigo-600 md:bg-indigo-50/80 font-bold scale-105 md:scale-100' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
               }`}
             >
@@ -102,7 +132,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
         </div>
 
         <div className="hidden md:block mt-auto px-6 pt-4 border-t border-slate-50 flex-shrink-0">
-          <button onClick={onLogout} className="w-full flex items-center space-x-4 px-5 py-3.5 rounded-2xl text-rose-500 hover:bg-rose-50 transition-all font-bold">
+          <button onClick={onLogout} className="w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl text-rose-500 hover:bg-rose-50 transition-all font-bold">
             <i className="fa-solid fa-right-from-bracket text-xl"></i>
             <span className="text-[15px] tracking-tight">{t('navSignOut')}</span>
           </button>
@@ -113,6 +143,7 @@ const Navigation = ({ user, onLogout }: { user: User; onLogout: () => void }) =>
 };
 
 const App: React.FC = () => {
+  const { isRtl } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [history, setHistory] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,8 +224,8 @@ const App: React.FC = () => {
   return (
     <HashRouter>
       <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
-        <Navigation user={user} onLogout={handleLogout} />
-        <main className="flex-1 pb-24 pt-16 md:pt-0 md:pb-8 md:pl-64 min-w-0 md:min-h-screen">
+        <Navigation user={user} onLogout={handleLogout} onRefreshUser={refreshUser} />
+        <main className={`flex-1 pb-24 pt-16 md:pt-0 md:pb-8 min-w-0 md:min-h-screen ${isRtl ? 'md:pr-64 md:pl-0' : 'md:pl-64 md:pr-0'}`}>
           <div className="max-w-5xl mx-auto px-4 pt-6 md:pt-12">
             <Routes>
               <Route path="/" element={<Dashboard user={user} history={history} onAction={refreshData} />} />
@@ -206,7 +237,7 @@ const App: React.FC = () => {
                   <Route path="/admin/logs-export" element={<AdminLogExport />} />
                   <Route path="/admin/active" element={<ActiveEmployees />} />
                   <Route path="/admin/location" element={<AdminLocationSettings />} />
-                  <Route path="/admin/users" element={<AdminUserManagement />} />
+                  <Route path="/admin/users" element={<AdminUserManagement currentUser={user} onRefreshUser={refreshUser} />} />
                   <Route path="/admin/shifts" element={<AdminShiftManagement />} />
                   <Route path="/admin/broadcasts" element={<AdminBroadcastManagement />} />
                 </>

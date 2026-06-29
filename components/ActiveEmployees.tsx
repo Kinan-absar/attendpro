@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { dataService } from '../services/dataService';
 import { formatMinutesToHHMM } from '../utils/format';
 import { AttendanceRecord, User } from '../types';
+import { useLanguage } from '../utils/LanguageContext';
 
 interface ActiveShift {
   user: User;
@@ -10,6 +11,7 @@ interface ActiveShift {
 }
 
 const ActiveEmployees: React.FC = () => {
+  const { t, isRtl } = useLanguage();
   const [active, setActive] = useState<ActiveShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
@@ -57,9 +59,9 @@ const ActiveEmployees: React.FC = () => {
     } catch (err: any) {
       console.error("Failed to load active employees", err);
       if (err.message?.includes('PERMISSION_DENIED') || err.code === 'permission-denied') {
-        setError("DATABASE_RESTRICTED: You don't have permission to view staff logs. Ensure your user profile is set to 'admin' and Firestore Rules are published.");
+        setError(t('activeDatabaseRestricted'));
       } else {
-        setError("Failed to sync active operations.");
+        setError(t('activeFailedSync'));
       }
     } finally {
       setLoading(false);
@@ -81,32 +83,34 @@ const ActiveEmployees: React.FC = () => {
   if (loading && active.length === 0) return (
     <div className="p-20 text-center">
       <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-      <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Scanning Active Workforce...</p>
+      <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('activeScanning')}</p>
     </div>
   );
 
   if (error) return (
     <div className="p-10 max-w-2xl mx-auto bg-rose-50 border border-rose-100 rounded-3xl text-center space-y-4">
       <i className="fa-solid fa-shield-halved text-4xl text-rose-500"></i>
-      <h3 className="text-lg font-black text-rose-900 uppercase">Access Restricted</h3>
+      <h3 className="text-lg font-black text-rose-900 uppercase">{t('activeAccessRestricted')}</h3>
       <p className="text-sm text-rose-700 font-medium leading-relaxed">{error}</p>
-      <button onClick={load} className="px-6 py-2 bg-rose-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest">Retry Sync</button>
+      <button onClick={load} className="px-6 py-2 bg-rose-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest">{t('activeRetrySync')}</button>
     </div>
   );
 
   return (
-    <div className="space-y-8 animate-fadeIn pb-20">
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Active Operations</h1>
-          <p className="text-slate-500">Real-time status of staff currently on shift</p>
+    <div className={`space-y-8 animate-fadeIn pb-20 ${isRtl ? 'text-right' : 'text-left'}`}>
+      <div className={`flex justify-between items-end ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className="text-start">
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">{t('activeOperations')}</h1>
+          <p className="text-slate-500">{t('activeSubtext')}</p>
         </div>
-        <div className="flex gap-4">
+        <div className={`flex gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <button onClick={load} className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 rounded-xl transition-all shadow-sm">
             <i className="fa-solid fa-rotate"></i>
           </button>
-          <div className="bg-indigo-600 text-white px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 flex items-center">
-            {active.length} Live {active.length === 1 ? 'User' : 'Users'}
+          <div className={`bg-indigo-600 text-white px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 flex items-center gap-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <span>{active.length}</span>
+            <span>{t('activeLive')}</span>
+            <span>{active.length === 1 ? t('activeUser') : t('activeUsers')}</span>
           </div>
         </div>
       </div>
@@ -116,18 +120,18 @@ const ActiveEmployees: React.FC = () => {
           <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <i className="fa-solid fa-moon text-slate-200 text-2xl"></i>
           </div>
-          <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No employees currently clocked in.</p>
+          <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('noActiveStaff')}</p>
         </div>
       ) : (
         <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full text-start">
               <thead>
                 <tr className="bg-slate-50/50">
-                  <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee</th>
-                  <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Clocked In At</th>
-                  <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Site Presence</th>
-                  <th className="px-8 py-5 text-right text-[10px] font-black uppercase text-slate-400 tracking-widest">Shift Duration</th>
+                  <th className={`px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t('activeColEmployee')}</th>
+                  <th className={`px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t('activeColClockedInAt')}</th>
+                  <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">{t('activeColSitePresence')}</th>
+                  <th className={`px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest ${isRtl ? 'text-left' : 'text-right'}`}>{t('activeColShiftDuration')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -140,7 +144,7 @@ const ActiveEmployees: React.FC = () => {
                   return (
                     <tr key={a.user.id} className="hover:bg-slate-50/50 transition-colors group">
                       <td className="px-8 py-5">
-                        <div className="flex items-center space-x-4">
+                        <div className={`flex items-center gap-4 ${isRtl ? 'flex-row-reverse text-right' : 'text-left'}`}>
                           <img 
                             src={a.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.user.name)}&background=random`} 
                             className="w-11 h-11 rounded-2xl border border-slate-100 shadow-sm" 
@@ -152,27 +156,27 @@ const ActiveEmployees: React.FC = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-5">
+                      <td className={`px-6 py-5 text-start`}>
                         <div className="flex flex-col">
                            <span className="font-mono font-bold text-slate-700">
                              {a.record.checkIn.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                            </span>
                            {lastExit && !isInside && (
                              <span className="text-[8px] font-black text-rose-400 uppercase tracking-tighter">
-                               Left at {lastExit.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                               {t('activeLeftAt')} {lastExit.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                              </span>
                            )}
                         </div>
                       </td>
                       <td className="px-6 py-5 text-center">
-                        <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest gap-2 ${
+                        <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest gap-2 ${isRtl ? 'flex-row-reverse' : ''} ${
                           isInside ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
                         }`}>
                           <i className={`fa-solid ${isInside ? 'fa-location-dot' : 'fa-person-walking-arrow-right'}`}></i>
-                          {isInside ? 'On Site' : 'Away'}
+                          {isInside ? t('activeOnSite') : t('activeAway')}
                         </span>
                       </td>
-                      <td className="px-8 py-5 text-right">
+                      <td className={`px-8 py-5 ${isRtl ? 'text-left' : 'text-right'}`}>
                         <span className="text-sm font-black text-indigo-600">
                           {getDuration(a.record.checkIn)}
                         </span>

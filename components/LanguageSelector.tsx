@@ -28,7 +28,7 @@ export const LanguageSelector: React.FC<{ light?: boolean }> = ({ light = false 
   }, []);
 
   return (
-    <div className="relative inline-block text-left" ref={containerRef} id="lang-selector-container">
+    <div className="relative inline-block text-start" ref={containerRef} id="lang-selector-container">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-black tracking-wide uppercase transition-all duration-300 outline-none select-none ${

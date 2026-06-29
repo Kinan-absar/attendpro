@@ -138,20 +138,20 @@ const History: React.FC<Props> = ({ history, user, onRefresh }) => {
         </div>
         <div className="flex flex-wrap items-end gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex flex-col">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">{t('fromDate')}</label>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1 text-start">{t('fromDate')}</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10 px-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
           </div>
           <div className="flex flex-col">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">{t('toDate')}</label>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1 text-start">{t('toDate')}</label>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10 px-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
           </div>
           <div className="flex gap-2">
-            {(startDate || endDate) && <button onClick={() => { setStartDate(''); setEndDate(''); }} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest">{t('clear')}</button>}
-            <button onClick={handleExportExcel} className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2 active:scale-95 transition-all">
+            {(startDate || endDate) && <button onClick={() => { setStartDate(''); setEndDate(''); }} className="h-10 px-4 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center hover:bg-slate-200 transition-all">{t('clear')}</button>}
+            <button onClick={handleExportExcel} className="h-10 px-5 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 hover:bg-emerald-700 transition-all">
               <i className="fa-solid fa-file-excel"></i>
               <span>{t('excel')}</span>
             </button>
-            <button onClick={() => window.print()} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center space-x-2 active:scale-95 transition-all">
+            <button onClick={() => window.print()} className="h-10 px-5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 hover:bg-indigo-700 transition-all">
               <i className="fa-solid fa-print"></i>
               <span>{t('print')}</span>
             </button>

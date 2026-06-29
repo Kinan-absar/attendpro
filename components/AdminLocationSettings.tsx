@@ -1,9 +1,10 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { dataService } from '../services/dataService';
 import { Project, User } from '../types';
+import { useLanguage } from '../utils/LanguageContext';
 
 const AdminLocationSettings: React.FC = () => {
+  const { t, isRtl } = useLanguage();
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -11,41 +12,6 @@ const AdminLocationSettings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [permissionError, setPermissionError] = useState(false);
   const [userSearch, setUserSearch] = useState('');
-  const [resetting, setResetting] = useState(false);
-
-  const handleSystemReset = async () => {
-    const confirm1 = confirm(
-      "⚠️ CRITICAL SYSTEM RESET WARNING ⚠️\n\n" +
-      "Are you absolutely sure you want to delete all data and start fresh?\n\n" +
-      "This action will permanently delete:\n" +
-      "• All attendance logs and punch histories\n" +
-      "• All registered employee/staff accounts (except yours)\n" +
-      "• All active worksites and geofencing limits\n" +
-      "• All holidays and announcements\n" +
-      "• All payroll adjustments\n\n" +
-      "This action IS IRREVERSIBLE. Press OK to verify."
-    );
-    if (!confirm1) return;
-
-    const confirm2 = confirm(
-      "FINAL CONFIRMATION:\n\n" +
-      "Are you 100% sure? All users and history will be permanently deleted and the app will reload fresh.\n\n" +
-      "Click OK to execute the purge."
-    );
-    if (!confirm2) return;
-
-    setResetting(true);
-    try {
-      await dataService.resetAllSystemData();
-      alert("Database Reset Complete! All records have been successfully purged, and your settings have been restored to default. Your admin account is fully retained.");
-      window.location.reload();
-    } catch (err: any) {
-      console.error(err);
-      alert("Database Purge Failed: " + (err.message || err));
-    } finally {
-      setResetting(false);
-    }
-  };
 
   const fetch = async () => {
     setLoading(true);
@@ -70,7 +36,7 @@ const AdminLocationSettings: React.FC = () => {
   }, []);
 
   const handleSave = async () => {
-    if (!editingProject?.name) return alert('Please enter project name');
+    if (!editingProject?.name) return alert(t('provideValidName'));
     setSaving(true);
     try {
       const projectToSave = {
@@ -88,7 +54,7 @@ const AdminLocationSettings: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure?')) return;
+    if (!confirm(t('confirmDeleteWorksite'))) return;
     try {
       await dataService.deleteProject(id);
       setProjects(projects.filter(p => p.id !== id));
@@ -126,21 +92,22 @@ const AdminLocationSettings: React.FC = () => {
     return users.filter(u => 
       (u?.name || '').toLowerCase().includes(s) || 
       (u?.employeeId || '').toLowerCase().includes(s)
-    ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    ).sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
   }, [users, userSearch]);
 
   if (loading) return (
     <div className="p-20 text-center">
-      <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+      <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      <p className="text-slate-400 font-black text-xs uppercase tracking-widest">{t('syncingWorksites')}</p>
     </div>
   );
 
   return (
-    <div className="space-y-8 animate-fadeIn pb-20">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Worksites & Projects</h1>
-          <p className="text-slate-500">Manage location-based geofencing and staff clusters</p>
+    <div className={`space-y-8 animate-fadeIn pb-20 ${isRtl ? 'text-right' : 'text-left'}`}>
+      <div className={`flex justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className="text-start">
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">{t('activeSites')}</h1>
+          <p className="text-slate-500">{t('manageSiteSub')}</p>
         </div>
         <button 
           onClick={() => {
@@ -151,16 +118,17 @@ const AdminLocationSettings: React.FC = () => {
             });
             setUserSearch('');
           }}
-          className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all"
+          className={`px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
         >
-          Add New Site
+          <i className="fa-solid fa-map-location-dot"></i>
+          <span>{t('addNewSite')}</span>
         </button>
       </div>
 
       {editingProject ? (
         <div className="max-w-4xl bg-white rounded-3xl border border-slate-100 shadow-xl p-8 space-y-8 animate-fadeIn">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-black text-slate-900">{editingProject.id ? 'Edit Worksite' : 'New Worksite'}</h2>
+          <div className={`flex justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <h2 className="text-xl font-black text-slate-900">{editingProject.id ? t('editWorksite') : t('newWorksite')}</h2>
             <button onClick={() => setEditingProject(null)} className="text-slate-400 hover:text-slate-600">
               <i className="fa-solid fa-xmark text-xl"></i>
             </button>
@@ -169,19 +137,19 @@ const AdminLocationSettings: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-6">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Project Name</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 text-start">{t('projectName')}</label>
                 <input 
                   type="text"
                   value={editingProject.name}
                   onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
                   placeholder="e.g. Building A Site"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none"
+                  className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none ${isRtl ? 'text-right' : 'text-left'}`}
                 />
               </div>
 
               <div className={`p-4 rounded-2xl border ${editingProject.geofence?.enabled ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="font-bold text-slate-900 text-sm">Geofence Boundary</span>
+                <div className={`flex items-center justify-between mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <span className="font-bold text-slate-900 text-sm text-start">{t('geofenceBoundary')}</span>
                   <button 
                     onClick={() => setEditingProject({
                       ...editingProject,
@@ -189,7 +157,7 @@ const AdminLocationSettings: React.FC = () => {
                     })}
                     className={`w-12 h-6 rounded-full relative transition-all ${editingProject.geofence?.enabled ? 'bg-indigo-600' : 'bg-slate-300'}`}
                   >
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${editingProject.geofence?.enabled ? 'left-7' : 'left-1'}`}></div>
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${editingProject.geofence?.enabled ? (isRtl ? 'right-7' : 'left-7') : (isRtl ? 'right-1' : 'left-1')}`}></div>
                   </button>
                 </div>
 
@@ -197,17 +165,17 @@ const AdminLocationSettings: React.FC = () => {
                   <div className="space-y-4 animate-fadeIn">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Lat</label>
-                        <input type="number" step="any" value={editingProject.geofence?.lat} onChange={(e) => setEditingProject({...editingProject, geofence: {...editingProject.geofence!, lat: parseFloat(e.target.value)}})} className="w-full px-3 py-2 border rounded-lg text-xs" />
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-start">Lat</label>
+                        <input type="number" step="any" value={editingProject.geofence?.lat} onChange={(e) => setEditingProject({...editingProject, geofence: {...editingProject.geofence!, lat: parseFloat(e.target.value)}})} className={`w-full px-3 py-2 border rounded-lg text-xs ${isRtl ? 'text-right' : 'text-left'}`} />
                       </div>
                       <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Lng</label>
-                        <input type="number" step="any" value={editingProject.geofence?.lng} onChange={(e) => setEditingProject({...editingProject, geofence: {...editingProject.geofence!, lng: parseFloat(e.target.value)}})} className="w-full px-3 py-2 border rounded-lg text-xs" />
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-start">Lng</label>
+                        <input type="number" step="any" value={editingProject.geofence?.lng} onChange={(e) => setEditingProject({...editingProject, geofence: {...editingProject.geofence!, lng: parseFloat(e.target.value)}})} className={`w-full px-3 py-2 border rounded-lg text-xs ${isRtl ? 'text-right' : 'text-left'}`} />
                       </div>
                     </div>
-                    <button onClick={captureLocation} className="w-full py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-50">Capture My GPS</button>
+                    <button onClick={captureLocation} className="w-full py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-50">{t('captureMyGps')}</button>
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Radius: {editingProject.geofence?.radius}m</label>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 text-start">{t('radius')}: {editingProject.geofence?.radius}m</label>
                       <input type="range" min="10" max="1000" step="10" value={editingProject.geofence?.radius} onChange={(e) => setEditingProject({...editingProject, geofence: {...editingProject.geofence!, radius: parseInt(e.target.value)}})} className="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
                     </div>
                   </div>
@@ -216,23 +184,23 @@ const AdminLocationSettings: React.FC = () => {
             </div>
 
             <div className="flex flex-col">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Assign Staff</label>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 text-start">{t('assignStaff')}</label>
               
               <div className="mb-3 relative group">
-                 <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors"></i>
+                 <i className={`fa-solid fa-magnifying-glass absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors`}></i>
                  <input 
                   type="text" 
-                  placeholder="Find staff..." 
+                  placeholder={t('findStaffPlaceholder')} 
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className={`w-full ${isRtl ? 'pr-9 pl-3 text-right' : 'pl-9 pr-3 text-left'} py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none`}
                  />
               </div>
 
               <div className="flex-1 overflow-y-auto max-h-[300px] border border-slate-100 rounded-2xl bg-slate-50 p-2 space-y-1 no-scrollbar shadow-inner">
                 {filteredUsersToAssign.length === 0 ? (
                   <div className="py-10 text-center opacity-40">
-                    <p className="text-[10px] font-black uppercase tracking-widest">No matching staff</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest">{t('noMatchingStaff')}</p>
                   </div>
                 ) : filteredUsersToAssign.map(user => {
                   const isAssigned = editingProject.assignedUserIds?.includes(user.id);
@@ -240,13 +208,13 @@ const AdminLocationSettings: React.FC = () => {
                     <button
                       key={user.id}
                       onClick={() => toggleUserAssignment(user.id)}
-                      className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${
+                      className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${isRtl ? 'flex-row-reverse' : ''} ${
                         isAssigned ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-100'
                       }`}
                     >
-                      <div className="flex items-center space-x-3">
-                        <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} className="w-6 h-6 rounded-full border border-white/20" />
-                        <div className="text-left">
+                      <div className={`flex items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                        <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} className="w-6 h-6 rounded-full border border-white/20" alt="" />
+                        <div className="text-start">
                           <p className="text-xs font-bold leading-none">{user.name}</p>
                           <p className={`text-[8px] font-black uppercase tracking-tighter ${isAssigned ? 'text-indigo-200' : 'text-slate-400'}`}>{user.employeeId}</p>
                         </div>
@@ -259,10 +227,10 @@ const AdminLocationSettings: React.FC = () => {
             </div>
           </div>
 
-          <div className="pt-6 border-t border-slate-100 flex gap-4">
-            <button onClick={() => setEditingProject(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest">Cancel</button>
+          <div className={`pt-6 border-t border-slate-100 flex gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <button onClick={() => setEditingProject(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest">{t('cancel')}</button>
             <button onClick={handleSave} disabled={saving} className="flex-2 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-50 transition-all">
-              {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Apply Changes'}
+              {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : t('applyChanges')}
             </button>
           </div>
         </div>
@@ -271,11 +239,11 @@ const AdminLocationSettings: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map(project => (
               <div key={project.id} className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                <div className="flex justify-between items-start mb-4">
+                <div className={`flex justify-between items-start mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${project.geofence.enabled ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
                     <i className={`fa-solid ${project.geofence.enabled ? 'fa-building-shield' : 'fa-globe'} text-xl`}></i>
                   </div>
-                  <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-all">
+                  <div className={`flex gap-1 opacity-0 group-hover:opacity-100 transition-all ${isRtl ? 'flex-row-reverse' : ''}`}>
                     <button onClick={() => setEditingProject(project)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors">
                       <i className="fa-solid fa-pen-to-square text-xs"></i>
                     </button>
@@ -284,59 +252,23 @@ const AdminLocationSettings: React.FC = () => {
                     </button>
                   </div>
                 </div>
-                <h3 className="text-xl font-black text-slate-900 mb-1">{project.name}</h3>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">
-                  {project.geofence.enabled ? `${project.geofence.radius}m Safe Zone` : 'Flexible Site'}
+                <h3 className="text-xl font-black text-slate-900 mb-1 text-start">{project.name}</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 text-start">
+                  {project.geofence.enabled ? `${project.geofence.radius}m ${t('safeZoneLabel')}` : t('flexibleSiteZone')}
                 </p>
-                <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
-                  <div className="flex -space-x-2">
+                <div className={`mt-auto pt-4 border-t border-slate-50 flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex ${isRtl ? 'flex-row-reverse space-x-reverse -space-x-2' : '-space-x-2'}`}>
                     {(project.assignedUserIds || []).slice(0, 4).map(uid => {
                       const u = users.find(user => user.id === uid);
-                      return u ? <img key={uid} src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} className="w-6 h-6 rounded-full border-2 border-white shadow-sm" /> : null;
+                      return u ? <img key={uid} src={u.avatar || `https://ui-avatars.com/api/?name=${u.name}`} className="w-6 h-6 rounded-full border-2 border-white shadow-sm" alt="" /> : null;
                     })}
                   </div>
                   <span className="text-[10px] font-black text-slate-300 uppercase">
-                    {(project.assignedUserIds || []).length} Personnel
+                    {(project.assignedUserIds || []).length} {t('personnel')}
                   </span>
                 </div>
               </div>
             ))}
-          </div>
-
-          {/* 🚨 DANGER ZONE */}
-          <div className="mt-12 p-8 bg-rose-50/40 border border-rose-100 rounded-[2rem] space-y-6">
-            <div>
-              <h2 className="text-xl font-black text-rose-900 tracking-tight flex items-center gap-2">
-                <i className="fa-solid fa-triangle-exclamation"></i>
-                Danger Zone
-              </h2>
-              <p className="text-rose-700/80 text-xs font-semibold mt-1">
-                Perform system-wide resets and destructive administrative tasks. These actions cannot be undone.
-              </p>
-            </div>
-
-            <div className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-white border border-rose-100 rounded-2xl gap-4 shadow-sm">
-              <div className="space-y-1">
-                <h3 className="font-bold text-slate-950 text-sm">Reset All System Data & Start Fresh</h3>
-                <p className="text-slate-500 text-xs max-w-xl">
-                  This will permanently purge all attendance records, holidays, announcements, assigned worksites, and registered employee profiles. Your administrator account is fully preserved.
-                </p>
-              </div>
-              <button
-                onClick={handleSystemReset}
-                disabled={resetting}
-                className="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-rose-100 transition-all flex-shrink-0 disabled:opacity-50"
-              >
-                {resetting ? (
-                  <span className="flex items-center gap-2">
-                    <i className="fa-solid fa-circle-notch fa-spin"></i>
-                    Resetting...
-                  </span>
-                ) : (
-                  'Reset Database'
-                )}
-              </button>
-            </div>
           </div>
         </div>
       )}

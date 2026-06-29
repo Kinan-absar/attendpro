@@ -1,10 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
 import { dataService } from '../services/dataService';
 import { User, AttendanceRecord } from '../types';
 import { formatMinutesToHHMM } from '../utils/format';
+import { useLanguage } from '../utils/LanguageContext';
 
 const AdminLogExport: React.FC = () => {
+  const { t, isRtl } = useLanguage();
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [fromDate, setFromDate] = useState<string>(
@@ -24,7 +25,7 @@ const AdminLogExport: React.FC = () => {
     setLoading(true);
     try {
       const u = await dataService.getUsers();
-      setUsers(u.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+      setUsers(u.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''))));
       setSelectedUserIds(u.map(user => user.id)); // Default select all
     } catch (err) {
       console.error(err);
@@ -46,7 +47,7 @@ const AdminLogExport: React.FC = () => {
 
   const handleExport = async () => {
     if (selectedUserIds.length === 0) {
-      alert("Please select at least one employee.");
+      alert(t('pleaseSelectEmployee'));
       return;
     }
 
@@ -68,7 +69,7 @@ const AdminLogExport: React.FC = () => {
       });
 
       if (filteredLogs.length === 0) {
-        alert("No logs found for the selected criteria.");
+        alert(t('noLogsFoundCriteria'));
         return;
       }
 
@@ -80,11 +81,11 @@ const AdminLogExport: React.FC = () => {
         
         const userA = users.find(u => u.id === a.userId)?.name || '';
         const userB = users.find(u => u.id === b.userId)?.name || '';
-        return userA.localeCompare(userB);
+        return String(userA || '').localeCompare(String(userB || ''));
       });
 
       // Format for CSV
-      const headers = ["Employee/Database ID", "Check In", "Check Out", "Worked Hours"];
+      const headers = [t('activeColEmployee'), t('activeColClockedInAt'), t('activeLeftAt'), t('activeColShiftDuration')];
       const rows = filteredLogs.map(log => {
         const user = users.find(u => u.id === log.userId);
         const clockIn = log.checkIn ? formatDate(log.checkIn) : "";
@@ -111,7 +112,7 @@ const AdminLogExport: React.FC = () => {
       document.body.removeChild(link);
 
     } catch (err: any) {
-      alert("Export failed: " + err.message);
+      alert(t('exportFailed') + err.message);
     } finally {
       setExporting(false);
     }
@@ -128,20 +129,20 @@ const AdminLogExport: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <h1 className="text-4xl font-black tracking-tighter text-slate-900 mb-2">Consolidated Logs</h1>
-          <p className="text-slate-500 font-medium">Export all employee logsheets into one report</p>
+    <div className={`space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 ${isRtl ? 'text-right' : 'text-left'}`}>
+      <div className={`flex flex-col md:flex-row md:items-end justify-between gap-6 ${isRtl ? 'md:flex-row-reverse' : ''}`}>
+        <div className="text-start">
+          <h1 className="text-4xl font-black tracking-tighter text-slate-900 mb-2">{t('consolidatedLogs')}</h1>
+          <p className="text-slate-500 font-medium">{t('exportSubtext')}</p>
         </div>
         
         <button
           onClick={handleExport}
           disabled={exporting}
-          className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center space-x-3 disabled:opacity-50"
+          className={`px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 disabled:opacity-50 ${isRtl ? 'flex-row-reverse' : ''}`}
         >
           <i className={`fa-solid ${exporting ? 'fa-spinner fa-spin' : 'fa-file-excel'}`}></i>
-          <span>{exporting ? 'Generating Report...' : 'Export Consolidated Excel'}</span>
+          <span>{exporting ? t('generatingReport') : t('exportExcelBtn')}</span>
         </button>
       </div>
 
@@ -149,28 +150,28 @@ const AdminLogExport: React.FC = () => {
         {/* Date Filters */}
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
-            <h3 className="text-lg font-black text-slate-900 mb-6 flex items-center space-x-2">
+            <h3 className={`text-lg font-black text-slate-900 mb-6 flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
               <i className="fa-solid fa-calendar-range text-indigo-500"></i>
-              <span>Date Range</span>
+              <span>{t('fromDate')} & {t('toDate')}</span>
             </h3>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">From Date</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 text-start">{t('fromDate')}</label>
                 <input
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                  className={`w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all ${isRtl ? 'text-right' : 'text-left'}`}
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">To Date</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 text-start">{t('toDate')}</label>
                 <input
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                  className={`w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all ${isRtl ? 'text-right' : 'text-left'}`}
                 />
               </div>
             </div>
@@ -180,23 +181,23 @@ const AdminLogExport: React.FC = () => {
         {/* Employee Selection */}
         <div className="lg:col-span-2">
           <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 h-full flex flex-col">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-black text-slate-900 flex items-center space-x-2">
+            <div className={`flex items-center justify-between mb-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <h3 className={`text-lg font-black text-slate-900 flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <i className="fa-solid fa-users text-indigo-500"></i>
-                <span>Select Employees</span>
+                <span>{t('selectEmployees')}</span>
               </h3>
-              <div className="flex space-x-2">
+              <div className={`flex gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <button 
                   onClick={selectAll}
                   className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-all"
                 >
-                  Select All
+                  {t('selectAllBtn')}
                 </button>
                 <button 
                   onClick={selectNone}
                   className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-all"
                 >
-                  Clear
+                  {t('clear')}
                 </button>
               </div>
             </div>
@@ -210,7 +211,7 @@ const AdminLogExport: React.FC = () => {
                 {users.map(user => (
                   <label 
                     key={user.id}
-                    className={`flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                    className={`flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${isRtl ? 'flex-row-reverse' : ''} ${
                       selectedUserIds.includes(user.id) 
                         ? 'border-indigo-600 bg-indigo-50/50' 
                         : 'border-slate-50 bg-slate-50/50 hover:border-slate-200'
@@ -222,12 +223,12 @@ const AdminLogExport: React.FC = () => {
                       checked={selectedUserIds.includes(user.id)}
                       onChange={() => toggleUser(user.id)}
                     />
-                    <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center mr-4 transition-all ${
+                    <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center ${isRtl ? 'ml-4' : 'mr-4'} transition-all flex-shrink-0 ${
                       selectedUserIds.includes(user.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white'
                     }`}>
                       {selectedUserIds.includes(user.id) && <i className="fa-solid fa-check text-[10px] text-white"></i>}
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 text-start">
                       <p className="text-sm font-black text-slate-900 truncate">{user.name}</p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">ID: {user.employeeId || 'N/A'}</p>
                     </div>
