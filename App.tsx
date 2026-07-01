@@ -14,6 +14,7 @@ import AdminShiftManagement from './components/AdminShiftManagement';
 import AdminBroadcastManagement from './components/AdminBroadcastManagement';
 import AdminLogExport from './components/AdminLogExport';
 import Settings from './components/Settings';
+import Subscription from './components/Subscription';
 import { useLanguage } from './utils/LanguageContext';
 import { LanguageSelector } from './components/LanguageSelector';
 import { useDialog } from './utils/DialogContext';
@@ -50,6 +51,7 @@ const Navigation = ({ user, onLogout, onRefreshUser }: { user: User; onLogout: (
     links.push({ path: '/admin/users', label: t('navStaff'), icon: 'fa-users-gear' });
     links.push({ path: '/admin/shifts', label: t('navSchedules'), icon: 'fa-calendar-day' });
     links.push({ path: '/admin/location', label: t('navWorksite'), icon: 'fa-location-dot' });
+    links.push({ path: '/admin/subscription', label: t('navSubscription') || 'Subscription', icon: 'fa-credit-card' });
   }
 
   // Settings is always the very last tab
@@ -242,6 +244,7 @@ const App: React.FC = () => {
                   <Route path="/admin/users" element={<AdminUserManagement currentUser={user} onRefreshUser={refreshUser} />} />
                   <Route path="/admin/shifts" element={<AdminShiftManagement />} />
                   <Route path="/admin/broadcasts" element={<AdminBroadcastManagement />} />
+                  <Route path="/admin/subscription" element={<Subscription currentUser={user} onRefreshUser={refreshUser} />} />
                 </>
               )}
               <Route path="*" element={<Navigate to="/" replace />} />

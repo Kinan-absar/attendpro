@@ -1,6 +1,6 @@
 {
   "name": "Odoo Connect: Smart Check-In",
-  "description": "A high-performance React application for Odoo attendance tracking, featuring real-time status updates, geofencing, and historical reporting.",
+  "description": "A high-performance React application for Odoo and custom attendance tracking, featuring multi-company SaaS subscriptions, employee limits, geofencing, and historical reporting.",
   "requestFramePermissions": [
     "geolocation"
   ]

@@ -34,7 +34,20 @@ export interface User {
 export interface Company {
   id: string;
   name: string;
+  companyName: string;
+  ownerId?: string;
+  plan: 'free' | 'basic' | 'business' | 'enterprise';
+  employeeLimit: number;
+  employeeCount: number;
+  subscriptionStatus: 'active' | 'trial' | 'expired' | 'cancelled';
+  trialEnds?: Date | null;
+  subscriptionStart?: Date | null;
+  subscriptionEnd?: Date | null;
+  paymentProvider?: string | null;
+  customerId?: string | null;
+  subscriptionId?: string | null;
   createdAt: Date;
+  updatedAt?: Date;
 }
 
 export interface Broadcast {

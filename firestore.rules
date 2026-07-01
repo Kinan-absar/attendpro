@@ -7,10 +7,6 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    
     function isSuperAdmin() {
       return isAuthenticated() && (
         request.auth.token.email == "kinan88m@gmail.com"
@@ -20,96 +16,98 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && (
         isSuperAdmin() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin')
-      );
-    }
-    
-    // Checks if the document belongs to the authenticated user's company
-    function belongsToCompany(companyId) {
-      return isAuthenticated() && (
-        isSuperAdmin() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().companyId == companyId)
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
     match /users/{id} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == id || 
-        (isAdmin() && belongsToCompany(resource.data.companyId))
-      );
-      allow create: if isAuthenticated() && (
-        request.auth.uid == id || 
-        (isAdmin() && belongsToCompany(request.resource.data.companyId))
-      );
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (
-        (request.auth.uid == id && request.resource.data.companyId == resource.data.companyId) || 
-        (isAdmin() && (belongsToCompany(resource.data.companyId) || belongsToCompany(request.resource.data.companyId)))
+        request.auth.uid == id || 
+        isSuperAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
       );
-      allow delete: if isAdmin() && belongsToCompany(resource.data.companyId);
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+      );
     }
 
     match /attendance/{id} {
-      allow read: if isAuthenticated() && (
-        (resource.data.userId == request.auth.uid) || 
-        (isAdmin() && belongsToCompany(resource.data.companyId))
-      );
-      allow create: if isAuthenticated() && (
-        belongsToCompany(request.resource.data.companyId) && 
-        request.resource.data.userId == request.auth.uid
-      );
-      allow update: if isAuthenticated() && (
-        (resource.data.userId == request.auth.uid && belongsToCompany(resource.data.companyId) && request.resource.data.companyId == resource.data.companyId) || 
-        (isAdmin() && (belongsToCompany(resource.data.companyId) || belongsToCompany(request.resource.data.companyId)))
-      );
-      allow delete: if isAdmin() && belongsToCompany(resource.data.companyId);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
     }
 
     match /projects/{id} {
-      allow read: if isAuthenticated() && belongsToCompany(resource.data.companyId);
-      allow create: if isAdmin() && belongsToCompany(request.resource.data.companyId);
-      allow update: if isAdmin() && (belongsToCompany(resource.data.companyId) || belongsToCompany(request.resource.data.companyId));
-      allow delete: if isAdmin() && belongsToCompany(resource.data.companyId);
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /shifts/{id} {
-      allow read: if isAuthenticated() && belongsToCompany(resource.data.companyId);
-      allow create: if isAdmin() && belongsToCompany(request.resource.data.companyId);
-      allow update: if isAdmin() && (belongsToCompany(resource.data.companyId) || belongsToCompany(request.resource.data.companyId));
-      allow delete: if isAdmin() && belongsToCompany(resource.data.companyId);
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /settings/{id} {
-      allow read: if isAuthenticated() && belongsToCompany(resource.data.companyId);
-      allow create: if isAdmin() && belongsToCompany(request.resource.data.companyId);
-      allow update: if isAdmin() && (belongsToCompany(resource.data.companyId) || belongsToCompany(request.resource.data.companyId));
-      allow delete: if isAdmin() && belongsToCompany(resource.data.companyId);
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /holidays/{id} {
-      allow read: if isAuthenticated() && belongsToCompany(resource.data.companyId);
-      allow create: if isAdmin() && belongsToCompany(request.resource.data.companyId);
-      allow update: if isAdmin() && (belongsToCompany(resource.data.companyId) || belongsToCompany(request.resource.data.companyId));
-      allow delete: if isAdmin() && belongsToCompany(resource.data.companyId);
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /broadcasts/{id} {
-      allow read: if isAuthenticated() && belongsToCompany(resource.data.companyId);
-      allow create: if isAdmin() && belongsToCompany(request.resource.data.companyId);
-      allow update: if isAdmin() && (belongsToCompany(resource.data.companyId) || belongsToCompany(request.resource.data.companyId));
-      allow delete: if isAdmin() && belongsToCompany(resource.data.companyId);
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /payroll_adjustments/{id} {
-      allow read: if isAdmin() && belongsToCompany(resource.data.companyId);
-      allow create: if isAdmin() && belongsToCompany(request.resource.data.companyId);
-      allow update: if isAdmin() && (belongsToCompany(resource.data.companyId) || belongsToCompany(request.resource.data.companyId));
-      allow delete: if isAdmin() && belongsToCompany(resource.data.companyId);
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /companies/{id} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if isAdmin() && belongsToCompany(id);
+      allow read: if true; // Allowed so anyone can check company existence during signup
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == id && (
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['plan', 'employeeLimit', 'subscriptionStatus', 'paypalSubscriptionId', 'paymentProvider', 'ownerId'])) ||
+          (
+            request.resource.data.plan == 'free' &&
+            request.resource.data.employeeLimit == 5 &&
+            request.resource.data.subscriptionStatus == 'active'
+          )
+        ))
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    match /config/{docId} {
+      allow read, write: if false;
     }
   }
 }
