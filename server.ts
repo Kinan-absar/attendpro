@@ -636,36 +636,50 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
    */
   app.post('/api/paypal/create-subscription', authenticateFirebase, async (req, res) => {
     const companyId = (req as AuthenticatedRequest).user?.companyId;
-    const { plan, billingCycle = 'monthly' } = req.body;
+    const { plan, billingCycle = 'monthly', quantity } = req.body;
     if (!companyId || !plan) {
       return res.status(400).json({ error: "Missing authentication or plan parameter" });
     }
 
     const cid = companyId.trim().toUpperCase();
-    console.log(`[PayPal API] Creating subscription request for company: ${cid}, Plan: ${plan}, Cycle: ${billingCycle}`);
+    console.log(`[PayPal API] Creating subscription request for company: ${cid}, Plan: ${plan}, Cycle: ${billingCycle}, Quantity: ${quantity}`);
 
     // Verify company employee count for Business plan
     let companyEmployeeCount = 0;
-    if (plan === 'business') {
-      try {
-        const usersSnap = await db.collection('users').where('companyId', '==', cid).get();
-        companyEmployeeCount = usersSnap.size;
-        console.log(`[PayPal API] Verified employee count for company ${cid}: ${companyEmployeeCount}`);
-      } catch (err: any) {
-        console.error(`[PayPal API] Error looking up employee count for company ${cid}:`, err.message || err);
-        return res.status(500).json({ error: "Failed to verify current employee count from database." });
-      }
+    try {
+      const usersSnap = await db.collection('users').where('companyId', '==', cid).get();
+      companyEmployeeCount = usersSnap.size;
+      console.log(`[PayPal API] Verified actual employee count for company ${cid}: ${companyEmployeeCount}`);
+    } catch (err: any) {
+      console.error(`[PayPal API] Error looking up employee count for company ${cid}:`, err.message || err);
+      return res.status(500).json({ error: "Failed to verify current employee count from database." });
+    }
 
-      if (companyEmployeeCount < 21) {
+    // Determine final quantity of seats
+    let finalQty = 1;
+    if (plan === 'business') {
+      const requestedQty = quantity ? parseInt(quantity, 10) : Math.max(21, companyEmployeeCount);
+      
+      if (requestedQty < 21) {
         return res.status(400).json({ 
-          error: `Your company currently has ${companyEmployeeCount} employees. The Business plan requires a minimum of 21 employees. Please subscribe to the Basic plan instead.` 
+          error: "The Business plan requires purchasing a minimum of 21 seats." 
         });
       }
-      if (companyEmployeeCount > 100) {
+      if (requestedQty > 100) {
         return res.status(400).json({ 
-          error: `Your company currently has ${companyEmployeeCount} employees. The Business plan supports up to 100 employees. Please contact our Sales team for Enterprise solutions.` 
+          error: "The Business plan supports a maximum of 100 seats. Please contact our Sales team for Enterprise solutions." 
         });
       }
+      if (requestedQty < companyEmployeeCount) {
+        return res.status(400).json({ 
+          error: `Your company currently has ${companyEmployeeCount} employees registered. You must purchase at least ${companyEmployeeCount} seats.` 
+        });
+      }
+      finalQty = requestedQty;
+    } else if (plan === 'basic') {
+      finalQty = 20;
+    } else {
+      finalQty = 5;
     }
 
     // 1. Look up current subscription in Firestore
@@ -735,7 +749,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
 
     if (isCredentialsPlaceholder) {
       const mockSubId = `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-      const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}&sim_cycle=${billingCycle}&sim_qty=${companyEmployeeCount || 25}`;
+      const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}&sim_cycle=${billingCycle}&sim_qty=${finalQty}`;
       console.log(`[PayPal API] Using Simulator fallback due to missing/placeholder credentials. Redirecting to: ${approvalUrl}`);
       return res.json({
         simulator: true,
@@ -777,13 +791,13 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
         application_context: {
           brand_name: "Attendance Pro",
           user_action: "SUBSCRIBE_NOW",
-          return_url: `${req.headers.origin || 'http://localhost:3000'}/admin/subscription?status=success&sim_plan=${plan}&sim_cycle=${billingCycle}&sim_qty=${companyEmployeeCount}`,
+          return_url: `${req.headers.origin || 'http://localhost:3000'}/admin/subscription?status=success&sim_plan=${plan}&sim_cycle=${billingCycle}&sim_qty=${finalQty}`,
           cancel_url: `${req.headers.origin || 'http://localhost:3000'}/admin/subscription?status=cancel`
         }
       };
 
       if (plan === 'business') {
-        reqBody.quantity = String(companyEmployeeCount);
+        reqBody.quantity = String(finalQty);
       }
 
       const response = await fetch(paypalUrl, {
@@ -801,7 +815,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
         const errorText = await response.text();
         console.warn("[PayPal API Error] Subscriptions API call failed, falling back to Simulator:", errorText);
         const mockSubId = `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-        const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}&sim_cycle=${billingCycle}&sim_qty=${companyEmployeeCount || 25}`;
+        const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}&sim_cycle=${billingCycle}&sim_qty=${finalQty}`;
         return res.json({
           simulator: true,
           subscriptionId: mockSubId,
@@ -822,7 +836,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     } catch (error: any) {
       console.warn("[PayPal API Exception] Creating subscription failed, falling back to Simulator:", error.message || error);
       const mockSubId = `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-      const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}&sim_cycle=${billingCycle}&sim_qty=${companyEmployeeCount || 25}`;
+      const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}&sim_cycle=${billingCycle}&sim_qty=${finalQty}`;
       return res.json({
         simulator: true,
         subscriptionId: mockSubId,

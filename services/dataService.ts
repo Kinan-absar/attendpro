@@ -1536,7 +1536,7 @@ class DataService {
   }
 
   // Actual secure Express PayPal subscription APIs protected with Firebase ID Token
-  async createCheckoutSession(plan: string, billingCycle: string = 'monthly'): Promise<{ success: boolean; simulator?: boolean; subscriptionId?: string; approvalUrl?: string; error?: string }> {
+  async createCheckoutSession(plan: string, billingCycle: string = 'monthly', quantity?: number): Promise<{ success: boolean; simulator?: boolean; subscriptionId?: string; approvalUrl?: string; error?: string }> {
     try {
       const idToken = await auth.currentUser?.getIdToken();
       if (!idToken) {
@@ -1551,7 +1551,7 @@ class DataService {
           'Authorization': `Bearer ${idToken}`,
           'X-Company-Id': companyId
         },
-        body: JSON.stringify({ plan, billingCycle, companyId })
+        body: JSON.stringify({ plan, billingCycle, companyId, quantity })
       });
       if (!response.ok) {
         const errData = await response.json();

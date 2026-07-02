@@ -17,6 +17,13 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [simulatingWebhook, setSimulatingWebhook] = useState(false);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [businessSeats, setBusinessSeats] = useState<number>(25);
+
+  useEffect(() => {
+    if (company) {
+      setBusinessSeats(Math.max(21, company.employeeCount || 0));
+    }
+  }, [company]);
 
   // Local translations for subscription-specific terms
   const sT = (key: string): string => {
@@ -238,7 +245,11 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
     // PayPal checkout process
     setIsProcessing(true);
     try {
-      const response = await dataService.createCheckoutSession(planId, billingCycle);
+      const response = await dataService.createCheckoutSession(
+        planId, 
+        billingCycle, 
+        planId === 'business' ? businessSeats : undefined
+      );
       if (response.approvalUrl) {
         // Redirect user to PayPal approval workflow (either simulated sandbox URL or real sandbox/live)
         window.location.href = response.approvalUrl;
@@ -259,7 +270,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
     setSimulatingWebhook(true);
     try {
       const mockSubId = company.paypalSubscriptionId || `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-      const qty = planId === 'business' ? (company.employeeCount || 25) : undefined;
+      const qty = planId === 'business' ? businessSeats : undefined;
       const result = await dataService.simulateWebhook(eventType, mockSubId, planId, qty);
       
       await showAlert(
@@ -472,12 +483,59 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                   <span className="text-4xl font-black tracking-tight text-slate-900">{p.price}</span>
                   <span className="text-slate-400 font-bold text-xs uppercase ml-1.5 block mt-1">{p.period}</span>
                   {p.id === 'business' && (
-                    <div className="mt-3 text-[10px] font-black text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl block border border-emerald-100/50">
-                      <i className="fa-solid fa-calculator mr-1"></i>
-                      {language === 'ar'
-                        ? `متوقع لمؤسستك: ${employeeCount * (billingCycle === 'annual' ? 9 : 1)} دولار / ${billingCycle === 'annual' ? 'سنة' : 'شهر'} (لـ ${employeeCount} موظفاً)`
-                        : `Expected: $${employeeCount * (billingCycle === 'annual' ? 9 : 1)} / ${billingCycle === 'annual' ? 'yr' : 'mo'} (for ${employeeCount} staff)`
-                      }
+                    <div className="mt-4 space-y-3">
+                      <label className="block text-[11px] font-black uppercase text-slate-500 tracking-wider">
+                        {language === 'ar' ? 'حدد عدد المقاعد (الموظفين):' : 'Select Employee Seats:'}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setBusinessSeats(prev => Math.max(Math.max(21, employeeCount), prev - 1))}
+                          disabled={businessSeats <= Math.max(21, employeeCount)}
+                          className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min={Math.max(21, employeeCount)}
+                          max={100}
+                          value={businessSeats}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val)) {
+                              setBusinessSeats(Math.min(100, Math.max(Math.max(21, employeeCount), val)));
+                            }
+                          }}
+                          className="w-16 text-center border border-slate-300 rounded-lg py-1 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setBusinessSeats(prev => Math.min(100, prev + 1))}
+                          disabled={businessSeats >= 100}
+                          className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          +
+                        </button>
+                      </div>
+                      
+                      <div className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-3 py-2.5 rounded-xl block border border-emerald-100/50 space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <i className="fa-solid fa-calculator"></i>
+                          <span>
+                            {language === 'ar'
+                              ? `التكلفة: ${businessSeats * (billingCycle === 'annual' ? 9 : 1)} دولار / ${billingCycle === 'annual' ? 'سنة' : 'شهر'}`
+                              : `Total Cost: $${businessSeats * (billingCycle === 'annual' ? 9 : 1)} / ${billingCycle === 'annual' ? 'yr' : 'mo'}`
+                            }
+                          </span>
+                        </div>
+                        <div className="text-[9px] text-emerald-600 font-bold">
+                          {language === 'ar'
+                            ? `(مخصص لـ ${businessSeats} مقعداً لشركتك التي بها ${employeeCount} موظفاً حالياً)`
+                            : `(Configured for ${businessSeats} seats; currently has ${employeeCount} staff)`
+                          }
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
