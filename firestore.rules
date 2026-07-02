@@ -92,16 +92,16 @@ service cloud.firestore {
       allow read: if true; // Allowed so anyone can check company existence during signup
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (
-        isSuperAdmin() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == id && (
-          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['plan', 'employeeLimit', 'subscriptionStatus', 'paypalSubscriptionId', 'paymentProvider', 'ownerId'])) ||
-          (
-            request.resource.data.plan == 'free' &&
-            request.resource.data.employeeLimit == 5 &&
-            request.resource.data.subscriptionStatus == 'active'
-          )
-        ))
+        // Deny ALL client writes to the five subscription fields (plan, employeeLimit, subscriptionStatus, paypalSubscriptionId, paymentProvider)
+        // because the authoritative write path is the server (via Admin SDK / PayPal APIs / Webhooks) and NOT the client.
+        // Even a superadmin cannot write these fields via the client SDK to ensure strict server-authoritative data integrity.
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['plan', 'employeeLimit', 'subscriptionStatus', 'paypalSubscriptionId', 'paymentProvider']) &&
+        (
+          isSuperAdmin() || 
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == id && 
+           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId']))
+        )
       );
       allow delete: if isSuperAdmin();
     }

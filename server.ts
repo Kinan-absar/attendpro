@@ -82,8 +82,8 @@ async function authenticateFirebase(req: express.Request, res: express.Response,
 async function verifyPayPalWebhookSignature(req: express.Request): Promise<boolean> {
   const webhookId = process.env.PAYPAL_WEBHOOK_ID;
   if (!webhookId) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error("[PayPal Webhook Verification] CRITICAL ERROR: PAYPAL_WEBHOOK_ID is missing in production!");
+    if (process.env.APP_ENV === 'sandbox_test' || process.env.APP_ENV === 'live_production') {
+      console.error(`[PayPal Webhook Verification] CRITICAL ERROR: PAYPAL_WEBHOOK_ID is missing in APP_ENV: ${process.env.APP_ENV}!`);
       return false;
     }
     console.warn("[PayPal Webhook Verification] PAYPAL_WEBHOOK_ID is not configured. Webhook signature verification is bypassed for local development/simulation.");
@@ -244,7 +244,18 @@ async function provisionPayPalProductAndPlans() {
   console.log('[PayPal Provision] Initializing secure auto-provisioning...');
 
   try {
-    // 1. Try to load from Firestore config first to optimize speed and reliability
+    // 1. Check if Plan IDs are provided directly in Environment Variables FIRST
+    if (process.env.PAYPAL_PLAN_BASIC && process.env.PAYPAL_PLAN_BUSINESS) {
+      paypalBasicPlanId = process.env.PAYPAL_PLAN_BASIC;
+      paypalBusinessPlanId = process.env.PAYPAL_PLAN_BUSINESS;
+      console.log(`[PayPal Provision] Successfully loaded Plan IDs from Environment Variables:`);
+      console.log(` - Source: ENVIRONMENT_VARIABLES`);
+      console.log(` - Basic Plan ID: ${paypalBasicPlanId}`);
+      console.log(` - Business Plan ID: ${paypalBusinessPlanId}`);
+      return;
+    }
+
+    // 2. Try to load from Firestore config next to optimize speed and reliability
     try {
       const configRef = db.collection('config').doc('paypal');
       const configDoc = await configRef.get();
@@ -256,6 +267,7 @@ async function provisionPayPalProductAndPlans() {
           paypalBasicPlanId = data.basicPlanId;
           paypalBusinessPlanId = data.businessPlanId;
           console.log(`[PayPal Provision] Successfully loaded existing IDs from Firestore:`);
+          console.log(` - Source: FIRESTORE_CACHE`);
           console.log(` - Product ID: ${paypalProductId}`);
           console.log(` - Basic Plan ID: ${paypalBasicPlanId}`);
           console.log(` - Business Plan ID: ${paypalBusinessPlanId}`);
@@ -266,12 +278,12 @@ async function provisionPayPalProductAndPlans() {
       console.warn('[PayPal Provision Warning] Bypassed Firestore Config read due to access limits:', fsError.message || fsError);
     }
 
-    // 2. Fetch PayPal Access Token
+    // 3. Search or Create Product
+    console.log('[PayPal Provision] Source: PAYPAL_API_PROVISIONING (Cache/Env Miss)');
     const token = await getPayPalAccessToken();
     const mode = process.env.PAYPAL_MODE === 'live' ? 'live' : 'sandbox';
     const baseUrl = mode === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 
-    // 3. Search or Create Product
     console.log('[PayPal Provision] Checking for existing Product "Attendance Pro" on PayPal...');
     const prodListResponse = await fetch(`${baseUrl}/v1/catalogs/products?page_size=20`, {
       method: 'GET',
@@ -460,11 +472,10 @@ async function provisionPayPalProductAndPlans() {
 }
 
 /**
- * 🚀 START FULL-STACK EXPRESS SERVER
+ * 📦 EXPORTABLE APP FACTORY (WITHOUT APP.LISTEN)
  */
-async function startServer() {
+export async function createApp(options?: { includeFrontend?: boolean }): Promise<express.Express> {
   const app = express();
-  const PORT = 3000;
 
   // Auto-provision PayPal product and plans on startup
   await provisionPayPalProductAndPlans();
@@ -653,10 +664,10 @@ async function startServer() {
    * 3. WEBHOOK ENDPOINT (PAYPAL SOURCE OF TRUTH)
    */
   app.post('/api/paypal/webhook', async (req, res) => {
-    // If NODE_ENV === "production" and PAYPAL_WEBHOOK_ID is missing, reject the webhook with an error.
-    if (process.env.NODE_ENV === "production" && !process.env.PAYPAL_WEBHOOK_ID) {
-      console.error("[PayPal Webhook] CRITICAL: PAYPAL_WEBHOOK_ID is missing in production. Rejecting webhook request.");
-      return res.status(400).json({ error: "PAYPAL_WEBHOOK_ID environment variable is missing in production" });
+    // If APP_ENV is sandbox_test or live_production and PAYPAL_WEBHOOK_ID is missing, reject the webhook with an error.
+    if ((process.env.APP_ENV === 'sandbox_test' || process.env.APP_ENV === 'live_production') && !process.env.PAYPAL_WEBHOOK_ID) {
+      console.error(`[PayPal Webhook] CRITICAL: PAYPAL_WEBHOOK_ID is missing in APP_ENV: ${process.env.APP_ENV}. Rejecting webhook request.`);
+      return res.status(400).json({ error: `PAYPAL_WEBHOOK_ID environment variable is missing in ${process.env.APP_ENV}` });
     }
 
     // Verify PayPal signature to protect from malicious spoofing
@@ -737,8 +748,8 @@ async function startServer() {
    * 🛠️ 4. SIMULATION ENDPOINT FOR EASY WEBHOOK TESTING
    */
   app.post('/api/paypal/simulate-webhook', authenticateFirebase, async (req, res) => {
-    if (process.env.NODE_ENV === "production") {
-      return res.status(403).json({ error: "Simulation endpoint is disabled in production." });
+    if (process.env.APP_ENV === 'sandbox_test' || process.env.APP_ENV === 'live_production') {
+      return res.status(403).json({ error: "Simulation endpoint is disabled in production and sandbox testing modes." });
     }
 
     const { eventType, subscriptionId, plan } = req.body;
@@ -771,19 +782,33 @@ async function startServer() {
      ⚙️ VITE MIDDLEWARE SETUP
      ========================================================================== */
 
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+  const includeFrontend = options?.includeFrontend !== false;
+
+  if (includeFrontend) {
+    if (process.env.NODE_ENV !== "production") {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
   }
+
+  return app;
+}
+
+/**
+ * 🚀 START FULL-STACK EXPRESS SERVER
+ */
+async function startServer() {
+  const PORT = 3000;
+  const app = await createApp({ includeFrontend: true });
 
   // Bind to Port 3000 and Host 0.0.0.0
   app.listen(PORT, "0.0.0.0", () => {
@@ -791,6 +816,15 @@ async function startServer() {
   });
 }
 
-startServer().catch(err => {
-  console.error("[Server] Fatal startup exception:", err);
-});
+// Only call startServer() automatically when this file is run directly, NOT when createApp is imported
+const isMain = process.argv[1] && (
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) ||
+  process.argv[1].endsWith('server.ts') ||
+  process.argv[1].endsWith('server.js')
+);
+
+if (isMain) {
+  startServer().catch(err => {
+    console.error("[Server] Fatal startup exception:", err);
+  });
+}
