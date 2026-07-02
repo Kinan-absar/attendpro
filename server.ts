@@ -1,25 +1,59 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getApps, initializeApp } from 'firebase-admin/app';
+import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { createServer as createViteServer } from 'vite';
 
 // Initialize Firebase Admin securely
 const projectId = process.env.PROJECT_ID || 'attendance-pro-a9257';
-if (!getApps().length) {
-  try {
-    initializeApp({
-      projectId: projectId
-    });
-    console.log(`[Firebase Admin] Initialized successfully with Project ID: ${projectId}`);
-  } catch (err) {
-    console.warn('[Firebase Admin] Initialization warning (falling back to automatic defaults):', err);
-    initializeApp();
+let db: any = null;
+let adminReady = false;
+
+try {
+  if (!getApps().length) {
+    const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    if (serviceAccountKey) {
+      try {
+        const parsedKey = JSON.parse(serviceAccountKey);
+        initializeApp({
+          credential: cert(parsedKey)
+        });
+        adminReady = true;
+        console.log(`[Firebase Admin] Initialized successfully using FIREBASE_SERVICE_ACCOUNT_KEY credential.`);
+      } catch (parseErr: any) {
+        console.error("FIREBASE_SERVICE_ACCOUNT_KEY is set but is not valid JSON — check how it was pasted into Vercel");
+      }
+    } else {
+      console.error("FIREBASE_SERVICE_ACCOUNT_KEY is not set — Admin Firestore writes will fail");
+    }
+
+    // Fallback if not initialized with credentials to prevent hard-crash on local dev
+    if (!getApps().length) {
+      try {
+        initializeApp({
+          projectId: projectId
+        });
+        console.log(`[Firebase Admin] Initialized with fallback Project ID: ${projectId}`);
+      } catch (err: any) {
+        console.warn('[Firebase Admin Warning] Fallback initialization error:', err.message || err);
+      }
+    }
+  } else {
+    // If already initialized (e.g. serverless warm container reuse), check if credentials were set
+    adminReady = !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   }
+
+  // Get firestore instance safely
+  db = getFirestore();
+} catch (globalInitErr: any) {
+  console.error("[Firebase Admin Critical] Global initialization failed completely:", globalInitErr.message || globalInitErr);
 }
-const db = getFirestore();
+
+export function isFirebaseAdminReady(): boolean {
+  return adminReady;
+}
 
 interface AuthenticatedRequest extends express.Request {
   user?: {
@@ -160,6 +194,7 @@ function getPlanLimit(plan: string): number {
 
 /**
  * 🔒 SECURE WRITES TO FIRESTORE VIA ADMIN SDK
+ * Returns a promise resolving to true if the write succeeded, or false otherwise.
  */
 async function updateCompanySubscriptionData(
   companyId: string, 
@@ -167,7 +202,12 @@ async function updateCompanySubscriptionData(
   subscriptionId: string | null, 
   status: 'active' | 'trial' | 'expired' | 'cancelled',
   provider: 'paypal' | null = 'paypal'
-) {
+): Promise<boolean> {
+  if (!isFirebaseAdminReady() || !db) {
+    console.warn(`[Firestore Admin Warning] Bypassed Firestore Admin set operation because Firebase Admin is not ready (credentials missing).`);
+    return false;
+  }
+
   const cid = companyId.trim().toUpperCase();
   const companyRef = db.collection('companies').doc(cid);
   
@@ -185,8 +225,10 @@ async function updateCompanySubscriptionData(
     }, { merge: true });
     
     console.log(`[Firestore Admin] Company ${cid} subscription updated securely to Plan: ${plan}, Status: ${status}, ID: ${subscriptionId}`);
+    return true;
   } catch (err: any) {
     console.warn(`[Firestore Admin Warning] Bypassed Firestore Admin set operation due to permission/network limits:`, err.message || err);
+    return false;
     // Bypassed gracefully; the client-side app will handle database update via the Client SDK
   }
 }
@@ -602,8 +644,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     // If it's a simulated subscription, return success immediately
     if (subscriptionId.startsWith('I-SIMSUB-') || subscriptionId === 'MOCK') {
       console.log(`[PayPal API] Verifying fully simulated subscription: ${subscriptionId}`);
-      await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
-      return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId });
+      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
+      return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
     }
 
     const clientId = process.env.PAYPAL_CLIENT_ID;
@@ -611,8 +653,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
 
     if (!clientId || !clientSecret || clientId.includes('YOUR_') || clientSecret.includes('YOUR_')) {
       console.warn("[PayPal API Warning] PayPal is unconfigured or using placeholders. Falling back to verification success (Simulator).");
-      await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
-      return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId });
+      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
+      return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
     }
 
     try {
@@ -632,8 +674,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
 
       if (!response.ok) {
         console.warn("[PayPal API Warning] Failed to retrieve subscription from PayPal API. Falling back to Success (Simulator):", response.statusText);
-        await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
-        return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId });
+        const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
+        return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
       }
 
       const data: any = await response.json();
@@ -646,17 +688,17 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       }
 
       if (status === 'ACTIVE') {
-        await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, 'active');
-        return res.json({ success: true, status, plan: resolvedPlan, companyId: customId });
+        const persisted = await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, 'active');
+        return res.json({ success: true, status, plan: resolvedPlan, companyId: customId, serverPersisted: persisted });
       } else {
         const mappedStatus = status === 'CANCELLED' ? 'cancelled' : 'expired';
-        await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, mappedStatus as any);
-        return res.json({ success: false, status, message: `Subscription is not active. Status: ${status}` });
+        const persisted = await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, mappedStatus as any);
+        return res.json({ success: false, status, message: `Subscription is not active. Status: ${status}`, serverPersisted: persisted });
       }
     } catch (error: any) {
       console.warn("[PayPal Verification Exception] Error encountered. Falling back to Success (Simulator):", error.message || error);
-      await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
-      return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId });
+      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
+      return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
     }
   });
 
