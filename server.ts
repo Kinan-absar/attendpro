@@ -541,11 +541,70 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     const cid = companyId.trim().toUpperCase();
     console.log(`[PayPal API] Creating subscription request for company: ${cid}, Plan: ${plan}`);
 
+    // 1. Look up current subscription in Firestore
+    let oldSubscriptionId: string | null = null;
+    let currentStatus: string | null = null;
+    let warningMessage: string | null = null;
+
+    if (db) {
+      try {
+        const companyDoc = await db.collection('companies').doc(cid).get();
+        if (companyDoc.exists) {
+          const companyData = companyDoc.data();
+          oldSubscriptionId = companyData?.paypalSubscriptionId || null;
+          currentStatus = companyData?.subscriptionStatus || null;
+        }
+      } catch (err: any) {
+        console.error(`[PayPal API] Error looking up company details in Firestore for ${cid}:`, err.message || err);
+      }
+    }
+
     const clientId = process.env.PAYPAL_CLIENT_ID;
     const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
 
     // Check if we should fall back to simulator mode due to missing or placeholder credentials
     const isCredentialsPlaceholder = !clientId || !clientSecret || clientId.includes('YOUR_') || clientSecret.includes('YOUR_');
+
+    // 2. If an active subscription exists, attempt cancellation
+    if (oldSubscriptionId && currentStatus === 'active') {
+      console.log(`[PayPal API] Found existing active subscription "${oldSubscriptionId}" for company ${cid}. Attempting automatic cancellation...`);
+      
+      // If it is a simulated subscription, handle simulation cancellation cleanly without API calls
+      if (oldSubscriptionId.startsWith('I-SIMSUB-') || oldSubscriptionId === 'MOCK' || isCredentialsPlaceholder) {
+        console.log(`[PayPal API] Existing subscription "${oldSubscriptionId}" is a simulated subscription. Simulating automatic cancellation...`);
+      } else {
+        try {
+          const accessToken = await getPayPalAccessToken();
+          const mode = process.env.PAYPAL_MODE === 'live' ? 'live' : 'sandbox';
+          const cancelUrl = mode === 'live'
+            ? `https://api-m.paypal.com/v1/billing/subscriptions/${oldSubscriptionId}/cancel`
+            : `https://api-m.sandbox.paypal.com/v1/billing/subscriptions/${oldSubscriptionId}/cancel`;
+
+          const cancelResponse = await fetch(cancelUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              reason: `Changing plan to ${plan}`
+            })
+          });
+
+          if (!cancelResponse.ok) {
+            const cancelErrText = await cancelResponse.text();
+            console.warn(`[PayPal API Warning] PayPal cancellation for subscription "${oldSubscriptionId}" returned status ${cancelResponse.status}:`, cancelErrText);
+            warningMessage = `We detected an existing active subscription but could not cancel it automatically. Please verify your PayPal account. Error details: ${cancelResponse.statusText}`;
+          } else {
+            console.log(`[PayPal API] Successfully cancelled old PayPal subscription "${oldSubscriptionId}"`);
+          }
+        } catch (cancelErr: any) {
+          console.error(`[PayPal API Exception] Failed to cancel existing active subscription "${oldSubscriptionId}":`, cancelErr.message || cancelErr);
+          warningMessage = `We encountered an unexpected error while trying to automatically cancel your existing active subscription. Please review your active subscriptions in your PayPal dashboard.`;
+        }
+      }
+    }
 
     if (isCredentialsPlaceholder) {
       const mockSubId = `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -554,7 +613,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       return res.json({
         simulator: true,
         subscriptionId: mockSubId,
-        approvalUrl
+        approvalUrl,
+        ...(warningMessage ? { warning: warningMessage } : {})
       });
     }
 
@@ -603,7 +663,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
         return res.json({
           simulator: true,
           subscriptionId: mockSubId,
-          approvalUrl
+          approvalUrl,
+          ...(warningMessage ? { warning: warningMessage } : {})
         });
       }
 
@@ -613,7 +674,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       return res.json({
         simulator: false,
         subscriptionId: data.id,
-        approvalUrl: approvalUrl || `https://www.sandbox.paypal.com/checkoutnow?token=${data.id}`
+        approvalUrl: approvalUrl || `https://www.sandbox.paypal.com/checkoutnow?token=${data.id}`,
+        ...(warningMessage ? { warning: warningMessage } : {})
       });
     } catch (error: any) {
       console.warn("[PayPal API Exception] Creating subscription failed, falling back to Simulator:", error.message || error);
@@ -622,7 +684,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       return res.json({
         simulator: true,
         subscriptionId: mockSubId,
-        approvalUrl
+        approvalUrl,
+        ...(warningMessage ? { warning: warningMessage } : {})
       });
     }
   });

@@ -1587,22 +1587,6 @@ class DataService {
       }
 
       const result = await response.json();
-
-      // Securely update the database client-side using the Client SDK
-      if (result.success && this.currentUser?.companyId) {
-        const cid = this.currentUser.companyId.trim().toUpperCase();
-        const limit = plan === 'basic' ? 20 : plan === 'business' ? 100 : 5;
-        await updateDoc(doc(db, COMPANIES, cid), {
-          plan: plan,
-          employeeLimit: limit,
-          subscriptionStatus: 'active',
-          paypalSubscriptionId: subscriptionId,
-          paymentProvider: 'paypal',
-          updatedAt: new Date()
-        });
-        console.log(`[Client-Side Sync] Company ${cid} subscription updated client-side to Plan: ${plan}, Limit: ${limit}`);
-      }
-
       return result;
     } catch (e: any) {
       console.error("[DataService] PayPal verify subscription failed:", e);
@@ -1633,36 +1617,6 @@ class DataService {
       }
 
       const result = await response.json();
-
-      // Securely update the database client-side based on simulated webhook type
-      if (result.success && this.currentUser?.companyId) {
-        const cid = this.currentUser.companyId.trim().toUpperCase();
-        if (eventType.includes('ACTIVATED') || eventType.includes('RENEWED')) {
-          const limit = plan === 'basic' ? 20 : plan === 'business' ? 100 : 5;
-          await updateDoc(doc(db, COMPANIES, cid), {
-            plan: plan,
-            employeeLimit: limit,
-            subscriptionStatus: 'active',
-            paypalSubscriptionId: subscriptionId,
-            paymentProvider: 'paypal',
-            updatedAt: new Date()
-          });
-        } else if (eventType.includes('CANCELLED')) {
-          await updateDoc(doc(db, COMPANIES, cid), {
-            subscriptionStatus: 'cancelled',
-            employeeLimit: 0, // Block additions
-            updatedAt: new Date()
-          });
-        } else if (eventType.includes('EXPIRED') || eventType.includes('SUSPENDED')) {
-          await updateDoc(doc(db, COMPANIES, cid), {
-            subscriptionStatus: 'expired',
-            employeeLimit: 0, // Block additions
-            updatedAt: new Date()
-          });
-        }
-        console.log(`[Client-Side Sync] Simulated webhook database update applied client-side for company ${cid}`);
-      }
-
       return result;
     } catch (e: any) {
       console.error("[DataService] Webhook simulation request failed:", e);
