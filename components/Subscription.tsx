@@ -667,48 +667,9 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
       {/* MANAGE BUSINESS SEATS (ONLY FOR ACTIVE BUSINESS PLAN) */}
       {plan === 'business' && status === 'active' && (() => {
         const cycle = company?.billingCycle || 'monthly';
-        const start = company?.subscriptionStart 
-          ? new Date(company.subscriptionStart) 
-          : (company?.createdAt ? new Date(company.createdAt) : new Date());
-        const now = new Date();
-        
-        // Calculate next renewal date
-        let nextRenewal = new Date(start);
-        if (cycle === 'annual') {
-          while (nextRenewal <= now) {
-            nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
-          }
-        } else {
-          while (nextRenewal <= now) {
-            nextRenewal.setMonth(nextRenewal.getMonth() + 1);
-          }
-        }
-        
-        // Calculate total days in current period
-        const previousRenewal = new Date(nextRenewal);
-        if (cycle === 'annual') {
-          previousRenewal.setFullYear(previousRenewal.getFullYear() - 1);
-        } else {
-          previousRenewal.setMonth(previousRenewal.getMonth() - 1);
-        }
-        const totalPeriodMs = nextRenewal.getTime() - previousRenewal.getTime();
-        const totalPeriodDays = Math.ceil(totalPeriodMs / (1000 * 60 * 60 * 24)) || 30;
-        
-        // Calculate remaining days
-        const remainingMs = nextRenewal.getTime() - now.getTime();
-        const remainingDays = Math.max(1, Math.min(totalPeriodDays, Math.ceil(remainingMs / (1000 * 60 * 60 * 24))));
-        
         const addNum = parseInt(additionalSeatsInput, 10) || 0;
         const pricePerSeat = cycle === 'annual' ? 9.00 : 1.00;
-        const proratedCostPerSeat = pricePerSeat * (remainingDays / totalPeriodDays);
-        const totalProratedUpgradeFee = Number((addNum * proratedCostPerSeat).toFixed(2));
         const nextRecurringBillAmount = (employeeLimit + addNum) * pricePerSeat;
-
-        const formattedRenewalDate = nextRenewal.toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
 
         return (
           <div className="space-y-6">
@@ -719,18 +680,18 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                 </span>
                 <div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                    {language === 'ar' ? "إدارة مقاعد خطة الأعمال مع الحساب النسبي (Prorata)" : "Manage Business Seats with Proration"}
+                    {language === 'ar' ? "إدارة مقاعد خطة الأعمال" : "Manage Business Seats"}
                   </h2>
                   <p className="text-xs text-slate-500 font-bold">
                     {language === 'ar' 
-                      ? "اشترِ مقاعد إضافية فورية مخصومة بناءً على الأيام المتبقية في دورتك الحالية." 
-                      : "Purchase immediate additional seats, discounted based on remaining days in your current billing cycle."
+                      ? "أضف مقاعد إضافية على الفور لمؤسستك دون أي رسوم فورية." 
+                      : "Add additional seats instantly for your team with zero immediate charge."
                     }
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                 {/* CURRENT SEATS (READ-ONLY) */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-2">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">
@@ -810,40 +771,16 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                     }
                   </p>
                 </div>
-
-                {/* PRO-RATA CALCULATOR DETAILS */}
-                <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm space-y-3 text-[11px] font-bold text-slate-600">
-                  <div className="text-slate-800 text-xs font-black uppercase tracking-wider pb-1.5 border-b border-slate-100 flex items-center gap-1.5">
-                    <i className="fa-solid fa-calculator text-emerald-600"></i>
-                    {language === 'ar' ? "تفاصيل الحساب النسبي" : "Pro-Rata Calculations"}
-                  </div>
-                  <div className="flex justify-between items-center gap-2">
-                    <span>{language === 'ar' ? "تاريخ التجديد القادم:" : "Next Renewal Date:"}</span>
-                    <span className="text-slate-900 font-black">{formattedRenewalDate}</span>
-                  </div>
-                  <div className="flex justify-between items-center gap-2">
-                    <span>{language === 'ar' ? "الأيام المتبقية في الدورة:" : "Days Remaining in Cycle:"}</span>
-                    <span className="text-slate-950 font-extrabold">{remainingDays} / {totalPeriodDays} {language === 'ar' ? "يوم" : "days"}</span>
-                  </div>
-                  <div className="flex justify-between items-center gap-2">
-                    <span>{language === 'ar' ? "نسبة الخصم:" : "Pro-rata Ratio:"}</span>
-                    <span className="text-emerald-700 font-extrabold">{((remainingDays / totalPeriodDays) * 100).toFixed(0)}%</span>
-                  </div>
-                  <div className="flex justify-between items-center gap-2">
-                    <span>{language === 'ar' ? "سعر المقعد التناسبي:" : "Prorated Seat Rate:"}</span>
-                    <span className="text-slate-900 font-black">${proratedCostPerSeat.toFixed(2)}</span>
-                  </div>
-                </div>
               </div>
 
-              {/* PRORATED GRAND SUMMARY BAR */}
+              {/* BILLING SUMMARY BAR */}
               <div className="p-6 bg-emerald-600 rounded-3xl text-white shadow-lg space-y-4 md:space-y-0 md:flex md:items-center md:justify-between">
                 <div className="space-y-1.5 text-start">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-700 text-white font-black text-[9px] uppercase tracking-widest leading-none">
-                    {language === 'ar' ? "ملخص طلب الترقية" : "UPGRADE ORDER BILLING"}
+                    {language === 'ar' ? "ملخص ترقية المقاعد" : "UPGRADE SUMMARY"}
                   </span>
                   <div className="text-xl font-black tracking-tight">
-                    {language === 'ar' ? `المقاعد الجديدة: ${employeeLimit + addNum} مقعداً` : `New Limit: ${employeeLimit + addNum} Total Seats`}
+                    {language === 'ar' ? `المقاعد الإجمالية الجديدة: ${employeeLimit + addNum} مقعداً` : `New Limit: ${employeeLimit + addNum} Total Seats`}
                     <span className="text-sm font-semibold ml-2 text-emerald-100">
                       ({language === 'ar' ? `بإضافة +${addNum} مقعداً` : `Adding +${addNum} seats`})
                     </span>
@@ -851,14 +788,14 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                   <div className="text-[11px] text-emerald-100 font-bold space-y-1">
                     <p>
                       {language === 'ar' 
-                        ? `الدفع المستحق اليوم (النسبة المتبقية فقط): $${totalProratedUpgradeFee}`
-                        : `Immediate upgrade fee due today (for the remainder of this cycle): $${totalProratedUpgradeFee}`
+                        ? "✨ لا توجد رسوم فورية اليوم! سيتم تفعيل المقاعد فوراً مجاناً للمتبقي من دورتك الحالية."
+                        : "✨ Zero immediate charge today! Enjoy free extra seats instantly for the remainder of this billing cycle."
                       }
                     </p>
-                    <p className="opacity-90">
+                    <p className="opacity-95 font-semibold">
                       {language === 'ar' 
-                        ? `الفاتورة الدورية القادمة (مجموع ${employeeLimit + addNum} مقعداً): $${nextRecurringBillAmount} شهرياً تبدأ في ${formattedRenewalDate}`
-                        : `Next recurring billing (${employeeLimit + addNum} seats at full rate): $${nextRecurringBillAmount} due on ${formattedRenewalDate}`
+                        ? `الفاتورة الدورية القادمة (مجموع ${employeeLimit + addNum} مقعداً): $${nextRecurringBillAmount} تبدأ تلقائياً في دورة التجديد القادمة.`
+                        : `Next cycle billing: Your upcoming automatic renewal will bill the updated total of $${nextRecurringBillAmount} for all ${employeeLimit + addNum} seats.`
                       }
                     </p>
                   </div>
@@ -881,27 +818,33 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                       }
 
                       const isConfirmed = await showConfirm(
-                        language === 'ar' ? "تأكيد ترقية المقاعد النسبية" : "Confirm Prorated Seat Upgrade",
+                        language === 'ar' ? "تأكيد ترقية المقاعد" : "Confirm Seat Upgrade",
                         language === 'ar'
-                          ? `هل أنت متأكد من رغبتك في زيادة المقاعد إلى ${targetQty} مقعداً؟ سيتم احتساب قيمة نسبية قدرها $${totalProratedUpgradeFee} للفترة المتبقية من دورتك الحالية وتحديث اشتراكك.`
-                          : `Are you sure you want to increase your company headcount capacity to ${targetQty} seats? This will charge a fair prorated fee of $${totalProratedUpgradeFee} for the remainder of your current period.`
+                          ? `هل أنت متأكد من رغبتك في زيادة المقاعد فوراً إلى ${targetQty} مقعداً؟ لن يتم خصم أي مبالغ منك اليوم، وستبدأ الفوترة المحدثة بقيمة $${nextRecurringBillAmount} في دورتك القادمة.`
+                          : `Are you sure you want to increase your company headcount capacity immediately to ${targetQty} seats? No charge will be made today. Your next cycle will update to $${nextRecurringBillAmount}.`
                       );
 
                       if (isConfirmed) {
                         setIsProcessing(true);
                         try {
-                          const response = await dataService.createCheckoutSession(
-                            'business', 
-                            company?.billingCycle || 'monthly', 
-                            targetQty
-                          );
-                          if (response.approvalUrl) {
-                            window.location.href = response.approvalUrl;
+                          const response = await dataService.updateSubscriptionSeats(targetQty);
+                          if (response.success) {
+                            await showAlert(
+                              language === 'ar' ? "تمت ترقية السعة!" : "Capacity Upgraded!",
+                              language === 'ar' 
+                                ? `تمت إضافة +${addNum} مقاعد جديدة بنجاح إلى حسابك فوراً ومجاناً حتى نهاية دورتك الحالية. ستنعكس الفوترة المحدثة في الدورة القادمة.`
+                                : `Successfully added +${addNum} new seats to your account instantly at no cost today. Future cycle billing will be adjusted to the updated capacity.`,
+                              "success"
+                            );
+                            setAdditionalSeatsInput("5");
+                            await fetchCompanyData();
+                            if (onRefreshUser) onRefreshUser();
                           } else {
-                            throw new Error("No approval URL received");
+                            throw new Error(response.error || "Failed to update subscription seats");
                           }
                         } catch (err: any) {
-                          await showAlert(t('error'), err.message || "Failed to trigger PayPal upgrade flow", "error");
+                          await showAlert(t('error'), err.message || "Failed to process seat upgrade capacity", "error");
+                        } finally {
                           setIsProcessing(false);
                         }
                       }
@@ -915,60 +858,12 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                         {sT('processing')}
                       </span>
                     ) : (
-                      language === 'ar' ? "تأكيد الترقية والدفع الآن" : "Authorize Prorated Upgrade"
+                      language === 'ar' ? "تأكيد الترقية الفورية مجاناً" : "Activate Seats Now"
                     )}
                   </button>
                 </div>
               </div>
             </div>
-
-            {/* SEAT PURCHASE HISTORY (IF ANY EXIST IN THE HISTORY ARRAY) */}
-            {company?.proratedUpgrades && company.proratedUpgrades.length > 0 && (
-              <div className="p-8 bg-white border border-slate-200 rounded-[2.5rem] text-start space-y-4 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
-                    <i className="fa-solid fa-receipt text-xs"></i>
-                  </span>
-                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">
-                    {language === 'ar' ? "سجل ترقيات المقاعد التناسبية" : "Prorated Seat Upgrade History"}
-                  </h3>
-                </div>
-
-                <div className="overflow-x-auto border border-slate-100 rounded-2xl">
-                  <table className="w-full text-xs text-slate-600">
-                    <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 text-center">
-                      <tr>
-                        <th className="py-3 px-4">{language === 'ar' ? "التاريخ" : "Date"}</th>
-                        <th className="py-3 px-4">{language === 'ar' ? "المقاعد المضافة" : "Seats Added"}</th>
-                        <th className="py-3 px-4">{language === 'ar' ? "السعة الجديدة" : "New Capacity"}</th>
-                        <th className="py-3 px-4">{language === 'ar' ? "الأيام المتبقية" : "Days in Cycle"}</th>
-                        <th className="py-3 px-4">{language === 'ar' ? "المبلغ المدفوع (بروراتا)" : "Amount Paid (Prorated)"}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-center font-bold">
-                      {company.proratedUpgrades.map((upgrade: any, idx: number) => {
-                        const dateObj = upgrade.date ? (upgrade.date.toDate ? upgrade.date.toDate() : new Date(upgrade.date)) : new Date();
-                        const formattedDate = dateObj.toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric'
-                        });
-
-                        return (
-                          <tr key={idx} className="hover:bg-slate-50/50">
-                            <td className="py-3 px-4 text-slate-500 font-mono">{formattedDate}</td>
-                            <td className="py-3 px-4 text-emerald-600 font-black">+{upgrade.seatsAdded}</td>
-                            <td className="py-3 px-4 text-slate-800">{upgrade.previousLimit} → {upgrade.newLimit}</td>
-                            <td className="py-3 px-4 text-slate-500">{upgrade.remainingDays} days left</td>
-                            <td className="py-3 px-4 font-mono font-black text-slate-900">${upgrade.proratedFee?.toFixed(2)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </div>
         );
       })()}

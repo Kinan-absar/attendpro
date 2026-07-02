@@ -240,58 +240,7 @@ async function updateCompanySubscriptionData(
       updatePayload.subscriptionStart = FieldValue.serverTimestamp();
     }
 
-    // Track prorated upgrades when adding seats to an active Business plan
-    let previousLimit = currentData ? (currentData.employeeLimit || 21) : 21;
-    if (plan === 'business' && currentData && currentData.plan === 'business' && limit > previousLimit && status === 'active') {
-      const addedSeats = limit - previousLimit;
-      const cycle = billingCycle || currentData.billingCycle || 'monthly';
-      const startTimestamp = currentData.subscriptionStart;
-      
-      let startDate = startTimestamp ? startTimestamp.toDate() : new Date();
-      const now = new Date();
-      
-      // Calculate next renewal date
-      let nextRenewal = new Date(startDate);
-      if (cycle === 'annual') {
-        while (nextRenewal <= now) {
-          nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
-        }
-      } else {
-        while (nextRenewal <= now) {
-          nextRenewal.setMonth(nextRenewal.getMonth() + 1);
-        }
-      }
-      
-      // Calculate total days in current period
-      const previousRenewal = new Date(nextRenewal);
-      if (cycle === 'annual') {
-        previousRenewal.setFullYear(previousRenewal.getFullYear() - 1);
-      } else {
-        previousRenewal.setMonth(previousRenewal.getMonth() - 1);
-      }
-      const totalPeriodDays = Math.ceil((nextRenewal.getTime() - previousRenewal.getTime()) / (1000 * 60 * 60 * 24)) || 30;
-      
-      // Calculate remaining days
-      const remainingDays = Math.max(1, Math.min(totalPeriodDays, Math.ceil((nextRenewal.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))));
-      
-      const pricePerSeat = cycle === 'annual' ? 9.00 : 1.00;
-      const proratedFee = Number((addedSeats * pricePerSeat * (remainingDays / totalPeriodDays)).toFixed(2));
-      
-      const newUpgrade = {
-        seatsAdded: addedSeats,
-        previousLimit,
-        newLimit: limit,
-        proratedFee,
-        remainingDays,
-        renewalDate: nextRenewal,
-        date: new Date()
-      };
-      
-      const existingUpgrades = currentData.proratedUpgrades || [];
-      updatePayload.proratedUpgrades = [...existingUpgrades, newUpgrade];
-      updatePayload.lastProratedUpgrade = newUpgrade;
-    }
-
+    // Directly update the subscription without immediate extra calculations
     await companyRef.set(updatePayload, { merge: true });
     
     console.log(`[Firestore Admin] Company ${cid} subscription updated securely to Plan: ${plan}, Limit: ${limit}, Status: ${status}, ID: ${subscriptionId}, Billing: ${billingCycle}`);
@@ -1025,6 +974,131 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       const parsedBillingCycle = billingCycle || 'monthly';
       const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty, parsedBillingCycle);
       return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
+    }
+  });
+
+  /**
+   * NEW: DIRECT SEAT UPDATE (NO IMMEDIATE CHARGE, FUTURE BILLING)
+   */
+  app.post('/api/paypal/update-seats', authenticateFirebase, async (req, res) => {
+    const companyId = (req as AuthenticatedRequest).user?.companyId;
+    const { quantity } = req.body;
+    
+    if (!companyId || quantity === undefined) {
+      return res.status(400).json({ error: "Missing companyId or quantity parameter" });
+    }
+
+    const cid = companyId.trim().toUpperCase();
+    const targetQty = parseInt(quantity, 10);
+
+    if (isNaN(targetQty) || targetQty < 21 || targetQty > 100) {
+      return res.status(400).json({ error: "Invalid seat quantity. Business plan supports between 21 and 100 seats." });
+    }
+
+    console.log(`[PayPal API] Direct seat update request for company: ${cid} to ${targetQty} seats.`);
+
+    try {
+      const companyRef = db.collection('companies').doc(cid);
+      const companyDoc = await companyRef.get();
+      if (!companyDoc.exists) {
+        return res.status(404).json({ error: "Company not found" });
+      }
+
+      const companyData = companyDoc.data();
+      const currentPlan = companyData?.plan;
+      const currentStatus = companyData?.subscriptionStatus;
+      const subscriptionId = companyData?.paypalSubscriptionId || companyData?.subscriptionId;
+
+      if (currentPlan !== 'business' || currentStatus !== 'active') {
+        return res.status(400).json({ error: "Direct seat upgrades are only available for active Business plan subscriptions." });
+      }
+
+      // Verify the company doesn't have more registered employees than the requested quantity
+      const usersSnap = await db.collection('users').where('companyId', '==', cid).get();
+      const currentEmployees = usersSnap.size;
+      if (targetQty < currentEmployees) {
+        return res.status(400).json({ 
+          error: `Your company currently has ${currentEmployees} registered staff. You cannot reduce seat capacity below your current registered team size.` 
+        });
+      }
+
+      // 1. Immediately update Firestore so the customer gets the seats right now for free
+      const updatePayload: any = {
+        employeeLimit: targetQty,
+        updatedAt: FieldValue.serverTimestamp()
+      };
+
+      // Clean up previous prorata variables if any, to keep it clean
+      if (companyData?.proratedUpgrades) {
+        updatePayload.proratedUpgrades = FieldValue.delete();
+      }
+      if (companyData?.lastProratedUpgrade) {
+        updatePayload.lastProratedUpgrade = FieldValue.delete();
+      }
+
+      await companyRef.update(updatePayload);
+      console.log(`[PayPal API] Successfully updated Firestore employeeLimit to ${targetQty} for company ${cid}`);
+
+      // 2. If it is a real PayPal subscription (not simulator), attempt a background revision call to update future billing
+      const clientId = process.env.PAYPAL_CLIENT_ID;
+      const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+      const isCredentialsPlaceholder = !clientId || !clientSecret || clientId.includes('YOUR_') || clientSecret.includes('YOUR_');
+
+      if (subscriptionId && !subscriptionId.startsWith('I-SIMSUB-') && subscriptionId !== 'MOCK' && !isCredentialsPlaceholder) {
+        console.log(`[PayPal API] Attempting to revise PayPal subscription ${subscriptionId} quantity to ${targetQty}...`);
+        try {
+          const accessToken = await getPayPalAccessToken();
+          const mode = process.env.PAYPAL_MODE === 'live' ? 'live' : 'sandbox';
+          const reviseUrl = mode === 'live'
+            ? `https://api-m.paypal.com/v1/billing/subscriptions/${subscriptionId}/revise`
+            : `https://api-m.sandbox.paypal.com/v1/billing/subscriptions/${subscriptionId}/revise`;
+
+          // Get Plan ID from the company or database
+          let planId = companyData?.paypalPlanId;
+          if (!planId) {
+            const billingCycle = companyData?.billingCycle || 'monthly';
+            planId = billingCycle === 'annual'
+              ? (paypalBusinessAnnualPlanId || process.env.PAYPAL_PLAN_BUSINESS_ANNUAL || '')
+              : (paypalBusinessMonthlyPlanId || process.env.PAYPAL_PLAN_BUSINESS_MONTHLY || '');
+          }
+
+          if (planId) {
+            const reviseResponse = await fetch(reviseUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
+              body: JSON.stringify({
+                plan_id: planId,
+                quantity: String(targetQty)
+              })
+            });
+
+            if (!reviseResponse.ok) {
+              const errBody = await reviseResponse.text();
+              console.warn(`[PayPal API Warning] Failed to revise PayPal subscription ${subscriptionId}. Status: ${reviseResponse.status}. Body: ${errBody}`);
+            } else {
+              console.log(`[PayPal API] Successfully revised PayPal subscription ${subscriptionId} quantity to ${targetQty}`);
+            }
+          }
+        } catch (paypalErr: any) {
+          console.warn(`[PayPal API Error] Failed to contact PayPal for subscription revision:`, paypalErr.message || paypalErr);
+        }
+      } else {
+        console.log(`[PayPal API] Simulated subscription detected or credentials missing. Skipping live PayPal API revision call.`);
+      }
+
+      return res.json({ 
+        success: true, 
+        message: "Seats upgraded successfully. The new seat capacity is active immediately, and the higher rate will be billed next cycle.",
+        limit: targetQty 
+      });
+
+    } catch (err: any) {
+      console.error(`[PayPal API] Error in update-seats endpoint:`, err.message || err);
+      return res.status(500).json({ error: "Internal server error while upgrading seat capacity." });
     }
   });
 

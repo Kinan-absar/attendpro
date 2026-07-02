@@ -1570,6 +1570,36 @@ class DataService {
     }
   }
 
+  async updateSubscriptionSeats(quantity: number): Promise<{ success: boolean; limit?: number; error?: string }> {
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        throw new Error("User must be authenticated to update subscription seats.");
+      }
+
+      const companyId = this.currentUser?.companyId || 'ABSAR';
+      const response = await fetch('/api/paypal/update-seats', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+          'X-Company-Id': companyId
+        },
+        body: JSON.stringify({ companyId, quantity })
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to update subscription seats');
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (e: any) {
+      console.error("[DataService] PayPal update subscription seats failed:", e);
+      throw e;
+    }
+  }
+
   async verifyPayPalSubscription(subscriptionId: string, plan: string, qty?: number, billingCycle?: string): Promise<{ success: boolean; status?: string; plan?: string; companyId?: string; error?: string }> {
     try {
       const idToken = await auth.currentUser?.getIdToken();
