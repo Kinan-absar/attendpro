@@ -18,10 +18,14 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
   const [simulatingWebhook, setSimulatingWebhook] = useState(false);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
   const [businessSeats, setBusinessSeats] = useState<number>(25);
+  const [businessSeatsInput, setBusinessSeatsInput] = useState<string>("25");
+  const [additionalSeatsInput, setAdditionalSeatsInput] = useState<string>("5");
 
   useEffect(() => {
     if (company) {
-      setBusinessSeats(Math.max(21, company.employeeCount || 0));
+      const initialQty = Math.max(21, company.employeeCount || 0);
+      setBusinessSeats(initialQty);
+      setBusinessSeatsInput(String(initialQty));
     }
   }, [company]);
 
@@ -163,7 +167,8 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
 
         console.log(`[Subscription Page] Verifying checkout return. Sub ID: ${subId}, Plan: ${targetPlan}, Company: ${targetCompany}, Qty: ${targetQty}`);
         
-        const result = await dataService.verifyPayPalSubscription(subId, targetPlan, targetQty);
+        const targetCycle = params.get('sim_cycle') || billingCycle;
+        const result = await dataService.verifyPayPalSubscription(subId, targetPlan, targetQty, targetCycle);
         if (result.success) {
           await showAlert(
             language === 'ar' ? "تم التنشيط!" : "Subscription Activated!", 
@@ -271,7 +276,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
     try {
       const mockSubId = company.paypalSubscriptionId || `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
       const qty = planId === 'business' ? businessSeats : undefined;
-      const result = await dataService.simulateWebhook(eventType, mockSubId, planId, qty);
+      const result = await dataService.simulateWebhook(eventType, mockSubId, planId, qty, billingCycle);
       
       await showAlert(
         "Simulator Fired", 
@@ -383,12 +388,59 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
       {/* DASHBOARD STATUS CARD */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="p-6 bg-white border border-slate-100 rounded-[2rem] shadow-xl shadow-slate-100/50 flex flex-col justify-between space-y-4">
-          <div className="text-start">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{sT('currentPlan')}</p>
-            <h2 className="text-2xl font-black text-indigo-600 uppercase tracking-tight mt-1">{plan}</h2>
+          <div className="text-start space-y-2">
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{sT('currentPlan')}</p>
+              <h2 className="text-2xl font-black text-indigo-600 uppercase tracking-tight mt-1">{plan}</h2>
+            </div>
+
+            {/* Rich details for subscriber */}
+            {plan !== 'free' && (
+              <div className="pt-2 border-t border-slate-100 space-y-1.5 text-[11px] font-bold text-slate-600">
+                <div className="flex justify-between items-center gap-2">
+                  <span>{language === 'ar' ? "دورة الفوترة:" : "Billing Cycle:"}</span>
+                  <span className="text-slate-900 font-extrabold capitalize">
+                    {company?.billingCycle === 'annual' 
+                      ? (language === 'ar' ? "سنوي" : "Annual") 
+                      : (language === 'ar' ? "شهري" : "Monthly")
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between items-center gap-2">
+                  <span>{language === 'ar' ? "معدل السعر:" : "Price Rate:"}</span>
+                  <span className="text-slate-900 font-extrabold">
+                    {plan === 'business'
+                      ? (company?.billingCycle === 'annual' ? "$9 / seat / yr" : "$1 / seat / mo")
+                      : (company?.billingCycle === 'annual' ? "$180 / yr" : "$20 / mo")
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between items-center gap-2">
+                  <span>{language === 'ar' ? "المقاعد الإجمالية:" : "Total Seats:"}</span>
+                  <span className="text-slate-900 font-extrabold">
+                    {plan === 'business' ? `${employeeLimit} seats` : "20 seats"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center gap-2">
+                  <span>{language === 'ar' ? "قيمة الفاتورة:" : "Total Billing:"}</span>
+                  <span className="text-slate-900 font-extrabold">
+                    {plan === 'business' 
+                      ? `$${employeeLimit * (company?.billingCycle === 'annual' ? 9 : 1)} / ${company?.billingCycle === 'annual' ? 'yr' : 'mo'}`
+                      : (company?.billingCycle === 'annual' ? "$180 / yr" : "$20 / mo")
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between items-center gap-2 truncate">
+                  <span className="shrink-0">{language === 'ar' ? "رقم الاشتراك:" : "Sub ID:"}</span>
+                  <span className="text-slate-500 text-[10px] font-mono select-all truncate max-w-[110px] text-end" title={company?.paypalSubscriptionId || ""}>
+                    {company?.paypalSubscriptionId || "N/A"}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest gap-1.5 ${
+            <span className={`inline-flex items-center px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest gap-1.5 leading-none ${
               status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
             }`}>
               <i className="fa-solid fa-circle text-[6px] animate-pulse"></i>
@@ -490,28 +542,48 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => setBusinessSeats(prev => Math.max(Math.max(21, employeeCount), prev - 1))}
+                          onClick={() => {
+                            const nextVal = Math.max(Math.max(21, employeeCount), businessSeats - 1);
+                            setBusinessSeats(nextVal);
+                            setBusinessSeatsInput(String(nextVal));
+                          }}
                           disabled={businessSeats <= Math.max(21, employeeCount)}
                           className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                         >
                           -
                         </button>
                         <input
-                          type="number"
-                          min={Math.max(21, employeeCount)}
-                          max={100}
-                          value={businessSeats}
+                          type="text"
+                          pattern="[0-9]*"
+                          inputMode="numeric"
+                          value={businessSeatsInput}
                           onChange={(e) => {
-                            const val = parseInt(e.target.value, 10);
-                            if (!isNaN(val)) {
-                              setBusinessSeats(Math.min(100, Math.max(Math.max(21, employeeCount), val)));
+                            const val = e.target.value;
+                            if (val === '' || /^\d+$/.test(val)) {
+                              setBusinessSeatsInput(val);
                             }
                           }}
-                          className="w-16 text-center border border-slate-300 rounded-lg py-1 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          onBlur={() => {
+                            const val = parseInt(businessSeatsInput, 10);
+                            if (isNaN(val)) {
+                              const fallback = Math.max(21, employeeCount);
+                              setBusinessSeats(fallback);
+                              setBusinessSeatsInput(String(fallback));
+                            } else {
+                              const clamped = Math.min(100, Math.max(Math.max(21, employeeCount), val));
+                              setBusinessSeats(clamped);
+                              setBusinessSeatsInput(String(clamped));
+                            }
+                          }}
+                          className="w-16 text-center border border-slate-300 rounded-lg py-1 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500"
                         />
                         <button
                           type="button"
-                          onClick={() => setBusinessSeats(prev => Math.min(100, prev + 1))}
+                          onClick={() => {
+                            const nextVal = Math.min(100, businessSeats + 1);
+                            setBusinessSeats(nextVal);
+                            setBusinessSeatsInput(String(nextVal));
+                          }}
                           disabled={businessSeats >= 100}
                           className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                         >
@@ -558,7 +630,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
 
               <div className="pt-6">
                 {isCurrent && !isSuspended ? (
-                  <div className="w-full py-3 bg-white border-2 border-indigo-600 text-indigo-600 rounded-2xl font-black text-xs uppercase tracking-widest text-center shadow-inner">
+                  <div className="w-full py-3.5 px-4 bg-white border-2 border-indigo-600 text-indigo-600 rounded-2xl font-black text-xs uppercase tracking-widest text-center shadow-inner flex items-center justify-center leading-none">
                     {sT('currentActive')}
                   </div>
                 ) : (
@@ -566,7 +638,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                     type="button"
                     onClick={() => handleSubscribe(p.id)}
                     disabled={isProcessing}
-                    className={`w-full py-3 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-md ${
+                    className={`w-full py-3.5 px-4 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-md flex items-center justify-center leading-none text-center ${
                       p.id === 'free' 
                         ? 'bg-slate-600 hover:bg-slate-700 hover:shadow-slate-500/20' 
                         : p.id === 'enterprise' 
@@ -591,6 +663,183 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
           );
         })}
       </div>
+
+      {/* MANAGE BUSINESS SEATS (ONLY FOR ACTIVE BUSINESS PLAN) */}
+      {plan === 'business' && status === 'active' && (
+        <div className="p-8 bg-gradient-to-r from-emerald-50/60 to-teal-50/60 border-2 border-emerald-500/30 rounded-[2.5rem] text-start space-y-6 shadow-xl shadow-emerald-100/20">
+          <div className="flex items-center gap-3">
+            <span className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-200">
+              <i className="fa-solid fa-users-gear text-lg"></i>
+            </span>
+            <div>
+              <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                {language === 'ar' ? "إدارة مقاعد خطة الأعمال" : "Manage Business Seats"}
+              </h2>
+              <p className="text-xs text-slate-500 font-bold">
+                {language === 'ar' 
+                  ? "قم بشراء مقاعد إضافية فورياً لموظفيك الجدد." 
+                  : "Purchase more employee seats instantly as your team scales."
+                }
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+            {/* CURRENT SEATS (READ-ONLY) */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-2">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                {language === 'ar' ? "المقاعد الحالية (للقراءة فقط):" : "Current Purchased Seats (Read-only):"}
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={employeeLimit}
+                  className="w-full bg-slate-50 text-slate-600 font-mono font-black text-center py-2.5 rounded-xl border border-slate-200 cursor-not-allowed focus:outline-none"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 font-bold">
+                {language === 'ar' 
+                  ? `(حالياً تم تسجيل ${employeeCount} موظفاً)` 
+                  : `(${employeeCount} staff registered currently)`
+                }
+              </p>
+            </div>
+
+            {/* ADDITIONAL SEATS INPUT */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-2">
+              <label className="block text-[10px] font-black text-emerald-700 uppercase tracking-wider">
+                {language === 'ar' ? "إضافة مقاعد جديدة:" : "Add New Seats:"}
+              </label>
+              <div className="flex items-center justify-between gap-2 bg-slate-50/50 p-1 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentVal = parseInt(additionalSeatsInput, 10) || 0;
+                    const nextVal = Math.max(1, currentVal - 1);
+                    setAdditionalSeatsInput(String(nextVal));
+                  }}
+                  className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"
+                >
+                  -
+                </button>
+                <input
+                  type="text"
+                  pattern="[0-9]*"
+                  inputMode="numeric"
+                  value={additionalSeatsInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || /^\d+$/.test(val)) {
+                      setAdditionalSeatsInput(val);
+                    }
+                  }}
+                  onBlur={() => {
+                    const val = parseInt(additionalSeatsInput, 10);
+                    if (isNaN(val) || val < 1) {
+                      setAdditionalSeatsInput("1");
+                    } else if (employeeLimit + val > 100) {
+                      setAdditionalSeatsInput(String(100 - employeeLimit));
+                    }
+                  }}
+                  className="w-16 bg-transparent text-center font-black text-sm text-slate-900 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentVal = parseInt(additionalSeatsInput, 10) || 0;
+                    const nextVal = Math.min(100 - employeeLimit, currentVal + 1);
+                    setAdditionalSeatsInput(String(nextVal));
+                  }}
+                  disabled={employeeLimit >= 100}
+                  className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  +
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 font-bold">
+                {language === 'ar' 
+                  ? "اكتب الرقم مباشرة أو استخدم أزرار التحكم" 
+                  : "Type directly or use adjustment buttons"
+                }
+              </p>
+            </div>
+
+            {/* SUMMARY & ORDER ACTIONS */}
+            <div className="bg-emerald-600 p-5 rounded-2xl text-white shadow-md flex flex-col justify-between space-y-3">
+              <div className="space-y-1">
+                <p className="text-[9px] font-black text-emerald-200 uppercase tracking-widest">
+                  {language === 'ar' ? "التكلفة والمجموع الجديد" : "SUMMARY OF UPGRADE"}
+                </p>
+                <div className="text-xl font-black tracking-tight">
+                  {employeeLimit + (parseInt(additionalSeatsInput, 10) || 0)} {language === 'ar' ? "مقعداً إجمالياً" : "Total Seats"}
+                </div>
+                <p className="text-[10px] text-emerald-100 font-bold">
+                  {language === 'ar' 
+                    ? `إضافة: +${parseInt(additionalSeatsInput, 10) || 0} مقاعد (+ $${(parseInt(additionalSeatsInput, 10) || 0) * (company?.billingCycle === 'annual' ? 9 : 1)} / ${company?.billingCycle === 'annual' ? 'سنة' : 'شهر'})`
+                    : `Adding: +${parseInt(additionalSeatsInput, 10) || 0} seats (+$${(parseInt(additionalSeatsInput, 10) || 0) * (company?.billingCycle === 'annual' ? 9 : 1)} / ${company?.billingCycle === 'annual' ? 'yr' : 'mo'})`
+                  }
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const addNum = parseInt(additionalSeatsInput, 10) || 0;
+                  const targetQty = employeeLimit + addNum;
+                  if (targetQty > 100) {
+                    await showAlert(
+                      t('error'), 
+                      language === 'ar' 
+                        ? "خطة الأعمال تدعم بحد أقصى 100 موظف. يرجى الاتصال بالمبيعات." 
+                        : "Business plan supports up to 100 seats. Contact Sales for Enterprise.", 
+                      "error"
+                    );
+                    return;
+                  }
+
+                  const isConfirmed = await showConfirm(
+                    language === 'ar' ? "تأكيد ترقية المقاعد" : "Confirm Seat Upgrade",
+                    language === 'ar'
+                      ? `هل أنت متأكد من رغبتك في زيادة المقاعد إلى ${targetQty} مقعداً؟ سيتم إلغاء اشتراكك الحالي وتعديل الفاتورة.`
+                      : `Are you sure you want to increase your company headcount capacity to ${targetQty} seats? This will automatically adjust your PayPal plan.`
+                  );
+
+                  if (isConfirmed) {
+                    setIsProcessing(true);
+                    try {
+                      const response = await dataService.createCheckoutSession(
+                        'business', 
+                        company?.billingCycle || 'monthly', 
+                        targetQty
+                      );
+                      if (response.approvalUrl) {
+                        window.location.href = response.approvalUrl;
+                      } else {
+                        throw new Error("No approval URL received");
+                      }
+                    } catch (err: any) {
+                      await showAlert(t('error'), err.message || "Failed to trigger PayPal upgrade flow", "error");
+                      setIsProcessing(false);
+                    }
+                  }
+                }}
+                disabled={isProcessing || (parseInt(additionalSeatsInput, 10) || 0) <= 0}
+                className="w-full py-2.5 px-4 bg-white text-emerald-700 hover:bg-emerald-50 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center leading-none text-center disabled:opacity-75 shadow"
+              >
+                {isProcessing ? (
+                  <span className="flex items-center justify-center gap-1.5">
+                    <i className="fa-solid fa-spinner fa-spin"></i>
+                    {sT('processing')}
+                  </span>
+                ) : (
+                  language === 'ar' ? "ترقية وحفظ التعديلات" : "Upgrade Capacity Now"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* DEVELOPER WEBHOOK SANDBOX SIMULATOR */}
       <div className="p-8 bg-slate-900 border border-slate-800 rounded-[2.5rem] text-start text-white space-y-6 shadow-2xl">

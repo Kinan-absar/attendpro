@@ -201,7 +201,8 @@ async function updateCompanySubscriptionData(
   subscriptionId: string | null, 
   status: 'active' | 'trial' | 'expired' | 'cancelled',
   provider: 'paypal' | null = 'paypal',
-  quantity?: number
+  quantity?: number,
+  billingCycle?: 'monthly' | 'annual'
 ): Promise<boolean> {
   if (!isFirebaseAdminReady() || !db) {
     console.warn(`[Firestore Admin Warning] Bypassed Firestore Admin set operation because Firebase Admin is not ready (credentials missing).`);
@@ -217,7 +218,7 @@ async function updateCompanySubscriptionData(
   }
   
   try {
-    await companyRef.set({
+    const updatePayload: any = {
       plan,
       employeeLimit: status === 'active' ? limit : 0, // 0 limit blocks adding employees if cancelled or expired
       subscriptionStatus: status,
@@ -225,9 +226,15 @@ async function updateCompanySubscriptionData(
       paymentProvider: provider,
       subscriptionStart: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
-    }, { merge: true });
+    };
+
+    if (billingCycle) {
+      updatePayload.billingCycle = billingCycle;
+    }
+
+    await companyRef.set(updatePayload, { merge: true });
     
-    console.log(`[Firestore Admin] Company ${cid} subscription updated securely to Plan: ${plan}, Limit: ${limit}, Status: ${status}, ID: ${subscriptionId}`);
+    console.log(`[Firestore Admin] Company ${cid} subscription updated securely to Plan: ${plan}, Limit: ${limit}, Status: ${status}, ID: ${subscriptionId}, Billing: ${billingCycle}`);
     return true;
   } catch (err: any) {
     console.warn(`[Firestore Admin Warning] Bypassed Firestore Admin set operation due to permission/network limits:`, err.message || err);
@@ -850,7 +857,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
    * 2. VERIFY PAYPAL SUBSCRIPTION (ON RETURNING TO CLIENT)
    */
   app.post('/api/paypal/verify-subscription', authenticateFirebase, async (req, res) => {
-    const { subscriptionId, plan, qty } = req.body;
+    const { subscriptionId, plan, qty, billingCycle } = req.body;
     const companyId = (req as AuthenticatedRequest).user?.companyId;
 
     if (!subscriptionId || !companyId) {
@@ -863,7 +870,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     if (subscriptionId.startsWith('I-SIMSUB-') || subscriptionId === 'MOCK') {
       console.log(`[PayPal API] Verifying fully simulated subscription: ${subscriptionId}`);
       const parsedQty = qty ? parseInt(qty, 10) : undefined;
-      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty);
+      const parsedBillingCycle = billingCycle || 'monthly';
+      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty, parsedBillingCycle);
       return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
     }
 
@@ -873,7 +881,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     if (!clientId || !clientSecret || clientId.includes('YOUR_') || clientSecret.includes('YOUR_')) {
       console.warn("[PayPal API Warning] PayPal is unconfigured or using placeholders. Falling back to verification success (Simulator).");
       const parsedQty = qty ? parseInt(qty, 10) : undefined;
-      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty);
+      const parsedBillingCycle = billingCycle || 'monthly';
+      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty, parsedBillingCycle);
       return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
     }
 
@@ -895,7 +904,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       if (!response.ok) {
         console.warn("[PayPal API Warning] Failed to retrieve subscription from PayPal API. Falling back to Success (Simulator):", response.statusText);
         const parsedQty = qty ? parseInt(qty, 10) : undefined;
-        const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty);
+        const parsedBillingCycle = billingCycle || 'monthly';
+        const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty, parsedBillingCycle);
         return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
       }
 
@@ -904,14 +914,35 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       const customId = data.custom_id || companyId;
       
       let resolvedPlan: any = plan || 'basic';
+      let resolvedBillingCycle: 'monthly' | 'annual' = 'monthly';
       if (
         data.plan_id === paypalBusinessMonthlyPlanId || 
-        data.plan_id === paypalBusinessAnnualPlanId || 
-        data.plan_id === process.env.PAYPAL_PLAN_BUSINESS_MONTHLY || 
-        data.plan_id === process.env.PAYPAL_PLAN_BUSINESS_ANNUAL ||
-        (data.plan_id && data.plan_id.includes('BUSINESS'))
+        data.plan_id === process.env.PAYPAL_PLAN_BUSINESS_MONTHLY
       ) {
         resolvedPlan = 'business';
+        resolvedBillingCycle = 'monthly';
+      } else if (
+        data.plan_id === paypalBusinessAnnualPlanId || 
+        data.plan_id === process.env.PAYPAL_PLAN_BUSINESS_ANNUAL
+      ) {
+        resolvedPlan = 'business';
+        resolvedBillingCycle = 'annual';
+      } else if (
+        data.plan_id === paypalBasicMonthlyPlanId || 
+        data.plan_id === process.env.PAYPAL_PLAN_BASIC_MONTHLY
+      ) {
+        resolvedPlan = 'basic';
+        resolvedBillingCycle = 'monthly';
+      } else if (
+        data.plan_id === paypalBasicAnnualPlanId || 
+        data.plan_id === process.env.PAYPAL_PLAN_BASIC_ANNUAL
+      ) {
+        resolvedPlan = 'basic';
+        resolvedBillingCycle = 'annual';
+      } else if (data.plan_id && data.plan_id.toUpperCase().includes('ANNUAL')) {
+        resolvedBillingCycle = 'annual';
+      } else {
+        resolvedBillingCycle = (billingCycle || 'monthly') as any;
       }
 
       let quantity: number | undefined = undefined;
@@ -922,17 +953,18 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       }
 
       if (status === 'ACTIVE') {
-        const persisted = await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, 'active', 'paypal', quantity);
+        const persisted = await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, 'active', 'paypal', quantity, resolvedBillingCycle);
         return res.json({ success: true, status, plan: resolvedPlan, companyId: customId, serverPersisted: persisted });
       } else {
         const mappedStatus = status === 'CANCELLED' ? 'cancelled' : 'expired';
-        const persisted = await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, mappedStatus as any, 'paypal', quantity);
+        const persisted = await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, mappedStatus as any, 'paypal', quantity, resolvedBillingCycle);
         return res.json({ success: false, status, message: `Subscription is not active. Status: ${status}`, serverPersisted: persisted });
       }
     } catch (error: any) {
       console.warn("[PayPal Verification Exception] Error encountered. Falling back to Success (Simulator):", error.message || error);
       const parsedQty = qty ? parseInt(qty, 10) : undefined;
-      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty);
+      const parsedBillingCycle = billingCycle || 'monthly';
+      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty, parsedBillingCycle);
       return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
     }
   });
@@ -973,14 +1005,33 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
         case 'BILLING.SUBSCRIPTION.ACTIVATED':
         case 'BILLING.SUBSCRIPTION.RENEWED': {
           let plan: 'basic' | 'business' = 'basic';
+          let billingCycle: 'monthly' | 'annual' = 'monthly';
           if (
             resource.plan_id === paypalBusinessMonthlyPlanId || 
-            resource.plan_id === paypalBusinessAnnualPlanId || 
-            resource.plan_id === process.env.PAYPAL_PLAN_BUSINESS_MONTHLY || 
-            resource.plan_id === process.env.PAYPAL_PLAN_BUSINESS_ANNUAL ||
-            (resource.plan_id && resource.plan_id.includes('BUSINESS'))
+            resource.plan_id === process.env.PAYPAL_PLAN_BUSINESS_MONTHLY
           ) {
             plan = 'business';
+            billingCycle = 'monthly';
+          } else if (
+            resource.plan_id === paypalBusinessAnnualPlanId || 
+            resource.plan_id === process.env.PAYPAL_PLAN_BUSINESS_ANNUAL
+          ) {
+            plan = 'business';
+            billingCycle = 'annual';
+          } else if (
+            resource.plan_id === paypalBasicMonthlyPlanId || 
+            resource.plan_id === process.env.PAYPAL_PLAN_BASIC_MONTHLY
+          ) {
+            plan = 'basic';
+            billingCycle = 'monthly';
+          } else if (
+            resource.plan_id === paypalBasicAnnualPlanId || 
+            resource.plan_id === process.env.PAYPAL_PLAN_BASIC_ANNUAL
+          ) {
+            plan = 'basic';
+            billingCycle = 'annual';
+          } else if (resource.plan_id && resource.plan_id.toUpperCase().includes('ANNUAL')) {
+            billingCycle = 'annual';
           }
 
           let quantity: number | undefined = undefined;
@@ -988,7 +1039,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
             quantity = parseInt(resource.quantity, 10);
           }
 
-          await updateCompanySubscriptionData(customId, plan, subscriptionId, 'active', 'paypal', quantity);
+          await updateCompanySubscriptionData(customId, plan, subscriptionId, 'active', 'paypal', quantity, billingCycle);
           break;
         }
         case 'BILLING.SUBSCRIPTION.CANCELLED': {
@@ -1045,7 +1096,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       return res.status(403).json({ error: "Simulation endpoint is disabled in production and sandbox testing modes." });
     }
 
-    const { eventType, subscriptionId, plan, qty } = req.body;
+    const { eventType, subscriptionId, plan, qty, billingCycle } = req.body;
     const companyId = (req as AuthenticatedRequest).user?.companyId;
 
     if (!eventType || !subscriptionId || !companyId) {
@@ -1061,7 +1112,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       if (eventType === 'BILLING.SUBSCRIPTION.EXPIRED' || eventType === 'PAYMENT.SALE.DENIED') targetStatus = 'expired';
 
       const parsedQty = qty ? parseInt(qty, 10) : undefined;
-      await updateCompanySubscriptionData(cid, plan || 'basic', subscriptionId, targetStatus, 'paypal', parsedQty);
+      const parsedBillingCycle = billingCycle || 'monthly';
+      await updateCompanySubscriptionData(cid, plan || 'basic', subscriptionId, targetStatus, 'paypal', parsedQty, parsedBillingCycle);
       return res.json({
         success: true,
         message: `Successfully simulated ${eventType} webhook callback. Firestore set to: ${targetStatus}.`

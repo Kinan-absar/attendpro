@@ -1564,7 +1564,7 @@ class DataService {
     }
   }
 
-  async verifyPayPalSubscription(subscriptionId: string, plan: string, qty?: number): Promise<{ success: boolean; status?: string; plan?: string; companyId?: string; error?: string }> {
+  async verifyPayPalSubscription(subscriptionId: string, plan: string, qty?: number, billingCycle?: string): Promise<{ success: boolean; status?: string; plan?: string; companyId?: string; error?: string }> {
     try {
       const idToken = await auth.currentUser?.getIdToken();
       if (!idToken) {
@@ -1579,7 +1579,7 @@ class DataService {
           'Authorization': `Bearer ${idToken}`,
           'X-Company-Id': companyId
         },
-        body: JSON.stringify({ subscriptionId, plan, companyId, qty })
+        body: JSON.stringify({ subscriptionId, plan, companyId, qty, billingCycle })
       });
       if (!response.ok) {
         const errData = await response.json();
@@ -1594,7 +1594,7 @@ class DataService {
     }
   }
 
-  async simulateWebhook(eventType: string, subscriptionId: string, plan: string, qty?: number): Promise<{ success: boolean; message?: string; error?: string }> {
+  async simulateWebhook(eventType: string, subscriptionId: string, plan: string, qty?: number, billingCycle?: string): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
       const idToken = await auth.currentUser?.getIdToken();
       if (!idToken) {
@@ -1609,7 +1609,7 @@ class DataService {
           'Authorization': `Bearer ${idToken}`,
           'X-Company-Id': companyId
         },
-        body: JSON.stringify({ eventType, subscriptionId, plan, companyId, qty })
+        body: JSON.stringify({ eventType, subscriptionId, plan, companyId, qty, billingCycle })
       });
       if (!response.ok) {
         const errData = await response.json();
