@@ -1474,6 +1474,12 @@ class DataService {
       employeeCount: data.employeeCount ?? 0,
       subscriptionStatus: data.subscriptionStatus || 'active',
       ownerId: data.ownerId || '',
+      paypalSubscriptionId: data.paypalSubscriptionId || data.subscriptionId || null,
+      subscriptionId: data.subscriptionId || data.paypalSubscriptionId || null,
+      paymentProvider: data.paymentProvider || null,
+      billingCycle: data.billingCycle || 'monthly',
+      subscriptionStart: this.convertToDate(data.subscriptionStart) || null,
+      subscriptionEnd: this.convertToDate(data.subscriptionEnd) || null,
       createdAt: this.convertToDate(data.createdAt) || new Date(),
       updatedAt: this.convertToDate(data.updatedAt) || new Date()
     } as Company;

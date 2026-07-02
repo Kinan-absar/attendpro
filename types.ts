@@ -46,6 +46,7 @@ export interface Company {
   paymentProvider?: string | null;
   customerId?: string | null;
   subscriptionId?: string | null;
+  paypalSubscriptionId?: string | null;
   billingCycle?: 'monthly' | 'annual';
   createdAt: Date;
   updatedAt?: Date;

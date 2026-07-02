@@ -218,18 +218,78 @@ async function updateCompanySubscriptionData(
   }
   
   try {
+    const currentSnap = await companyRef.get();
+    const currentData = currentSnap.exists ? currentSnap.data() : null;
+    const isPlanUpgradeSamePlan = currentData && currentData.plan === plan;
+
     const updatePayload: any = {
       plan,
       employeeLimit: status === 'active' ? limit : 0, // 0 limit blocks adding employees if cancelled or expired
       subscriptionStatus: status,
       paypalSubscriptionId: subscriptionId,
       paymentProvider: provider,
-      subscriptionStart: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
     };
 
     if (billingCycle) {
       updatePayload.billingCycle = billingCycle;
+    }
+
+    // Only set subscriptionStart if there is no previous subscriptionStart, or if changing plan type
+    if (!isPlanUpgradeSamePlan || !currentData?.subscriptionStart) {
+      updatePayload.subscriptionStart = FieldValue.serverTimestamp();
+    }
+
+    // Track prorated upgrades when adding seats to an active Business plan
+    let previousLimit = currentData ? (currentData.employeeLimit || 21) : 21;
+    if (plan === 'business' && currentData && currentData.plan === 'business' && limit > previousLimit && status === 'active') {
+      const addedSeats = limit - previousLimit;
+      const cycle = billingCycle || currentData.billingCycle || 'monthly';
+      const startTimestamp = currentData.subscriptionStart;
+      
+      let startDate = startTimestamp ? startTimestamp.toDate() : new Date();
+      const now = new Date();
+      
+      // Calculate next renewal date
+      let nextRenewal = new Date(startDate);
+      if (cycle === 'annual') {
+        while (nextRenewal <= now) {
+          nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
+        }
+      } else {
+        while (nextRenewal <= now) {
+          nextRenewal.setMonth(nextRenewal.getMonth() + 1);
+        }
+      }
+      
+      // Calculate total days in current period
+      const previousRenewal = new Date(nextRenewal);
+      if (cycle === 'annual') {
+        previousRenewal.setFullYear(previousRenewal.getFullYear() - 1);
+      } else {
+        previousRenewal.setMonth(previousRenewal.getMonth() - 1);
+      }
+      const totalPeriodDays = Math.ceil((nextRenewal.getTime() - previousRenewal.getTime()) / (1000 * 60 * 60 * 24)) || 30;
+      
+      // Calculate remaining days
+      const remainingDays = Math.max(1, Math.min(totalPeriodDays, Math.ceil((nextRenewal.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))));
+      
+      const pricePerSeat = cycle === 'annual' ? 9.00 : 1.00;
+      const proratedFee = Number((addedSeats * pricePerSeat * (remainingDays / totalPeriodDays)).toFixed(2));
+      
+      const newUpgrade = {
+        seatsAdded: addedSeats,
+        previousLimit,
+        newLimit: limit,
+        proratedFee,
+        remainingDays,
+        renewalDate: nextRenewal,
+        date: new Date()
+      };
+      
+      const existingUpgrades = currentData.proratedUpgrades || [];
+      updatePayload.proratedUpgrades = [...existingUpgrades, newUpgrade];
+      updatePayload.lastProratedUpgrade = newUpgrade;
     }
 
     await companyRef.set(updatePayload, { merge: true });
@@ -239,7 +299,6 @@ async function updateCompanySubscriptionData(
   } catch (err: any) {
     console.warn(`[Firestore Admin Warning] Bypassed Firestore Admin set operation due to permission/network limits:`, err.message || err);
     return false;
-    // Bypassed gracefully; the client-side app will handle database update via the Client SDK
   }
 }
 

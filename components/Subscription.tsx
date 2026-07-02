@@ -665,181 +665,313 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
       </div>
 
       {/* MANAGE BUSINESS SEATS (ONLY FOR ACTIVE BUSINESS PLAN) */}
-      {plan === 'business' && status === 'active' && (
-        <div className="p-8 bg-gradient-to-r from-emerald-50/60 to-teal-50/60 border-2 border-emerald-500/30 rounded-[2.5rem] text-start space-y-6 shadow-xl shadow-emerald-100/20">
-          <div className="flex items-center gap-3">
-            <span className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-200">
-              <i className="fa-solid fa-users-gear text-lg"></i>
-            </span>
-            <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                {language === 'ar' ? "إدارة مقاعد خطة الأعمال" : "Manage Business Seats"}
-              </h2>
-              <p className="text-xs text-slate-500 font-bold">
-                {language === 'ar' 
-                  ? "قم بشراء مقاعد إضافية فورياً لموظفيك الجدد." 
-                  : "Purchase more employee seats instantly as your team scales."
-                }
-              </p>
-            </div>
-          </div>
+      {plan === 'business' && status === 'active' && (() => {
+        const cycle = company?.billingCycle || 'monthly';
+        const start = company?.subscriptionStart 
+          ? new Date(company.subscriptionStart) 
+          : (company?.createdAt ? new Date(company.createdAt) : new Date());
+        const now = new Date();
+        
+        // Calculate next renewal date
+        let nextRenewal = new Date(start);
+        if (cycle === 'annual') {
+          while (nextRenewal <= now) {
+            nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
+          }
+        } else {
+          while (nextRenewal <= now) {
+            nextRenewal.setMonth(nextRenewal.getMonth() + 1);
+          }
+        }
+        
+        // Calculate total days in current period
+        const previousRenewal = new Date(nextRenewal);
+        if (cycle === 'annual') {
+          previousRenewal.setFullYear(previousRenewal.getFullYear() - 1);
+        } else {
+          previousRenewal.setMonth(previousRenewal.getMonth() - 1);
+        }
+        const totalPeriodMs = nextRenewal.getTime() - previousRenewal.getTime();
+        const totalPeriodDays = Math.ceil(totalPeriodMs / (1000 * 60 * 60 * 24)) || 30;
+        
+        // Calculate remaining days
+        const remainingMs = nextRenewal.getTime() - now.getTime();
+        const remainingDays = Math.max(1, Math.min(totalPeriodDays, Math.ceil(remainingMs / (1000 * 60 * 60 * 24))));
+        
+        const addNum = parseInt(additionalSeatsInput, 10) || 0;
+        const pricePerSeat = cycle === 'annual' ? 9.00 : 1.00;
+        const proratedCostPerSeat = pricePerSeat * (remainingDays / totalPeriodDays);
+        const totalProratedUpgradeFee = Number((addNum * proratedCostPerSeat).toFixed(2));
+        const nextRecurringBillAmount = (employeeLimit + addNum) * pricePerSeat;
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
-            {/* CURRENT SEATS (READ-ONLY) */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-2">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                {language === 'ar' ? "المقاعد الحالية (للقراءة فقط):" : "Current Purchased Seats (Read-only):"}
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={employeeLimit}
-                  className="w-full bg-slate-50 text-slate-600 font-mono font-black text-center py-2.5 rounded-xl border border-slate-200 cursor-not-allowed focus:outline-none"
-                />
-              </div>
-              <p className="text-[10px] text-slate-400 font-bold">
-                {language === 'ar' 
-                  ? `(حالياً تم تسجيل ${employeeCount} موظفاً)` 
-                  : `(${employeeCount} staff registered currently)`
-                }
-              </p>
-            </div>
+        const formattedRenewalDate = nextRenewal.toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
 
-            {/* ADDITIONAL SEATS INPUT */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-2">
-              <label className="block text-[10px] font-black text-emerald-700 uppercase tracking-wider">
-                {language === 'ar' ? "إضافة مقاعد جديدة:" : "Add New Seats:"}
-              </label>
-              <div className="flex items-center justify-between gap-2 bg-slate-50/50 p-1 rounded-xl border border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const currentVal = parseInt(additionalSeatsInput, 10) || 0;
-                    const nextVal = Math.max(1, currentVal - 1);
-                    setAdditionalSeatsInput(String(nextVal));
-                  }}
-                  className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"
-                >
-                  -
-                </button>
-                <input
-                  type="text"
-                  pattern="[0-9]*"
-                  inputMode="numeric"
-                  value={additionalSeatsInput}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === '' || /^\d+$/.test(val)) {
-                      setAdditionalSeatsInput(val);
+        return (
+          <div className="space-y-6">
+            <div className="p-8 bg-gradient-to-r from-emerald-50/60 to-teal-50/60 border-2 border-emerald-500/30 rounded-[2.5rem] text-start space-y-6 shadow-xl shadow-emerald-100/20">
+              <div className="flex items-center gap-3">
+                <span className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-200">
+                  <i className="fa-solid fa-users-gear text-lg"></i>
+                </span>
+                <div>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                    {language === 'ar' ? "إدارة مقاعد خطة الأعمال مع الحساب النسبي (Prorata)" : "Manage Business Seats with Proration"}
+                  </h2>
+                  <p className="text-xs text-slate-500 font-bold">
+                    {language === 'ar' 
+                      ? "اشترِ مقاعد إضافية فورية مخصومة بناءً على الأيام المتبقية في دورتك الحالية." 
+                      : "Purchase immediate additional seats, discounted based on remaining days in your current billing cycle."
                     }
-                  }}
-                  onBlur={() => {
-                    const val = parseInt(additionalSeatsInput, 10);
-                    if (isNaN(val) || val < 1) {
-                      setAdditionalSeatsInput("1");
-                    } else if (employeeLimit + val > 100) {
-                      setAdditionalSeatsInput(String(100 - employeeLimit));
-                    }
-                  }}
-                  className="w-16 bg-transparent text-center font-black text-sm text-slate-900 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const currentVal = parseInt(additionalSeatsInput, 10) || 0;
-                    const nextVal = Math.min(100 - employeeLimit, currentVal + 1);
-                    setAdditionalSeatsInput(String(nextVal));
-                  }}
-                  disabled={employeeLimit >= 100}
-                  className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  +
-                </button>
-              </div>
-              <p className="text-[10px] text-slate-400 font-bold">
-                {language === 'ar' 
-                  ? "اكتب الرقم مباشرة أو استخدم أزرار التحكم" 
-                  : "Type directly or use adjustment buttons"
-                }
-              </p>
-            </div>
-
-            {/* SUMMARY & ORDER ACTIONS */}
-            <div className="bg-emerald-600 p-5 rounded-2xl text-white shadow-md flex flex-col justify-between space-y-3">
-              <div className="space-y-1">
-                <p className="text-[9px] font-black text-emerald-200 uppercase tracking-widest">
-                  {language === 'ar' ? "التكلفة والمجموع الجديد" : "SUMMARY OF UPGRADE"}
-                </p>
-                <div className="text-xl font-black tracking-tight">
-                  {employeeLimit + (parseInt(additionalSeatsInput, 10) || 0)} {language === 'ar' ? "مقعداً إجمالياً" : "Total Seats"}
+                  </p>
                 </div>
-                <p className="text-[10px] text-emerald-100 font-bold">
-                  {language === 'ar' 
-                    ? `إضافة: +${parseInt(additionalSeatsInput, 10) || 0} مقاعد (+ $${(parseInt(additionalSeatsInput, 10) || 0) * (company?.billingCycle === 'annual' ? 9 : 1)} / ${company?.billingCycle === 'annual' ? 'سنة' : 'شهر'})`
-                    : `Adding: +${parseInt(additionalSeatsInput, 10) || 0} seats (+$${(parseInt(additionalSeatsInput, 10) || 0) * (company?.billingCycle === 'annual' ? 9 : 1)} / ${company?.billingCycle === 'annual' ? 'yr' : 'mo'})`
-                  }
-                </p>
               </div>
 
-              <button
-                type="button"
-                onClick={async () => {
-                  const addNum = parseInt(additionalSeatsInput, 10) || 0;
-                  const targetQty = employeeLimit + addNum;
-                  if (targetQty > 100) {
-                    await showAlert(
-                      t('error'), 
-                      language === 'ar' 
-                        ? "خطة الأعمال تدعم بحد أقصى 100 موظف. يرجى الاتصال بالمبيعات." 
-                        : "Business plan supports up to 100 seats. Contact Sales for Enterprise.", 
-                      "error"
-                    );
-                    return;
-                  }
-
-                  const isConfirmed = await showConfirm(
-                    language === 'ar' ? "تأكيد ترقية المقاعد" : "Confirm Seat Upgrade",
-                    language === 'ar'
-                      ? `هل أنت متأكد من رغبتك في زيادة المقاعد إلى ${targetQty} مقعداً؟ سيتم إلغاء اشتراكك الحالي وتعديل الفاتورة.`
-                      : `Are you sure you want to increase your company headcount capacity to ${targetQty} seats? This will automatically adjust your PayPal plan.`
-                  );
-
-                  if (isConfirmed) {
-                    setIsProcessing(true);
-                    try {
-                      const response = await dataService.createCheckoutSession(
-                        'business', 
-                        company?.billingCycle || 'monthly', 
-                        targetQty
-                      );
-                      if (response.approvalUrl) {
-                        window.location.href = response.approvalUrl;
-                      } else {
-                        throw new Error("No approval URL received");
-                      }
-                    } catch (err: any) {
-                      await showAlert(t('error'), err.message || "Failed to trigger PayPal upgrade flow", "error");
-                      setIsProcessing(false);
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                {/* CURRENT SEATS (READ-ONLY) */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                    {language === 'ar' ? "المقاعد الحالية (للقراءة فقط):" : "Current Purchased Seats (Read-only):"}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={employeeLimit}
+                      className="w-full bg-slate-50 text-slate-600 font-mono font-black text-center py-2.5 rounded-xl border border-slate-200 cursor-not-allowed focus:outline-none"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold">
+                    {language === 'ar' 
+                      ? `(حالياً تم تسجيل ${employeeCount} موظفاً)` 
+                      : `(${employeeCount} staff registered currently)`
                     }
-                  }
-                }}
-                disabled={isProcessing || (parseInt(additionalSeatsInput, 10) || 0) <= 0}
-                className="w-full py-2.5 px-4 bg-white text-emerald-700 hover:bg-emerald-50 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center leading-none text-center disabled:opacity-75 shadow"
-              >
-                {isProcessing ? (
-                  <span className="flex items-center justify-center gap-1.5">
-                    <i className="fa-solid fa-spinner fa-spin"></i>
-                    {sT('processing')}
+                  </p>
+                </div>
+
+                {/* ADDITIONAL SEATS INPUT */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-2">
+                  <label className="block text-[10px] font-black text-emerald-700 uppercase tracking-wider">
+                    {language === 'ar' ? "إضافة مقاعد جديدة:" : "Add New Seats:"}
+                  </label>
+                  <div className="flex items-center justify-between gap-2 bg-slate-50/50 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentVal = parseInt(additionalSeatsInput, 10) || 0;
+                        const nextVal = Math.max(1, currentVal - 1);
+                        setAdditionalSeatsInput(String(nextVal));
+                      }}
+                      className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="text"
+                      pattern="[0-9]*"
+                      inputMode="numeric"
+                      value={additionalSeatsInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || /^\d+$/.test(val)) {
+                          setAdditionalSeatsInput(val);
+                        }
+                      }}
+                      onBlur={() => {
+                        const val = parseInt(additionalSeatsInput, 10);
+                        if (isNaN(val) || val < 1) {
+                          setAdditionalSeatsInput("1");
+                        } else if (employeeLimit + val > 100) {
+                          setAdditionalSeatsInput(String(100 - employeeLimit));
+                        }
+                      }}
+                      className="w-16 bg-transparent text-center font-black text-sm text-slate-900 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentVal = parseInt(additionalSeatsInput, 10) || 0;
+                        const nextVal = Math.min(100 - employeeLimit, currentVal + 1);
+                        setAdditionalSeatsInput(String(nextVal));
+                      }}
+                      disabled={employeeLimit >= 100}
+                      className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold">
+                    {language === 'ar' 
+                      ? "اكتب الرقم مباشرة أو استخدم أزرار التحكم" 
+                      : "Type directly or use adjustment buttons"
+                    }
+                  </p>
+                </div>
+
+                {/* PRO-RATA CALCULATOR DETAILS */}
+                <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm space-y-3 text-[11px] font-bold text-slate-600">
+                  <div className="text-slate-800 text-xs font-black uppercase tracking-wider pb-1.5 border-b border-slate-100 flex items-center gap-1.5">
+                    <i className="fa-solid fa-calculator text-emerald-600"></i>
+                    {language === 'ar' ? "تفاصيل الحساب النسبي" : "Pro-Rata Calculations"}
+                  </div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span>{language === 'ar' ? "تاريخ التجديد القادم:" : "Next Renewal Date:"}</span>
+                    <span className="text-slate-900 font-black">{formattedRenewalDate}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span>{language === 'ar' ? "الأيام المتبقية في الدورة:" : "Days Remaining in Cycle:"}</span>
+                    <span className="text-slate-950 font-extrabold">{remainingDays} / {totalPeriodDays} {language === 'ar' ? "يوم" : "days"}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span>{language === 'ar' ? "نسبة الخصم:" : "Pro-rata Ratio:"}</span>
+                    <span className="text-emerald-700 font-extrabold">{((remainingDays / totalPeriodDays) * 100).toFixed(0)}%</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span>{language === 'ar' ? "سعر المقعد التناسبي:" : "Prorated Seat Rate:"}</span>
+                    <span className="text-slate-900 font-black">${proratedCostPerSeat.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* PRORATED GRAND SUMMARY BAR */}
+              <div className="p-6 bg-emerald-600 rounded-3xl text-white shadow-lg space-y-4 md:space-y-0 md:flex md:items-center md:justify-between">
+                <div className="space-y-1.5 text-start">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-700 text-white font-black text-[9px] uppercase tracking-widest leading-none">
+                    {language === 'ar' ? "ملخص طلب الترقية" : "UPGRADE ORDER BILLING"}
                   </span>
-                ) : (
-                  language === 'ar' ? "ترقية وحفظ التعديلات" : "Upgrade Capacity Now"
-                )}
-              </button>
+                  <div className="text-xl font-black tracking-tight">
+                    {language === 'ar' ? `المقاعد الجديدة: ${employeeLimit + addNum} مقعداً` : `New Limit: ${employeeLimit + addNum} Total Seats`}
+                    <span className="text-sm font-semibold ml-2 text-emerald-100">
+                      ({language === 'ar' ? `بإضافة +${addNum} مقعداً` : `Adding +${addNum} seats`})
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-emerald-100 font-bold space-y-1">
+                    <p>
+                      {language === 'ar' 
+                        ? `الدفع المستحق اليوم (النسبة المتبقية فقط): $${totalProratedUpgradeFee}`
+                        : `Immediate upgrade fee due today (for the remainder of this cycle): $${totalProratedUpgradeFee}`
+                      }
+                    </p>
+                    <p className="opacity-90">
+                      {language === 'ar' 
+                        ? `الفاتورة الدورية القادمة (مجموع ${employeeLimit + addNum} مقعداً): $${nextRecurringBillAmount} شهرياً تبدأ في ${formattedRenewalDate}`
+                        : `Next recurring billing (${employeeLimit + addNum} seats at full rate): $${nextRecurringBillAmount} due on ${formattedRenewalDate}`
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                <div className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const targetQty = employeeLimit + addNum;
+                      if (targetQty > 100) {
+                        await showAlert(
+                          t('error'), 
+                          language === 'ar' 
+                            ? "خطة الأعمال تدعم بحد أقصى 100 موظف. يرجى الاتصال بالمبيعات." 
+                            : "Business plan supports up to 100 seats. Contact Sales for Enterprise.", 
+                          "error"
+                        );
+                        return;
+                      }
+
+                      const isConfirmed = await showConfirm(
+                        language === 'ar' ? "تأكيد ترقية المقاعد النسبية" : "Confirm Prorated Seat Upgrade",
+                        language === 'ar'
+                          ? `هل أنت متأكد من رغبتك في زيادة المقاعد إلى ${targetQty} مقعداً؟ سيتم احتساب قيمة نسبية قدرها $${totalProratedUpgradeFee} للفترة المتبقية من دورتك الحالية وتحديث اشتراكك.`
+                          : `Are you sure you want to increase your company headcount capacity to ${targetQty} seats? This will charge a fair prorated fee of $${totalProratedUpgradeFee} for the remainder of your current period.`
+                      );
+
+                      if (isConfirmed) {
+                        setIsProcessing(true);
+                        try {
+                          const response = await dataService.createCheckoutSession(
+                            'business', 
+                            company?.billingCycle || 'monthly', 
+                            targetQty
+                          );
+                          if (response.approvalUrl) {
+                            window.location.href = response.approvalUrl;
+                          } else {
+                            throw new Error("No approval URL received");
+                          }
+                        } catch (err: any) {
+                          await showAlert(t('error'), err.message || "Failed to trigger PayPal upgrade flow", "error");
+                          setIsProcessing(false);
+                        }
+                      }
+                    }}
+                    disabled={isProcessing || addNum <= 0}
+                    className="w-full md:w-auto py-3 px-6 bg-white text-emerald-700 hover:bg-emerald-50 rounded-2xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center leading-none text-center disabled:opacity-75 shadow-md active:scale-95"
+                  >
+                    {isProcessing ? (
+                      <span className="flex items-center justify-center gap-1.5">
+                        <i className="fa-solid fa-spinner fa-spin"></i>
+                        {sT('processing')}
+                      </span>
+                    ) : (
+                      language === 'ar' ? "تأكيد الترقية والدفع الآن" : "Authorize Prorated Upgrade"
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
+
+            {/* SEAT PURCHASE HISTORY (IF ANY EXIST IN THE HISTORY ARRAY) */}
+            {company?.proratedUpgrades && company.proratedUpgrades.length > 0 && (
+              <div className="p-8 bg-white border border-slate-200 rounded-[2.5rem] text-start space-y-4 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+                    <i className="fa-solid fa-receipt text-xs"></i>
+                  </span>
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">
+                    {language === 'ar' ? "سجل ترقيات المقاعد التناسبية" : "Prorated Seat Upgrade History"}
+                  </h3>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+                  <table className="w-full text-xs text-slate-600">
+                    <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 text-center">
+                      <tr>
+                        <th className="py-3 px-4">{language === 'ar' ? "التاريخ" : "Date"}</th>
+                        <th className="py-3 px-4">{language === 'ar' ? "المقاعد المضافة" : "Seats Added"}</th>
+                        <th className="py-3 px-4">{language === 'ar' ? "السعة الجديدة" : "New Capacity"}</th>
+                        <th className="py-3 px-4">{language === 'ar' ? "الأيام المتبقية" : "Days in Cycle"}</th>
+                        <th className="py-3 px-4">{language === 'ar' ? "المبلغ المدفوع (بروراتا)" : "Amount Paid (Prorated)"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-center font-bold">
+                      {company.proratedUpgrades.map((upgrade: any, idx: number) => {
+                        const dateObj = upgrade.date ? (upgrade.date.toDate ? upgrade.date.toDate() : new Date(upgrade.date)) : new Date();
+                        const formattedDate = dateObj.toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        });
+
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="py-3 px-4 text-slate-500 font-mono">{formattedDate}</td>
+                            <td className="py-3 px-4 text-emerald-600 font-black">+{upgrade.seatsAdded}</td>
+                            <td className="py-3 px-4 text-slate-800">{upgrade.previousLimit} → {upgrade.newLimit}</td>
+                            <td className="py-3 px-4 text-slate-500">{upgrade.remainingDays} days left</td>
+                            <td className="py-3 px-4 font-mono font-black text-slate-900">${upgrade.proratedFee?.toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* DEVELOPER WEBHOOK SANDBOX SIMULATOR */}
       <div className="p-8 bg-slate-900 border border-slate-800 rounded-[2.5rem] text-start text-white space-y-6 shadow-2xl">
