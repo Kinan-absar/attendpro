@@ -1,53 +1,18 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import { createServer as createViteServer, loadEnv } from 'vite';
-
-const mode = process.env.NODE_ENV || 'development';
-const env = loadEnv(mode, process.cwd(), '');
-for (const [key, value] of Object.entries(env)) {
-  if (process.env[key] === undefined) {
-    process.env[key] = value;
-  }
-}
-
-const projectId = process.env.PROJECT_ID || 'attendance-pro-a9257';
-const hasAdminCredentials = Boolean(
-  process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
-  (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) ||
-  process.env.GOOGLE_APPLICATION_CREDENTIALS
-);
-
-function getFirebaseAdminOptions() {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-    return {
-      projectId: serviceAccount.project_id || projectId,
-      credential: cert(serviceAccount),
-    };
-  }
-
-  if (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
-    return {
-      projectId,
-      credential: cert({
-        projectId,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      }),
-    };
-  }
-
-  return { projectId };
-}
+import { createServer as createViteServer } from 'vite';
 
 // Initialize Firebase Admin securely
+const projectId = process.env.PROJECT_ID || 'attendance-pro-a9257';
 if (!getApps().length) {
   try {
-    initializeApp(getFirebaseAdminOptions());
+    initializeApp({
+      projectId: projectId
+    });
     console.log(`[Firebase Admin] Initialized successfully with Project ID: ${projectId}`);
   } catch (err) {
     console.warn('[Firebase Admin] Initialization warning (falling back to automatic defaults):', err);
@@ -55,10 +20,6 @@ if (!getApps().length) {
   }
 }
 const db = getFirestore();
-
-function canUseAdminFirestore() {
-  return hasAdminCredentials;
-}
 
 interface AuthenticatedRequest extends express.Request {
   user?: {
@@ -208,11 +169,6 @@ async function updateCompanySubscriptionData(
   provider: 'paypal' | null = 'paypal'
 ) {
   const cid = companyId.trim().toUpperCase();
-  if (!canUseAdminFirestore()) {
-    console.warn(`[Firestore Admin] Skipping server-side subscription write for ${cid}; local Admin credentials are not configured.`);
-    return;
-  }
-
   const companyRef = db.collection('companies').doc(cid);
   
   const limit = getPlanLimit(plan);
@@ -289,7 +245,7 @@ async function provisionPayPalProductAndPlans() {
 
   try {
     // 1. Try to load from Firestore config first to optimize speed and reliability
-    if (canUseAdminFirestore()) try {
+    try {
       const configRef = db.collection('config').doc('paypal');
       const configDoc = await configRef.get();
 
@@ -485,7 +441,7 @@ async function provisionPayPalProductAndPlans() {
     }
 
     // 5. Store to Firestore for future fast retrieval
-    if (canUseAdminFirestore()) try {
+    try {
       const configRef = db.collection('config').doc('paypal');
       await configRef.set({
         productId: paypalProductId,
@@ -506,9 +462,9 @@ async function provisionPayPalProductAndPlans() {
 /**
  * 🚀 START FULL-STACK EXPRESS SERVER
  */
-export async function createApp(options: { includeFrontend?: boolean } = {}) {
+async function startServer() {
   const app = express();
-  const includeFrontend = options.includeFrontend ?? false;
+  const PORT = 3000;
 
   // Auto-provision PayPal product and plans on startup
   await provisionPayPalProductAndPlans();
@@ -541,7 +497,7 @@ export async function createApp(options: { includeFrontend?: boolean } = {}) {
 
     if (isCredentialsPlaceholder) {
       const mockSubId = `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-      const approvalUrl = `/#/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}`;
+      const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}`;
       console.log(`[PayPal API] Using Simulator fallback due to missing/placeholder credentials. Redirecting to: ${approvalUrl}`);
       return res.json({
         simulator: true,
@@ -581,8 +537,8 @@ export async function createApp(options: { includeFrontend?: boolean } = {}) {
           application_context: {
             brand_name: "Attendance Pro",
             user_action: "SUBSCRIBE_NOW",
-            return_url: `${req.headers.origin || 'http://localhost:3000'}/#/admin/subscription?status=success`,
-            cancel_url: `${req.headers.origin || 'http://localhost:3000'}/#/admin/subscription?status=cancel`
+            return_url: `${req.headers.origin || 'http://localhost:3000'}/admin/subscription?status=success`,
+            cancel_url: `${req.headers.origin || 'http://localhost:3000'}/admin/subscription?status=cancel`
           }
         })
       });
@@ -591,7 +547,7 @@ export async function createApp(options: { includeFrontend?: boolean } = {}) {
         const errorText = await response.text();
         console.warn("[PayPal API Error] Subscriptions API call failed, falling back to Simulator:", errorText);
         const mockSubId = `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-        const approvalUrl = `/#/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}`;
+        const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}`;
         return res.json({
           simulator: true,
           subscriptionId: mockSubId,
@@ -610,7 +566,7 @@ export async function createApp(options: { includeFrontend?: boolean } = {}) {
     } catch (error: any) {
       console.warn("[PayPal API Exception] Creating subscription failed, falling back to Simulator:", error.message || error);
       const mockSubId = `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-      const approvalUrl = `/#/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}`;
+      const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}`;
       return res.json({
         simulator: true,
         subscriptionId: mockSubId,
@@ -815,13 +771,13 @@ export async function createApp(options: { includeFrontend?: boolean } = {}) {
      ⚙️ VITE MIDDLEWARE SETUP
      ========================================================================== */
 
-  if (includeFrontend && process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else if (includeFrontend) {
+  } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
@@ -829,21 +785,12 @@ export async function createApp(options: { includeFrontend?: boolean } = {}) {
     });
   }
 
-  return app;
-}
-
-export async function startServer() {
-  const app = await createApp({ includeFrontend: true });
-  const PORT = Number(process.env.PORT || 3000);
-
   // Bind to Port 3000 and Host 0.0.0.0
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`[Server] running on http://0.0.0.0:${PORT} in ${process.env.NODE_ENV || 'development'} mode.`);
   });
 }
 
-if (!process.env.VERCEL) {
-  startServer().catch(err => {
-    console.error("[Server] Fatal startup exception:", err);
-  });
-}
+startServer().catch(err => {
+  console.error("[Server] Fatal startup exception:", err);
+});

@@ -62,33 +62,6 @@ class DataService {
     }
   }
 
-  private async readApiResponse<T>(response: Response, fallbackError: string): Promise<T> {
-    const body = await response.text();
-    const contentType = response.headers.get('content-type') || '';
-    let data: any = null;
-
-    if (body && contentType.includes('application/json')) {
-      try {
-        data = JSON.parse(body);
-      } catch {
-        throw new Error(`Server returned invalid JSON (${response.status}).`);
-      }
-    } else if (body) {
-      data = { error: body };
-    }
-
-    if (!response.ok) {
-      const message = data?.error || data?.message || response.statusText || fallbackError;
-      throw new Error(`${message} (${response.status})`);
-    }
-
-    if (!data) {
-      throw new Error(`Server returned an empty response (${response.status}).`);
-    }
-
-    return data as T;
-  }
-
   /**
    * Deeply sanitizes an object to ensure it only contains Firestore-compatible primitives.
    * Prevents "Circular structure to JSON" errors by identifying plain objects vs class instances.
@@ -1581,9 +1554,10 @@ class DataService {
         body: JSON.stringify({ plan, companyId })
       });
       if (!response.ok) {
-        await this.readApiResponse(response, 'Failed to create PayPal subscription');
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to create PayPal subscription');
       }
-      return await this.readApiResponse(response, 'Failed to create PayPal subscription');
+      return await response.json();
     } catch (e: any) {
       console.error("[DataService] PayPal create checkout failed:", e);
       throw e;
@@ -1608,28 +1582,25 @@ class DataService {
         body: JSON.stringify({ subscriptionId, plan, companyId })
       });
       if (!response.ok) {
-        await this.readApiResponse(response, 'Failed to verify PayPal subscription');
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to verify PayPal subscription');
       }
 
-      const result = await this.readApiResponse<{ success: boolean; status?: string; plan?: string; companyId?: string; error?: string }>(response, 'Failed to verify PayPal subscription');
+      const result = await response.json();
 
       // Securely update the database client-side using the Client SDK
       if (result.success && this.currentUser?.companyId) {
-        try {
-          const cid = this.currentUser.companyId.trim().toUpperCase();
-          const limit = plan === 'basic' ? 20 : plan === 'business' ? 100 : 5;
-          await updateDoc(doc(db, COMPANIES, cid), {
-            plan: plan,
-            employeeLimit: limit,
-            subscriptionStatus: 'active',
-            paypalSubscriptionId: subscriptionId,
-            paymentProvider: 'paypal',
-            updatedAt: new Date()
-          });
-          console.log(`[Client-Side Sync] Company ${cid} subscription updated client-side to Plan: ${plan}, Limit: ${limit}`);
-        } catch (syncError) {
-          console.warn("[Client-Side Sync] Subscription verified, but client-side Firestore sync was skipped:", syncError);
-        }
+        const cid = this.currentUser.companyId.trim().toUpperCase();
+        const limit = plan === 'basic' ? 20 : plan === 'business' ? 100 : 5;
+        await updateDoc(doc(db, COMPANIES, cid), {
+          plan: plan,
+          employeeLimit: limit,
+          subscriptionStatus: 'active',
+          paypalSubscriptionId: subscriptionId,
+          paymentProvider: 'paypal',
+          updatedAt: new Date()
+        });
+        console.log(`[Client-Side Sync] Company ${cid} subscription updated client-side to Plan: ${plan}, Limit: ${limit}`);
       }
 
       return result;
@@ -1657,42 +1628,39 @@ class DataService {
         body: JSON.stringify({ eventType, subscriptionId, plan, companyId })
       });
       if (!response.ok) {
-        await this.readApiResponse(response, 'Webhook simulation failed');
+        const errData = await response.json();
+        throw new Error(errData.error || 'Webhook simulation failed');
       }
 
-      const result = await this.readApiResponse<{ success: boolean; message?: string; error?: string }>(response, 'Webhook simulation failed');
+      const result = await response.json();
 
       // Securely update the database client-side based on simulated webhook type
       if (result.success && this.currentUser?.companyId) {
-        try {
-          const cid = this.currentUser.companyId.trim().toUpperCase();
-          if (eventType.includes('ACTIVATED') || eventType.includes('RENEWED')) {
-            const limit = plan === 'basic' ? 20 : plan === 'business' ? 100 : 5;
-            await updateDoc(doc(db, COMPANIES, cid), {
-              plan: plan,
-              employeeLimit: limit,
-              subscriptionStatus: 'active',
-              paypalSubscriptionId: subscriptionId,
-              paymentProvider: 'paypal',
-              updatedAt: new Date()
-            });
-          } else if (eventType.includes('CANCELLED')) {
-            await updateDoc(doc(db, COMPANIES, cid), {
-              subscriptionStatus: 'cancelled',
-              employeeLimit: 0, // Block additions
-              updatedAt: new Date()
-            });
-          } else if (eventType.includes('EXPIRED') || eventType.includes('SUSPENDED')) {
-            await updateDoc(doc(db, COMPANIES, cid), {
-              subscriptionStatus: 'expired',
-              employeeLimit: 0, // Block additions
-              updatedAt: new Date()
-            });
-          }
-          console.log(`[Client-Side Sync] Simulated webhook database update applied client-side for company ${cid}`);
-        } catch (syncError) {
-          console.warn("[Client-Side Sync] Webhook succeeded, but client-side Firestore sync was skipped:", syncError);
+        const cid = this.currentUser.companyId.trim().toUpperCase();
+        if (eventType.includes('ACTIVATED') || eventType.includes('RENEWED')) {
+          const limit = plan === 'basic' ? 20 : plan === 'business' ? 100 : 5;
+          await updateDoc(doc(db, COMPANIES, cid), {
+            plan: plan,
+            employeeLimit: limit,
+            subscriptionStatus: 'active',
+            paypalSubscriptionId: subscriptionId,
+            paymentProvider: 'paypal',
+            updatedAt: new Date()
+          });
+        } else if (eventType.includes('CANCELLED')) {
+          await updateDoc(doc(db, COMPANIES, cid), {
+            subscriptionStatus: 'cancelled',
+            employeeLimit: 0, // Block additions
+            updatedAt: new Date()
+          });
+        } else if (eventType.includes('EXPIRED') || eventType.includes('SUSPENDED')) {
+          await updateDoc(doc(db, COMPANIES, cid), {
+            subscriptionStatus: 'expired',
+            employeeLimit: 0, // Block additions
+            updatedAt: new Date()
+          });
         }
+        console.log(`[Client-Side Sync] Simulated webhook database update applied client-side for company ${cid}`);
       }
 
       return result;

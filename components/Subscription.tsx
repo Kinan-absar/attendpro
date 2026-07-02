@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
 import { dataService } from '../services/dataService';
 import { Company, User } from '../types';
 import { useLanguage } from '../utils/LanguageContext';
@@ -13,7 +12,6 @@ interface Props {
 const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
   const { t, isRtl, language } = useLanguage();
   const { showAlert, showConfirm } = useDialog();
-  const location = useLocation();
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -119,20 +117,6 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
     return localTrans[lang][key] || key;
   };
 
-  const getCallbackParams = () => {
-    const hashQueryIndex = window.location.hash.indexOf('?');
-    if (hashQueryIndex >= 0) {
-      return new URLSearchParams(window.location.hash.slice(hashQueryIndex + 1));
-    }
-    return new URLSearchParams(window.location.search);
-  };
-
-  const clearCallbackParams = () => {
-    const hashPath = window.location.hash.split('?')[0];
-    const fallbackPath = `${window.location.pathname}#/admin/subscription`;
-    window.history.replaceState({}, document.title, hashPath ? `${window.location.pathname}${hashPath}` : fallbackPath);
-  };
-
   const fetchCompanyData = async () => {
     setLoading(true);
     try {
@@ -150,7 +134,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
 
   // Check URL query parameters for returning checkout status
   const handleUrlCallbacks = async () => {
-    const params = getCallbackParams();
+    const params = new URLSearchParams(window.location.search);
     const status = params.get('status');
     const simSubId = params.get('sim_sub_id');
     const simPlan = params.get('sim_plan');
@@ -187,7 +171,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
       } finally {
         setIsProcessing(false);
         // Clear search parameters from URL so refreshes don't re-trigger verification
-        clearCallbackParams();
+        window.history.replaceState({}, document.title, window.location.pathname);
         await fetchCompanyData();
         if (onRefreshUser) onRefreshUser();
       }
@@ -197,7 +181,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
         language === 'ar' ? "تم إلغاء عملية الدفع عبر PayPal." : "You cancelled the PayPal subscription setup.", 
         "info"
       );
-      clearCallbackParams();
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
   };
 
@@ -209,7 +193,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
     if (currentUser) {
       handleUrlCallbacks();
     }
-  }, [currentUser, location]);
+  }, [currentUser]);
 
   const handleSubscribe = async (planId: string) => {
     if (planId === 'free') {
@@ -249,23 +233,15 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
 
     // PayPal checkout process
     setIsProcessing(true);
-    const checkoutWindow = window.open('', '_blank', 'noopener,noreferrer');
     try {
       const response = await dataService.createCheckoutSession(planId);
       if (response.approvalUrl) {
-        // Open PayPal outside sandboxed preview frames so it can complete top-level redirects.
-        if (checkoutWindow) {
-          checkoutWindow.location.href = response.approvalUrl;
-        } else {
-          window.location.href = response.approvalUrl;
-        }
+        // Redirect user to PayPal approval workflow (either simulated sandbox URL or real sandbox/live)
+        window.location.href = response.approvalUrl;
       } else {
         throw new Error("No approval URL received from PayPal API");
       }
     } catch (err: any) {
-      if (checkoutWindow) {
-        checkoutWindow.close();
-      }
       await showAlert(t('error'), err.message || "Failed to trigger PayPal flow", "error");
       setIsProcessing(false);
     }
