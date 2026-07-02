@@ -4,7 +4,6 @@ import { fileURLToPath } from 'url';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import { createServer as createViteServer } from 'vite';
 
 // Initialize Firebase Admin securely
 const projectId = process.env.PROJECT_ID || 'attendance-pro-a9257';
@@ -828,6 +827,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
 
   if (includeFrontend) {
     if (process.env.NODE_ENV !== "production") {
+      const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: "spa",
