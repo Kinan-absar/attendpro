@@ -16,6 +16,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [simulatingWebhook, setSimulatingWebhook] = useState(false);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
 
   // Local translations for subscription-specific terms
   const sT = (key: string): string => {
@@ -29,7 +30,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
         remainingSlots: "remaining slots",
         unlimited: "Unlimited",
         upgradeBtn: "Subscribe with PayPal",
-        enterpriseBtn: "Contact Enterprise Support",
+        enterpriseBtn: "Contact Sales",
         currentActive: "Active (Current)",
         active: "Active",
         trial: "Trial",
@@ -42,19 +43,21 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
         freeLimit: "Up to 5 Employees",
         basicName: "Basic Growth",
         basicDesc: "Great for growing small teams requiring robust tracking.",
-        basicPrice: "$20",
-        basicPeriod: "per month",
+        basicPrice: billingCycle === 'annual' ? "$180" : "$20",
+        basicPeriod: billingCycle === 'annual' ? "per year ($15/mo)" : "per month",
         basicLimit: "Up to 20 Employees",
         businessName: "Business Pro",
-        businessDesc: "Great for larger teams demanding robust attendance tracking.",
-        businessPrice: "$99",
-        businessPeriod: "per month",
-        businessLimit: "Up to 100 Employees",
+        businessDesc: billingCycle === 'annual' 
+          ? "For 21-100 employees. Billed annually ($9/yr per employee)."
+          : "For 21-100 employees. Billed monthly ($1/mo per employee).",
+        businessPrice: billingCycle === 'annual' ? "$9" : "$1",
+        businessPeriod: billingCycle === 'annual' ? "per employee / yr" : "per employee / mo",
+        businessLimit: "21 to 100 Employees",
         enterpriseName: "Enterprise Max",
-        enterpriseDesc: "Dedicated SLAs, custom telemetry, and limitless capacity.",
-        enterprisePrice: "Custom Pricing",
-        enterprisePeriod: "contact for contract",
-        enterpriseLimit: "Unlimited Employees",
+        enterpriseDesc: "For companies with 100+ employees. Custom contracts and limitless capacity.",
+        enterprisePrice: "Contact Us",
+        enterprisePeriod: "tailored pricing",
+        enterpriseLimit: "100+ Employees",
         processing: "Contacting PayPal Portal...",
         verifying: "Verifying subscription status...",
         paypalOnly: "Payments powered securely by PayPal Subscriptions.",
@@ -75,7 +78,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
         remainingSlots: "أماكن متبقية",
         unlimited: "غير محدود",
         upgradeBtn: "اشترك بواسطة PayPal",
-        enterpriseBtn: "تواصل مع الدعم الفني للمؤسسات",
+        enterpriseBtn: "تواصل مع المبيعات",
         currentActive: "نشط (الحالي)",
         active: "نشط",
         trial: "تجريبي",
@@ -88,19 +91,21 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
         freeLimit: "حتى 5 موظفين",
         basicName: "النمو الأساسي",
         basicDesc: "رائعة للفرق الصغيرة المتنامية التي تحتاج إلى تتبع حضور قوي.",
-        basicPrice: "20 دولار",
-        basicPeriod: "شهرياً",
+        basicPrice: billingCycle === 'annual' ? "180 دولار" : "20 دولار",
+        basicPeriod: billingCycle === 'annual' ? "سنوياً (15$/شهر)" : "شهرياً",
         basicLimit: "حتى 20 موظفاً",
         businessName: "محترفي الأعمال",
-        businessDesc: "رائعة للمؤسسات الأكبر حجماً التي تتطلب زيادة الحدود وقابلية التوسع.",
-        businessPrice: "99 دولار",
-        businessPeriod: "شهرياً",
-        businessLimit: "حتى 100 موظف",
+        businessDesc: billingCycle === 'annual'
+          ? "للشركات من 21-100 موظف. دفع سنوي (9 دولار سنوياً لكل موظف)."
+          : "للشركات من 21-100 موظف. دفع شهري (1 دولار شهرياً لكل موظف).",
+        businessPrice: billingCycle === 'annual' ? "9 دولار" : "1 دولار",
+        businessPeriod: billingCycle === 'annual' ? "لكل موظف / سنة" : "لكل موظف / شهر",
+        businessLimit: "من 21 إلى 100 موظف",
         enterpriseName: "المؤسسات الكبرى",
-        enterpriseDesc: "دعم مخصص بالكامل، ضمان مستوى الخدمة، وسعة وظيفية بلا حدود.",
-        enterprisePrice: "مخصص",
-        enterprisePeriod: "تواصل للحصول على عقد",
-        enterpriseLimit: "موظفون غير محدودين",
+        enterpriseDesc: "للشركات التي تضم أكثر من 100 موظف. عقود مخصصة وسعة غير محدودة.",
+        enterprisePrice: "اتصل بنا",
+        enterprisePeriod: "أسعار خاصة ومخصصة",
+        enterpriseLimit: "أكثر من 100 موظف",
         processing: "جاري الاتصال بـ PayPal...",
         verifying: "جاري التحقق من حالة الاشتراك...",
         paypalOnly: "المدفوعات مؤمنة بالكامل عبر اشتراكات PayPal.",
@@ -139,6 +144,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
     const simSubId = params.get('sim_sub_id');
     const simPlan = params.get('sim_plan');
     const simCompany = params.get('sim_company');
+    const simQty = params.get('sim_qty');
 
     if (status === 'success') {
       setIsProcessing(true);
@@ -146,10 +152,11 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
         const subId = simSubId || params.get('subscription_id') || 'MOCK';
         const targetPlan = simPlan || 'basic';
         const targetCompany = simCompany || currentUser?.companyId || 'ABSAR';
+        const targetQty = simQty ? parseInt(simQty, 10) : undefined;
 
-        console.log(`[Subscription Page] Verifying checkout return. Sub ID: ${subId}, Plan: ${targetPlan}, Company: ${targetCompany}`);
+        console.log(`[Subscription Page] Verifying checkout return. Sub ID: ${subId}, Plan: ${targetPlan}, Company: ${targetCompany}, Qty: ${targetQty}`);
         
-        const result = await dataService.verifyPayPalSubscription(subId, targetPlan);
+        const result = await dataService.verifyPayPalSubscription(subId, targetPlan, targetQty);
         if (result.success) {
           await showAlert(
             language === 'ar' ? "تم التنشيط!" : "Subscription Activated!", 
@@ -221,20 +228,17 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
     }
 
     if (planId === 'enterprise') {
-      await showAlert(
-        language === 'ar' ? "تواصل معنا" : "Enterprise Sales",
-        language === 'ar'
-          ? "الرجاء التواصل مع إدارة المبيعات على info@absar.sa لترتيب عقد مخصص وتفعيل غير محدود للموظفين."
-          : "Please contact sales at info@absar.sa to provision custom telemetry, high capacity pipelines, and dedicated Enterprise keys.",
-        "info"
-      );
+      const email = "info@absar.sa";
+      const subject = encodeURIComponent("Attendance Pro - Enterprise Plan Inquiry");
+      const body = encodeURIComponent(`Hello Absar Sales Team,\n\nWe are interested in the Enterprise Max plan for our company: ${company?.id || 'My Company'}.\nOur current employee headcount is ${company?.employeeCount || 100}+.\n\nPlease contact us back to discuss onboarding.\n\nBest regards,\n`);
+      window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
       return;
     }
 
     // PayPal checkout process
     setIsProcessing(true);
     try {
-      const response = await dataService.createCheckoutSession(planId);
+      const response = await dataService.createCheckoutSession(planId, billingCycle);
       if (response.approvalUrl) {
         // Redirect user to PayPal approval workflow (either simulated sandbox URL or real sandbox/live)
         window.location.href = response.approvalUrl;
@@ -255,7 +259,8 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
     setSimulatingWebhook(true);
     try {
       const mockSubId = company.paypalSubscriptionId || `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-      const result = await dataService.simulateWebhook(eventType, mockSubId, planId);
+      const qty = planId === 'business' ? (company.employeeCount || 25) : undefined;
+      const result = await dataService.simulateWebhook(eventType, mockSubId, planId, qty);
       
       await showAlert(
         "Simulator Fired", 
@@ -415,6 +420,31 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
         </div>
       </div>
 
+      {/* BILLING CYCLE TOGGLE */}
+      <div className="flex justify-center items-center gap-4 py-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+        <span className={`text-sm font-black transition-colors ${billingCycle === 'monthly' ? 'text-indigo-600' : 'text-slate-400'}`}>
+          {language === 'ar' ? "دورة دفع شهرية" : "Monthly Billing"}
+        </span>
+        <button
+          type="button"
+          onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'annual' : 'monthly')}
+          className="w-14 h-8 bg-slate-200 rounded-full p-1 transition-colors duration-300 relative focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          aria-label="Toggle Billing Cycle"
+        >
+          <div
+            className={`w-6 h-6 rounded-full transition-all duration-300 shadow-md ${
+              billingCycle === 'annual' ? 'translate-x-6 bg-emerald-600' : 'translate-x-0 bg-indigo-600'
+            }`}
+          />
+        </button>
+        <span className={`text-sm font-black flex items-center gap-2 transition-colors ${billingCycle === 'annual' ? 'text-emerald-600' : 'text-slate-400'}`}>
+          {language === 'ar' ? "دورة دفع سنوية" : "Annual Billing"}
+          <span className="px-2.5 py-0.5 text-[10px] bg-emerald-100 text-emerald-700 font-black rounded-full animate-pulse">
+            {language === 'ar' ? "وفر 25%" : "Save 25%"}
+          </span>
+        </span>
+      </div>
+
       {/* PLAN CARDS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {plansList.map((p) => {
@@ -441,6 +471,15 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                 <div className="py-2">
                   <span className="text-4xl font-black tracking-tight text-slate-900">{p.price}</span>
                   <span className="text-slate-400 font-bold text-xs uppercase ml-1.5 block mt-1">{p.period}</span>
+                  {p.id === 'business' && (
+                    <div className="mt-3 text-[10px] font-black text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl block border border-emerald-100/50">
+                      <i className="fa-solid fa-calculator mr-1"></i>
+                      {language === 'ar'
+                        ? `متوقع لمؤسستك: ${employeeCount * (billingCycle === 'annual' ? 9 : 1)} دولار / ${billingCycle === 'annual' ? 'سنة' : 'شهر'} (لـ ${employeeCount} موظفاً)`
+                        : `Expected: $${employeeCount * (billingCycle === 'annual' ? 9 : 1)} / ${billingCycle === 'annual' ? 'yr' : 'mo'} (for ${employeeCount} staff)`
+                      }
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-2 border-t border-slate-200/55 space-y-2">
@@ -466,6 +505,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                   </div>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => handleSubscribe(p.id)}
                     disabled={isProcessing}
                     className={`w-full py-3 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-md ${
@@ -526,7 +566,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
             </div>
 
             <div className="space-y-2">
-              <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">2. Test Business Active ($99/mo)</p>
+              <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">2. Test Business Active ($1/mo/unit)</p>
               <button
                 type="button"
                 disabled={simulatingWebhook}
@@ -534,7 +574,7 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md disabled:opacity-50"
               >
                 {simulatingWebhook ? <i className="fa-solid fa-spinner fa-spin mr-1"></i> : null}
-                {sT('simSuccess')} (Business)
+                {sT('simSuccess')} (Business - {employeeCount || 25} units)
               </button>
             </div>
 

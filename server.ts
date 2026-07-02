@@ -185,7 +185,7 @@ function getPlanLimit(plan: string): number {
   switch (plan.toLowerCase()) {
     case 'free': return 5;
     case 'basic': return 20;
-    case 'business': return 100; // Allows 50+ (up to 100 employees)
+    case 'business': return 100; // Normal maximum limit is 100, but we set limit dynamically based on purchased quantity for Business
     case 'enterprise': return 999999; // Unlimited
     default: return 5;
   }
@@ -200,7 +200,8 @@ async function updateCompanySubscriptionData(
   plan: 'free' | 'basic' | 'business' | 'enterprise', 
   subscriptionId: string | null, 
   status: 'active' | 'trial' | 'expired' | 'cancelled',
-  provider: 'paypal' | null = 'paypal'
+  provider: 'paypal' | null = 'paypal',
+  quantity?: number
 ): Promise<boolean> {
   if (!isFirebaseAdminReady() || !db) {
     console.warn(`[Firestore Admin Warning] Bypassed Firestore Admin set operation because Firebase Admin is not ready (credentials missing).`);
@@ -210,7 +211,10 @@ async function updateCompanySubscriptionData(
   const cid = companyId.trim().toUpperCase();
   const companyRef = db.collection('companies').doc(cid);
   
-  const limit = getPlanLimit(plan);
+  let limit = getPlanLimit(plan);
+  if (plan === 'business' && quantity !== undefined) {
+    limit = quantity;
+  }
   
   try {
     await companyRef.set({
@@ -223,7 +227,7 @@ async function updateCompanySubscriptionData(
       updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     
-    console.log(`[Firestore Admin] Company ${cid} subscription updated securely to Plan: ${plan}, Status: ${status}, ID: ${subscriptionId}`);
+    console.log(`[Firestore Admin] Company ${cid} subscription updated securely to Plan: ${plan}, Limit: ${limit}, Status: ${status}, ID: ${subscriptionId}`);
     return true;
   } catch (err: any) {
     console.warn(`[Firestore Admin Warning] Bypassed Firestore Admin set operation due to permission/network limits:`, err.message || err);
@@ -267,8 +271,10 @@ async function getPayPalAccessToken(): Promise<string> {
 
 // Dynamically provisioned PayPal IDs
 let paypalProductId = '';
-let paypalBasicPlanId = '';
-let paypalBusinessPlanId = '';
+let paypalBasicMonthlyPlanId = '';
+let paypalBasicAnnualPlanId = '';
+let paypalBusinessMonthlyPlanId = '';
+let paypalBusinessAnnualPlanId = '';
 
 /**
  * 🛠️ AUTO-PROVISION PAYPAL PRODUCT & PLANS ON STARTUP
@@ -286,13 +292,17 @@ async function provisionPayPalProductAndPlans() {
 
   try {
     // 1. Check if Plan IDs are provided directly in Environment Variables FIRST
-    if (process.env.PAYPAL_PLAN_BASIC && process.env.PAYPAL_PLAN_BUSINESS) {
-      paypalBasicPlanId = process.env.PAYPAL_PLAN_BASIC;
-      paypalBusinessPlanId = process.env.PAYPAL_PLAN_BUSINESS;
-      console.log(`[PayPal Provision] Successfully loaded Plan IDs from Environment Variables:`);
-      console.log(` - Source: ENVIRONMENT_VARIABLES`);
-      console.log(` - Basic Plan ID: ${paypalBasicPlanId}`);
-      console.log(` - Business Plan ID: ${paypalBusinessPlanId}`);
+    if (
+      process.env.PAYPAL_PLAN_BASIC_MONTHLY && 
+      process.env.PAYPAL_PLAN_BASIC_ANNUAL && 
+      process.env.PAYPAL_PLAN_BUSINESS_MONTHLY && 
+      process.env.PAYPAL_PLAN_BUSINESS_ANNUAL
+    ) {
+      paypalBasicMonthlyPlanId = process.env.PAYPAL_PLAN_BASIC_MONTHLY;
+      paypalBasicAnnualPlanId = process.env.PAYPAL_PLAN_BASIC_ANNUAL;
+      paypalBusinessMonthlyPlanId = process.env.PAYPAL_PLAN_BUSINESS_MONTHLY;
+      paypalBusinessAnnualPlanId = process.env.PAYPAL_PLAN_BUSINESS_ANNUAL;
+      console.log(`[PayPal Provision] Successfully loaded Plan IDs from Environment Variables.`);
       return;
     }
 
@@ -303,15 +313,20 @@ async function provisionPayPalProductAndPlans() {
 
       if (configDoc.exists) {
         const data = configDoc.data();
-        if (data && data.productId && data.basicPlanId && data.businessPlanId) {
+        if (
+          data && 
+          data.productId && 
+          data.basicMonthlyPlanId && 
+          data.basicAnnualPlanId && 
+          data.businessMonthlyPlanId && 
+          data.businessAnnualPlanId
+        ) {
           paypalProductId = data.productId;
-          paypalBasicPlanId = data.basicPlanId;
-          paypalBusinessPlanId = data.businessPlanId;
-          console.log(`[PayPal Provision] Successfully loaded existing IDs from Firestore:`);
-          console.log(` - Source: FIRESTORE_CACHE`);
-          console.log(` - Product ID: ${paypalProductId}`);
-          console.log(` - Basic Plan ID: ${paypalBasicPlanId}`);
-          console.log(` - Business Plan ID: ${paypalBusinessPlanId}`);
+          paypalBasicMonthlyPlanId = data.basicMonthlyPlanId;
+          paypalBasicAnnualPlanId = data.basicAnnualPlanId;
+          paypalBusinessMonthlyPlanId = data.businessMonthlyPlanId;
+          paypalBusinessAnnualPlanId = data.businessAnnualPlanId;
+          console.log(`[PayPal Provision] Successfully loaded existing IDs from Firestore cache.`);
           return;
         }
       }
@@ -380,21 +395,26 @@ async function provisionPayPalProductAndPlans() {
       }
     });
 
-    let existingBasicPlan: any = null;
-    let existingBusinessPlan: any = null;
+    let existingBasicMonthly: any = null;
+    let existingBasicAnnual: any = null;
+    let existingBusinessMonthly: any = null;
+    let existingBusinessAnnual: any = null;
 
     if (plansResponse.ok) {
       const plansData: any = await plansResponse.json();
-      existingBasicPlan = plansData.plans?.find((p: any) => p.name === 'Attendance Pro - Basic Plan' && p.status === 'ACTIVE');
-      existingBusinessPlan = plansData.plans?.find((p: any) => p.name === 'Attendance Pro - Business Plan' && p.status === 'ACTIVE');
+      existingBasicMonthly = plansData.plans?.find((p: any) => p.name === 'Attendance Pro - Basic Monthly' && p.status === 'ACTIVE');
+      existingBasicAnnual = plansData.plans?.find((p: any) => p.name === 'Attendance Pro - Basic Annual' && p.status === 'ACTIVE');
+      existingBusinessMonthly = plansData.plans?.find((p: any) => p.name === 'Attendance Pro - Business Monthly' && p.status === 'ACTIVE');
+      existingBusinessAnnual = plansData.plans?.find((p: any) => p.name === 'Attendance Pro - Business Annual' && p.status === 'ACTIVE');
     }
 
-    if (existingBasicPlan) {
-      paypalBasicPlanId = existingBasicPlan.id;
-      console.log(`[PayPal Provision] Found existing Basic Plan on PayPal account: ${paypalBasicPlanId}`);
+    // A. Basic Monthly ($20/mo flat)
+    if (existingBasicMonthly) {
+      paypalBasicMonthlyPlanId = existingBasicMonthly.id;
+      console.log(`[PayPal Provision] Found existing Basic Monthly Plan: ${paypalBasicMonthlyPlanId}`);
     } else {
-      console.log('[PayPal Provision] Creating Basic Plan ($20/mo)...');
-      const createBasicResponse = await fetch(`${baseUrl}/v1/billing/plans`, {
+      console.log('[PayPal Provision] Creating Basic Monthly Plan ($20/mo)...');
+      const response = await fetch(`${baseUrl}/v1/billing/plans`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -403,23 +423,17 @@ async function provisionPayPalProductAndPlans() {
         },
         body: JSON.stringify({
           product_id: paypalProductId,
-          name: 'Attendance Pro - Basic Plan',
-          description: 'Up to 20 employees attendance tracking',
+          name: 'Attendance Pro - Basic Monthly',
+          description: 'Up to 20 employees attendance tracking (Monthly)',
           status: 'ACTIVE',
           billing_cycles: [
             {
-              frequency: {
-                interval_unit: 'MONTH',
-                interval_count: 1
-              },
+              frequency: { interval_unit: 'MONTH', interval_count: 1 },
               tenure_type: 'REGULAR',
               sequence: 1,
               total_cycles: 0,
               pricing_scheme: {
-                fixed_price: {
-                  value: '20.00',
-                  currency_code: 'USD'
-                }
+                fixed_price: { value: '20.00', currency_code: 'USD' }
               }
             }
           ],
@@ -430,23 +444,23 @@ async function provisionPayPalProductAndPlans() {
           }
         })
       });
-
-      if (!createBasicResponse.ok) {
-        const errText = await createBasicResponse.text();
-        throw new Error(`Failed to create Basic Plan: ${errText}`);
+      if (response.ok) {
+        const data: any = await response.json();
+        paypalBasicMonthlyPlanId = data.id;
+        console.log(`[PayPal Provision] Created Basic Monthly Plan: ${paypalBasicMonthlyPlanId}`);
+      } else {
+        const txt = await response.text();
+        console.warn(`[PayPal Provision Warning] Failed to create Basic Monthly Plan: ${txt}`);
       }
-
-      const createBasicData: any = await createBasicResponse.json();
-      paypalBasicPlanId = createBasicData.id;
-      console.log(`[PayPal Provision] Created Basic Plan: ${paypalBasicPlanId}`);
     }
 
-    if (existingBusinessPlan) {
-      paypalBusinessPlanId = existingBusinessPlan.id;
-      console.log(`[PayPal Provision] Found existing Business Plan on PayPal account: ${paypalBusinessPlanId}`);
+    // B. Basic Annual ($180/yr flat)
+    if (existingBasicAnnual) {
+      paypalBasicAnnualPlanId = existingBasicAnnual.id;
+      console.log(`[PayPal Provision] Found existing Basic Annual Plan: ${paypalBasicAnnualPlanId}`);
     } else {
-      console.log('[PayPal Provision] Creating Business Plan ($99/mo)...');
-      const createBusinessResponse = await fetch(`${baseUrl}/v1/billing/plans`, {
+      console.log('[PayPal Provision] Creating Basic Annual Plan ($180/yr)...');
+      const response = await fetch(`${baseUrl}/v1/billing/plans`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -455,23 +469,17 @@ async function provisionPayPalProductAndPlans() {
         },
         body: JSON.stringify({
           product_id: paypalProductId,
-          name: 'Attendance Pro - Business Plan',
-          description: 'Up to 100 employees attendance tracking',
+          name: 'Attendance Pro - Basic Annual',
+          description: 'Up to 20 employees attendance tracking (Annual)',
           status: 'ACTIVE',
           billing_cycles: [
             {
-              frequency: {
-                interval_unit: 'MONTH',
-                interval_count: 1
-              },
+              frequency: { interval_unit: 'YEAR', interval_count: 1 },
               tenure_type: 'REGULAR',
               sequence: 1,
               total_cycles: 0,
               pricing_scheme: {
-                fixed_price: {
-                  value: '99.00',
-                  currency_code: 'USD'
-                }
+                fixed_price: { value: '180.00', currency_code: 'USD' }
               }
             }
           ],
@@ -482,15 +490,108 @@ async function provisionPayPalProductAndPlans() {
           }
         })
       });
-
-      if (!createBusinessResponse.ok) {
-        const errText = await createBusinessResponse.text();
-        throw new Error(`Failed to create Business Plan: ${errText}`);
+      if (response.ok) {
+        const data: any = await response.json();
+        paypalBasicAnnualPlanId = data.id;
+        console.log(`[PayPal Provision] Created Basic Annual Plan: ${paypalBasicAnnualPlanId}`);
+      } else {
+        const txt = await response.text();
+        console.warn(`[PayPal Provision Warning] Failed to create Basic Annual Plan: ${txt}`);
       }
+    }
 
-      const createBusinessData: any = await createBusinessResponse.json();
-      paypalBusinessPlanId = createBusinessData.id;
-      console.log(`[PayPal Provision] Created Business Plan: ${paypalBusinessPlanId}`);
+    // C. Business Monthly ($1/unit, quantity supported)
+    if (existingBusinessMonthly) {
+      paypalBusinessMonthlyPlanId = existingBusinessMonthly.id;
+      console.log(`[PayPal Provision] Found existing Business Monthly Plan: ${paypalBusinessMonthlyPlanId}`);
+    } else {
+      console.log('[PayPal Provision] Creating Business Monthly Plan ($1/employee/mo)...');
+      const response = await fetch(`${baseUrl}/v1/billing/plans`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({
+          product_id: paypalProductId,
+          name: 'Attendance Pro - Business Monthly',
+          description: '$1 per employee per month (quantity-based)',
+          status: 'ACTIVE',
+          billing_cycles: [
+            {
+              frequency: { interval_unit: 'MONTH', interval_count: 1 },
+              tenure_type: 'REGULAR',
+              sequence: 1,
+              total_cycles: 0,
+              pricing_scheme: {
+                fixed_price: { value: '1.00', currency_code: 'USD' }
+              }
+            }
+          ],
+          payment_preferences: {
+            auto_bill_outstanding: true,
+            setup_fee_failure_action: 'CONTINUE',
+            payment_failure_threshold: 3
+          },
+          quantity_supported: true
+        })
+      });
+      if (response.ok) {
+        const data: any = await response.json();
+        paypalBusinessMonthlyPlanId = data.id;
+        console.log(`[PayPal Provision] Created Business Monthly Plan: ${paypalBusinessMonthlyPlanId}`);
+      } else {
+        const txt = await response.text();
+        console.warn(`[PayPal Provision Warning] Failed to create Business Monthly Plan: ${txt}`);
+      }
+    }
+
+    // D. Business Annual ($9/unit, quantity supported)
+    if (existingBusinessAnnual) {
+      paypalBusinessAnnualPlanId = existingBusinessAnnual.id;
+      console.log(`[PayPal Provision] Found existing Business Annual Plan: ${paypalBusinessAnnualPlanId}`);
+    } else {
+      console.log('[PayPal Provision] Creating Business Annual Plan ($9/employee/yr)...');
+      const response = await fetch(`${baseUrl}/v1/billing/plans`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({
+          product_id: paypalProductId,
+          name: 'Attendance Pro - Business Annual',
+          description: '$9 per employee per year (quantity-based)',
+          status: 'ACTIVE',
+          billing_cycles: [
+            {
+              frequency: { interval_unit: 'YEAR', interval_count: 1 },
+              tenure_type: 'REGULAR',
+              sequence: 1,
+              total_cycles: 0,
+              pricing_scheme: {
+                fixed_price: { value: '9.00', currency_code: 'USD' }
+              }
+            }
+          ],
+          payment_preferences: {
+            auto_bill_outstanding: true,
+            setup_fee_failure_action: 'CONTINUE',
+            payment_failure_threshold: 3
+          },
+          quantity_supported: true
+        })
+      });
+      if (response.ok) {
+        const data: any = await response.json();
+        paypalBusinessAnnualPlanId = data.id;
+        console.log(`[PayPal Provision] Created Business Annual Plan: ${paypalBusinessAnnualPlanId}`);
+      } else {
+        const txt = await response.text();
+        console.warn(`[PayPal Provision Warning] Failed to create Business Annual Plan: ${txt}`);
+      }
     }
 
     // 5. Store to Firestore for future fast retrieval
@@ -498,10 +599,12 @@ async function provisionPayPalProductAndPlans() {
       const configRef = db.collection('config').doc('paypal');
       await configRef.set({
         productId: paypalProductId,
-        basicPlanId: paypalBasicPlanId,
-        businessPlanId: paypalBusinessPlanId,
+        basicMonthlyPlanId: paypalBasicMonthlyPlanId,
+        basicAnnualPlanId: paypalBasicAnnualPlanId,
+        businessMonthlyPlanId: paypalBusinessMonthlyPlanId,
+        businessAnnualPlanId: paypalBusinessAnnualPlanId,
         updatedAt: FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
       console.log('[PayPal Provision] Successfully saved provisioned IDs to Firestore config.');
     } catch (fsWriteErr: any) {
       console.warn('[PayPal Provision Warning] Could not save provisioned IDs to Firestore config:', fsWriteErr.message || fsWriteErr);
@@ -533,13 +636,37 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
    */
   app.post('/api/paypal/create-subscription', authenticateFirebase, async (req, res) => {
     const companyId = (req as AuthenticatedRequest).user?.companyId;
-    const { plan } = req.body;
+    const { plan, billingCycle = 'monthly' } = req.body;
     if (!companyId || !plan) {
       return res.status(400).json({ error: "Missing authentication or plan parameter" });
     }
 
     const cid = companyId.trim().toUpperCase();
-    console.log(`[PayPal API] Creating subscription request for company: ${cid}, Plan: ${plan}`);
+    console.log(`[PayPal API] Creating subscription request for company: ${cid}, Plan: ${plan}, Cycle: ${billingCycle}`);
+
+    // Verify company employee count for Business plan
+    let companyEmployeeCount = 0;
+    if (plan === 'business') {
+      try {
+        const usersSnap = await db.collection('users').where('companyId', '==', cid).get();
+        companyEmployeeCount = usersSnap.size;
+        console.log(`[PayPal API] Verified employee count for company ${cid}: ${companyEmployeeCount}`);
+      } catch (err: any) {
+        console.error(`[PayPal API] Error looking up employee count for company ${cid}:`, err.message || err);
+        return res.status(500).json({ error: "Failed to verify current employee count from database." });
+      }
+
+      if (companyEmployeeCount < 21) {
+        return res.status(400).json({ 
+          error: `Your company currently has ${companyEmployeeCount} employees. The Business plan requires a minimum of 21 employees. Please subscribe to the Basic plan instead.` 
+        });
+      }
+      if (companyEmployeeCount > 100) {
+        return res.status(400).json({ 
+          error: `Your company currently has ${companyEmployeeCount} employees. The Business plan supports up to 100 employees. Please contact our Sales team for Enterprise solutions.` 
+        });
+      }
+    }
 
     // 1. Look up current subscription in Firestore
     let oldSubscriptionId: string | null = null;
@@ -608,7 +735,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
 
     if (isCredentialsPlaceholder) {
       const mockSubId = `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-      const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}`;
+      const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}&sim_cycle=${billingCycle}&sim_qty=${companyEmployeeCount || 25}`;
       console.log(`[PayPal API] Using Simulator fallback due to missing/placeholder credentials. Redirecting to: ${approvalUrl}`);
       return res.json({
         simulator: true,
@@ -627,14 +754,38 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
 
       // Retrieve corresponding Plan ID from dynamic provisioning variables or Env
       let planId = '';
-      if (plan === 'basic') planId = paypalBasicPlanId || process.env.PAYPAL_PLAN_BASIC || '';
-      if (plan === 'business') planId = paypalBusinessPlanId || process.env.PAYPAL_PLAN_BUSINESS || '';
+      if (plan === 'basic') {
+        planId = billingCycle === 'annual'
+          ? (paypalBasicAnnualPlanId || process.env.PAYPAL_PLAN_BASIC_ANNUAL || '')
+          : (paypalBasicMonthlyPlanId || process.env.PAYPAL_PLAN_BASIC_MONTHLY || '');
+      } else if (plan === 'business') {
+        planId = billingCycle === 'annual'
+          ? (paypalBusinessAnnualPlanId || process.env.PAYPAL_PLAN_BUSINESS_ANNUAL || '')
+          : (paypalBusinessMonthlyPlanId || process.env.PAYPAL_PLAN_BUSINESS_MONTHLY || '');
+      }
 
       if (!planId) {
-        planId = plan === 'basic' ? 'P-MOCK_BASIC_PLAN' : 'P-MOCK_BUSINESS_PLAN';
+        planId = plan === 'basic'
+          ? (billingCycle === 'annual' ? 'P-MOCK_BASIC_ANNUAL' : 'P-MOCK_BASIC_MONTHLY')
+          : (billingCycle === 'annual' ? 'P-MOCK_BUSINESS_ANNUAL' : 'P-MOCK_BUSINESS_MONTHLY');
       }
 
       // Call PayPal Subscriptions API
+      const reqBody: any = {
+        plan_id: planId,
+        custom_id: cid,
+        application_context: {
+          brand_name: "Attendance Pro",
+          user_action: "SUBSCRIBE_NOW",
+          return_url: `${req.headers.origin || 'http://localhost:3000'}/admin/subscription?status=success&sim_plan=${plan}&sim_cycle=${billingCycle}&sim_qty=${companyEmployeeCount}`,
+          cancel_url: `${req.headers.origin || 'http://localhost:3000'}/admin/subscription?status=cancel`
+        }
+      };
+
+      if (plan === 'business') {
+        reqBody.quantity = String(companyEmployeeCount);
+      }
+
       const response = await fetch(paypalUrl, {
         method: 'POST',
         headers: {
@@ -643,23 +794,14 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
           'Accept': 'application/json',
           'Prefer': 'return=representation'
         },
-        body: JSON.stringify({
-          plan_id: planId,
-          custom_id: cid,
-          application_context: {
-            brand_name: "Attendance Pro",
-            user_action: "SUBSCRIBE_NOW",
-            return_url: `${req.headers.origin || 'http://localhost:3000'}/admin/subscription?status=success`,
-            cancel_url: `${req.headers.origin || 'http://localhost:3000'}/admin/subscription?status=cancel`
-          }
-        })
+        body: JSON.stringify(reqBody)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
         console.warn("[PayPal API Error] Subscriptions API call failed, falling back to Simulator:", errorText);
         const mockSubId = `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-        const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}`;
+        const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}&sim_cycle=${billingCycle}&sim_qty=${companyEmployeeCount || 25}`;
         return res.json({
           simulator: true,
           subscriptionId: mockSubId,
@@ -680,7 +822,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     } catch (error: any) {
       console.warn("[PayPal API Exception] Creating subscription failed, falling back to Simulator:", error.message || error);
       const mockSubId = `I-SIMSUB-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-      const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}`;
+      const approvalUrl = `/admin/subscription?status=success&sim_sub_id=${mockSubId}&sim_plan=${plan}&sim_company=${cid}&sim_cycle=${billingCycle}&sim_qty=${companyEmployeeCount || 25}`;
       return res.json({
         simulator: true,
         subscriptionId: mockSubId,
@@ -694,7 +836,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
    * 2. VERIFY PAYPAL SUBSCRIPTION (ON RETURNING TO CLIENT)
    */
   app.post('/api/paypal/verify-subscription', authenticateFirebase, async (req, res) => {
-    const { subscriptionId, plan } = req.body;
+    const { subscriptionId, plan, qty } = req.body;
     const companyId = (req as AuthenticatedRequest).user?.companyId;
 
     if (!subscriptionId || !companyId) {
@@ -706,7 +848,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     // If it's a simulated subscription, return success immediately
     if (subscriptionId.startsWith('I-SIMSUB-') || subscriptionId === 'MOCK') {
       console.log(`[PayPal API] Verifying fully simulated subscription: ${subscriptionId}`);
-      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
+      const parsedQty = qty ? parseInt(qty, 10) : undefined;
+      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty);
       return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
     }
 
@@ -715,7 +858,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
 
     if (!clientId || !clientSecret || clientId.includes('YOUR_') || clientSecret.includes('YOUR_')) {
       console.warn("[PayPal API Warning] PayPal is unconfigured or using placeholders. Falling back to verification success (Simulator).");
-      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
+      const parsedQty = qty ? parseInt(qty, 10) : undefined;
+      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty);
       return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
     }
 
@@ -736,7 +880,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
 
       if (!response.ok) {
         console.warn("[PayPal API Warning] Failed to retrieve subscription from PayPal API. Falling back to Success (Simulator):", response.statusText);
-        const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
+        const parsedQty = qty ? parseInt(qty, 10) : undefined;
+        const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty);
         return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
       }
 
@@ -745,21 +890,35 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       const customId = data.custom_id || companyId;
       
       let resolvedPlan: any = plan || 'basic';
-      if (data.plan_id === paypalBusinessPlanId || data.plan_id === process.env.PAYPAL_PLAN_BUSINESS) {
+      if (
+        data.plan_id === paypalBusinessMonthlyPlanId || 
+        data.plan_id === paypalBusinessAnnualPlanId || 
+        data.plan_id === process.env.PAYPAL_PLAN_BUSINESS_MONTHLY || 
+        data.plan_id === process.env.PAYPAL_PLAN_BUSINESS_ANNUAL ||
+        (data.plan_id && data.plan_id.includes('BUSINESS'))
+      ) {
         resolvedPlan = 'business';
       }
 
+      let quantity: number | undefined = undefined;
+      if (data.quantity) {
+        quantity = parseInt(data.quantity, 10);
+      } else if (qty) {
+        quantity = parseInt(qty, 10);
+      }
+
       if (status === 'ACTIVE') {
-        const persisted = await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, 'active');
+        const persisted = await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, 'active', 'paypal', quantity);
         return res.json({ success: true, status, plan: resolvedPlan, companyId: customId, serverPersisted: persisted });
       } else {
         const mappedStatus = status === 'CANCELLED' ? 'cancelled' : 'expired';
-        const persisted = await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, mappedStatus as any);
+        const persisted = await updateCompanySubscriptionData(customId, resolvedPlan, subscriptionId, mappedStatus as any, 'paypal', quantity);
         return res.json({ success: false, status, message: `Subscription is not active. Status: ${status}`, serverPersisted: persisted });
       }
     } catch (error: any) {
       console.warn("[PayPal Verification Exception] Error encountered. Falling back to Success (Simulator):", error.message || error);
-      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active');
+      const parsedQty = qty ? parseInt(qty, 10) : undefined;
+      const persisted = await updateCompanySubscriptionData(companyId, plan || 'basic', subscriptionId, 'active', 'paypal', parsedQty);
       return res.json({ success: true, status: 'ACTIVE', plan: plan || 'basic', companyId, serverPersisted: persisted });
     }
   });
@@ -800,10 +959,22 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
         case 'BILLING.SUBSCRIPTION.ACTIVATED':
         case 'BILLING.SUBSCRIPTION.RENEWED': {
           let plan: 'basic' | 'business' = 'basic';
-          if (resource.plan_id === paypalBusinessPlanId || resource.plan_id === process.env.PAYPAL_PLAN_BUSINESS) {
+          if (
+            resource.plan_id === paypalBusinessMonthlyPlanId || 
+            resource.plan_id === paypalBusinessAnnualPlanId || 
+            resource.plan_id === process.env.PAYPAL_PLAN_BUSINESS_MONTHLY || 
+            resource.plan_id === process.env.PAYPAL_PLAN_BUSINESS_ANNUAL ||
+            (resource.plan_id && resource.plan_id.includes('BUSINESS'))
+          ) {
             plan = 'business';
           }
-          await updateCompanySubscriptionData(customId, plan, subscriptionId, 'active');
+
+          let quantity: number | undefined = undefined;
+          if (resource.quantity) {
+            quantity = parseInt(resource.quantity, 10);
+          }
+
+          await updateCompanySubscriptionData(customId, plan, subscriptionId, 'active', 'paypal', quantity);
           break;
         }
         case 'BILLING.SUBSCRIPTION.CANCELLED': {
@@ -814,10 +985,12 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
             .get();
 
           const cid = !querySnap.empty ? querySnap.docs[0].id : customId;
-          const currentPlan = !querySnap.empty ? (querySnap.docs[0].data().plan || 'basic') : 'basic';
+          const companyData = !querySnap.empty ? querySnap.docs[0].data() : null;
+          const currentPlan = companyData?.plan || 'basic';
+          const currentLimit = companyData?.employeeLimit || 20;
           
           if (cid) {
-            await updateCompanySubscriptionData(cid, currentPlan, subscriptionId, 'cancelled');
+            await updateCompanySubscriptionData(cid, currentPlan, subscriptionId, 'cancelled', 'paypal', currentLimit);
           }
           break;
         }
@@ -830,10 +1003,12 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
             .get();
 
           const cid = !querySnap.empty ? querySnap.docs[0].id : customId;
-          const currentPlan = !querySnap.empty ? (querySnap.docs[0].data().plan || 'basic') : 'basic';
+          const companyData = !querySnap.empty ? querySnap.docs[0].data() : null;
+          const currentPlan = companyData?.plan || 'basic';
+          const currentLimit = companyData?.employeeLimit || 20;
           
           if (cid) {
-            await updateCompanySubscriptionData(cid, currentPlan, subscriptionId, 'expired');
+            await updateCompanySubscriptionData(cid, currentPlan, subscriptionId, 'expired', 'paypal', currentLimit);
           }
           break;
         }
@@ -856,7 +1031,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       return res.status(403).json({ error: "Simulation endpoint is disabled in production and sandbox testing modes." });
     }
 
-    const { eventType, subscriptionId, plan } = req.body;
+    const { eventType, subscriptionId, plan, qty } = req.body;
     const companyId = (req as AuthenticatedRequest).user?.companyId;
 
     if (!eventType || !subscriptionId || !companyId) {
@@ -871,7 +1046,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
       if (eventType === 'BILLING.SUBSCRIPTION.CANCELLED') targetStatus = 'cancelled';
       if (eventType === 'BILLING.SUBSCRIPTION.EXPIRED' || eventType === 'PAYMENT.SALE.DENIED') targetStatus = 'expired';
 
-      await updateCompanySubscriptionData(cid, plan || 'basic', subscriptionId, targetStatus);
+      const parsedQty = qty ? parseInt(qty, 10) : undefined;
+      await updateCompanySubscriptionData(cid, plan || 'basic', subscriptionId, targetStatus, 'paypal', parsedQty);
       return res.json({
         success: true,
         message: `Successfully simulated ${eventType} webhook callback. Firestore set to: ${targetStatus}.`
