@@ -12,12 +12,11 @@ async function getApp() {
 export default async function handler(req: any, res: any) {
   try {
     const app = await getApp();
-    // Forward query parameters if they exist
     const query = req.url?.split('?')[1];
-    req.url = '/api/paypal/update-seats' + (query ? `?${query}` : '');
+    req.url = '/api/paypal/verify-revision' + (query ? `?${query}` : '');
     return app(req, res);
   } catch (err: any) {
-    console.error("[Vercel Handler Error] Failed inside update-seats serverless wrapper:", err);
+    console.error("[Vercel Handler Error] Failed inside verify-revision serverless wrapper:", err);
     res.status(500).json({ error: "Internal Server Error", message: err.message || String(err) });
   }
 }

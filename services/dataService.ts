@@ -1570,15 +1570,15 @@ class DataService {
     }
   }
 
-  async updateSubscriptionSeats(quantity: number): Promise<{ success: boolean; limit?: number; error?: string }> {
+  async reviseSubscriptionSeats(quantity: number): Promise<{ success: boolean; approvalUrl?: string; simulator?: boolean; warning?: string; error?: string }> {
     try {
       const idToken = await auth.currentUser?.getIdToken();
       if (!idToken) {
-        throw new Error("User must be authenticated to update subscription seats.");
+        throw new Error("User must be authenticated to revise subscription seats.");
       }
 
       const companyId = this.currentUser?.companyId || 'ABSAR';
-      const response = await fetch('/api/paypal/update-seats', {
+      const response = await fetch('/api/paypal/revise-subscription', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1589,13 +1589,43 @@ class DataService {
       });
       if (!response.ok) {
         const errData = await response.json();
-        throw new Error(errData.error || 'Failed to update subscription seats');
+        throw new Error(errData.error || 'Failed to initiate subscription seat revision');
       }
 
       const result = await response.json();
       return result;
     } catch (e: any) {
-      console.error("[DataService] PayPal update subscription seats failed:", e);
+      console.error("[DataService] PayPal revise subscription seats failed:", e);
+      throw e;
+    }
+  }
+
+  async verifyPayPalRevision(subscriptionId: string, quantity?: number): Promise<{ success: boolean; limit?: number; error?: string }> {
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        throw new Error("User must be authenticated to verify subscription revision.");
+      }
+
+      const companyId = this.currentUser?.companyId || 'ABSAR';
+      const response = await fetch('/api/paypal/verify-revision', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+          'X-Company-Id': companyId
+        },
+        body: JSON.stringify({ subscriptionId, quantity, companyId })
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to verify subscription revision');
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (e: any) {
+      console.error("[DataService] PayPal verify subscription revision failed:", e);
       throw e;
     }
   }

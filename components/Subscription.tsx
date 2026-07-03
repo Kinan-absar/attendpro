@@ -194,6 +194,38 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
         await fetchCompanyData();
         if (onRefreshUser) onRefreshUser();
       }
+    } else if (status === 'success_revision') {
+      setIsProcessing(true);
+      try {
+        const subId = params.get('subscription_id') || params.get('rev_sub_id') || 'MOCK';
+        const targetQty = params.get('rev_qty') ? parseInt(params.get('rev_qty')!, 10) : undefined;
+        console.log(`[Subscription Page] Verifying revision return. Sub ID: ${subId}, Qty: ${targetQty}`);
+        
+        const result = await dataService.verifyPayPalRevision(subId, targetQty);
+        if (result.success) {
+          await showAlert(
+            language === 'ar' ? "تمت ترقية السعة!" : "Capacity Upgraded!",
+            language === 'ar'
+              ? `تم التحقق بنجاح وتفعيل سعة المقاعد الجديدة (${targetQty} مقعداً). ستنعكس الفوترة المحدثة في دورتك القادمة.`
+              : `Your updated seat capacity of ${targetQty} seats has been successfully verified and is active immediately.`,
+            "success"
+          );
+        } else {
+          await showAlert(
+            "Upgrade Incomplete",
+            result.error || "Failed to verify subscription revision.",
+            "error"
+          );
+        }
+      } catch (err: any) {
+        console.error("Revision callback verification failed:", err);
+        await showAlert("Error", err.message || "Failed to verify subscription revision", "error");
+      } finally {
+        setIsProcessing(false);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        await fetchCompanyData();
+        if (onRefreshUser) onRefreshUser();
+      }
     } else if (status === 'cancel') {
       await showAlert(
         language === 'ar' ? "تم الإلغاء" : "Checkout Cancelled", 
@@ -827,24 +859,14 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
                       if (isConfirmed) {
                         setIsProcessing(true);
                         try {
-                          const response = await dataService.updateSubscriptionSeats(targetQty);
-                          if (response.success) {
-                            await showAlert(
-                              language === 'ar' ? "تمت ترقية السعة!" : "Capacity Upgraded!",
-                              language === 'ar' 
-                                ? `تمت إضافة +${addNum} مقاعد جديدة بنجاح إلى حسابك فوراً ومجاناً حتى نهاية دورتك الحالية. ستنعكس الفوترة المحدثة في الدورة القادمة.`
-                                : `Successfully added +${addNum} new seats to your account instantly at no cost today. Future cycle billing will be adjusted to the updated capacity.`,
-                              "success"
-                            );
-                            setAdditionalSeatsInput("5");
-                            await fetchCompanyData();
-                            if (onRefreshUser) onRefreshUser();
+                          const response = await dataService.reviseSubscriptionSeats(targetQty);
+                          if (response.approvalUrl) {
+                            window.location.href = response.approvalUrl;
                           } else {
-                            throw new Error(response.error || "Failed to update subscription seats");
+                            throw new Error(response.error || "Failed to initiate seat upgrade revision");
                           }
                         } catch (err: any) {
                           await showAlert(t('error'), err.message || "Failed to process seat upgrade capacity", "error");
-                        } finally {
                           setIsProcessing(false);
                         }
                       }
