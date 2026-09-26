@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+import { GoogleGenAI, Type } from '@google/genai';
 
 // Initialize Firebase Admin securely
 const projectId = process.env.PROJECT_ID || 'attendance-pro-a9257';
@@ -692,6 +693,44 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
   // Enable JSON body parsing
   app.use(express.json());
 
+  app.post('/api/ai/analyze-attendance', async (req, res) => {
+    try {
+      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      if (!apiKey) {
+        return res.status(503).json({ error: 'Gemini API key not configured' });
+      }
+      const { historySummary } = req.body;
+      if (!Array.isArray(historySummary) || historySummary.length === 0) {
+        return res.json(null);
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Analyze these recent employee attendance duration records and provide a professional, encouraging work habit summary.
+      Data (Durations in minutes): ${JSON.stringify(historySummary)}`,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              summary: { type: Type.STRING },
+              suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
+              trend: { type: Type.STRING, description: 'positive, neutral, or negative' }
+            },
+            required: ['summary', 'suggestions', 'trend']
+          }
+        }
+      });
+
+      const parsed = response.text ? JSON.parse(response.text) : null;
+      return res.json(parsed);
+    } catch (err: any) {
+      console.error('[AI Endpoint Error]', err.message || err);
+      return res.status(500).json({ error: 'Failed to analyze attendance' });
+    }
+  });
+
   /* ==========================================================================
      💰 PAYPAL API ENDPOINTS (FULLY SECURED)
      ========================================================================== */
@@ -1370,7 +1409,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     } else {
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
-      app.get('*', (req, res) => {
+      app.get('/{*splat}', (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }
@@ -1394,9 +1433,10 @@ async function startServer() {
 
 // Only call startServer() automatically when this file is run directly, NOT when createApp is imported
 const isMain = process.argv[1] && (
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) ||
+  (typeof import.meta?.url === 'string' && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) ||
   process.argv[1].endsWith('server.ts') ||
-  process.argv[1].endsWith('server.js')
+  process.argv[1].endsWith('server.js') ||
+  process.argv[1].endsWith('server.cjs')
 );
 
 if (isMain) {
