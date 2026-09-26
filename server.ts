@@ -4,7 +4,6 @@ import { fileURLToPath } from 'url';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import { GoogleGenAI, Type } from '@google/genai';
 
 // Initialize Firebase Admin securely
 const projectId = process.env.PROJECT_ID || 'attendance-pro-a9257';
@@ -26,7 +25,7 @@ try {
         console.error("FIREBASE_SERVICE_ACCOUNT_KEY is set but is not valid JSON — check how it was pasted into Vercel");
       }
     } else {
-      console.error("FIREBASE_SERVICE_ACCOUNT_KEY is not set — Admin Firestore writes will fail");
+      console.warn("[Firebase Admin Warning] FIREBASE_SERVICE_ACCOUNT_KEY is not set — Admin Firestore writes will be bypassed in local/preview mode.");
     }
 
     // Fallback if not initialized with credentials to prevent hard-crash on local dev
@@ -48,7 +47,7 @@ try {
   // Get firestore instance safely
   db = getFirestore();
 } catch (globalInitErr: any) {
-  console.error("[Firebase Admin Critical] Global initialization failed completely:", globalInitErr.message || globalInitErr);
+  console.warn("[Firebase Admin Warning] Global initialization fallback:", globalInitErr.message || globalInitErr);
 }
 
 export function isFirebaseAdminReady(): boolean {
@@ -60,7 +59,123 @@ interface AuthenticatedRequest extends express.Request {
     uid: string;
     email?: string;
     companyId: string;
+    idToken?: string;
   };
+}
+
+/**
+ * 🛠️ HELPER: Parse Firestore REST API document fields into a plain object
+ */
+function parseFirestoreRestFields(fields: Record<string, any> | undefined): Record<string, any> {
+  if (!fields) return {};
+  const result: Record<string, any> = {};
+  for (const [key, val] of Object.entries(fields)) {
+    if (!val || typeof val !== 'object') continue;
+    if ('stringValue' in val) result[key] = val.stringValue;
+    else if ('integerValue' in val) result[key] = Number(val.integerValue);
+    else if ('doubleValue' in val) result[key] = Number(val.doubleValue);
+    else if ('booleanValue' in val) result[key] = Boolean(val.booleanValue);
+    else if ('nullValue' in val) result[key] = null;
+    else if ('timestampValue' in val) result[key] = val.timestampValue;
+  }
+  return result;
+}
+
+/**
+ * 🛠️ HELPER: Read Company Document via Admin SDK with Firestore REST API fallback
+ */
+async function getCompanyDocData(companyId: string, idToken?: string): Promise<Record<string, any> | null> {
+  const cid = companyId.trim().toUpperCase();
+
+  if (isFirebaseAdminReady() && db) {
+    try {
+      const companyDoc = await db.collection('companies').doc(cid).get();
+      if (companyDoc.exists) {
+        return companyDoc.data() || null;
+      }
+      return null;
+    } catch (err: any) {
+      console.warn(`[Firestore Lookup Warning] Admin SDK company lookup failed for ${cid}, falling back to REST API:`, err.message || err);
+    }
+  }
+
+  try {
+    const headers: Record<string, string> = {};
+    if (idToken) {
+      headers['Authorization'] = `Bearer ${idToken}`;
+    }
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/companies/${encodeURIComponent(cid)}`;
+    const response = await fetch(url, { method: 'GET', headers });
+    if (response.status === 404) {
+      return null;
+    }
+    if (response.ok) {
+      const data: any = await response.json();
+      return parseFirestoreRestFields(data.fields);
+    }
+  } catch (restErr: any) {
+    console.warn(`[Firestore Lookup Warning] REST company lookup fallback failed for ${cid}:`, restErr.message || restErr);
+  }
+
+  return null;
+}
+
+/**
+ * 🛠️ HELPER: Count Company Employees via Admin SDK with Firestore REST API fallback
+ */
+async function getCompanyEmployeeCount(companyId: string, idToken?: string): Promise<number> {
+  const cid = companyId.trim().toUpperCase();
+
+  if (isFirebaseAdminReady() && db) {
+    try {
+      const usersSnap = await db.collection('users').where('companyId', '==', cid).get();
+      return usersSnap.size;
+    } catch (err: any) {
+      console.warn(`[Firestore Lookup Warning] Admin SDK employee count lookup failed for ${cid}, falling back to REST API:`, err.message || err);
+    }
+  }
+
+  if (idToken) {
+    try {
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          structuredQuery: {
+            from: [{ collectionId: 'users' }],
+            where: {
+              fieldFilter: {
+                field: { fieldPath: 'companyId' },
+                op: 'EQUAL',
+                value: { stringValue: cid }
+              }
+            }
+          }
+        })
+      });
+
+      if (response.ok) {
+        const rows: any = await response.json();
+        if (Array.isArray(rows)) {
+          return rows.filter((r: any) => r && r.document).length;
+        }
+      }
+    } catch (restErr: any) {
+      console.warn(`[Firestore Lookup Warning] REST employee count query failed for ${cid}:`, restErr.message || restErr);
+    }
+  }
+
+  // Fallback to company doc's employeeCount field if available
+  const companyData = await getCompanyDocData(cid, idToken);
+  if (companyData && typeof companyData.employeeCount === 'number') {
+    return companyData.employeeCount;
+  }
+
+  return 0;
 }
 
 /**
@@ -79,7 +194,7 @@ async function authenticateFirebase(req: express.Request, res: express.Response,
 
     let companyId: string | undefined = req.headers['x-company-id'] as string;
 
-    if (!companyId) {
+    if (!companyId && isFirebaseAdminReady() && db) {
       try {
         const userDoc = await db.collection('users').doc(uid).get();
         if (userDoc.exists) {
@@ -101,7 +216,8 @@ async function authenticateFirebase(req: express.Request, res: express.Response,
     (req as AuthenticatedRequest).user = {
       uid,
       email: decodedToken.email,
-      companyId: companyId.trim().toUpperCase()
+      companyId: companyId.trim().toUpperCase(),
+      idToken
     };
     next();
   } catch (error: any) {
@@ -335,6 +451,55 @@ async function callPayPalReviseSubscription(
   return approvalUrl;
 }
 
+/**
+ * 🛠️ HELPER: Call PayPal Cancel Subscription Endpoint
+ */
+async function callPayPalCancelSubscription(
+  subscriptionId: string,
+  reason: string = "Customer changed subscription plan"
+): Promise<{ success: boolean; errorText?: string }> {
+  const clientId = process.env.PAYPAL_CLIENT_ID;
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+  const isCredentialsPlaceholder = !clientId || !clientSecret || clientId.includes('YOUR_') || clientSecret.includes('YOUR_');
+
+  if (subscriptionId.startsWith('I-SIMSUB-') || subscriptionId === 'MOCK' || isCredentialsPlaceholder) {
+    console.log(`[PayPal API] Subscription "${subscriptionId}" is simulated or credentials placeholder. Simulating cancellation...`);
+    return { success: true };
+  }
+
+  try {
+    const accessToken = await getPayPalAccessToken();
+    const mode = process.env.PAYPAL_MODE === 'live' ? 'live' : 'sandbox';
+    const cancelUrl = mode === 'live'
+      ? `https://api-m.paypal.com/v1/billing/subscriptions/${subscriptionId}/cancel`
+      : `https://api-m.sandbox.paypal.com/v1/billing/subscriptions/${subscriptionId}/cancel`;
+
+    const response = await fetch(cancelUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        reason
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`[PayPal API Warning] PayPal cancellation for subscription "${subscriptionId}" returned status ${response.status}:`, errorText);
+      return { success: false, errorText: `Status ${response.status}: ${response.statusText} (${errorText})` };
+    }
+
+    console.log(`[PayPal API] Successfully cancelled PayPal subscription "${subscriptionId}"`);
+    return { success: true };
+  } catch (err: any) {
+    console.error(`[PayPal API Exception] Failed to cancel subscription "${subscriptionId}":`, err.message || err);
+    return { success: false, errorText: err.message || String(err) };
+  }
+}
+
 // Dynamically provisioned PayPal IDs
 let paypalProductId = '';
 let paypalBasicMonthlyPlanId = '';
@@ -373,31 +538,33 @@ async function provisionPayPalProductAndPlans() {
     }
 
     // 2. Try to load from Firestore config next to optimize speed and reliability
-    try {
-      const configRef = db.collection('config').doc('paypal');
-      const configDoc = await configRef.get();
+    if (isFirebaseAdminReady() && db) {
+      try {
+        const configRef = db.collection('config').doc('paypal');
+        const configDoc = await configRef.get();
 
-      if (configDoc.exists) {
-        const data = configDoc.data();
-        if (
-          data && 
-          data.productId && 
-          data.basicMonthlyPlanId && 
-          data.basicAnnualPlanId && 
-          data.businessMonthlyPlanId && 
-          data.businessAnnualPlanId
-        ) {
-          paypalProductId = data.productId;
-          paypalBasicMonthlyPlanId = data.basicMonthlyPlanId;
-          paypalBasicAnnualPlanId = data.basicAnnualPlanId;
-          paypalBusinessMonthlyPlanId = data.businessMonthlyPlanId;
-          paypalBusinessAnnualPlanId = data.businessAnnualPlanId;
-          console.log(`[PayPal Provision] Successfully loaded existing IDs from Firestore cache.`);
-          return;
+        if (configDoc.exists) {
+          const data = configDoc.data();
+          if (
+            data && 
+            data.productId && 
+            data.basicMonthlyPlanId && 
+            data.basicAnnualPlanId && 
+            data.businessMonthlyPlanId && 
+            data.businessAnnualPlanId
+          ) {
+            paypalProductId = data.productId;
+            paypalBasicMonthlyPlanId = data.basicMonthlyPlanId;
+            paypalBasicAnnualPlanId = data.basicAnnualPlanId;
+            paypalBusinessMonthlyPlanId = data.businessMonthlyPlanId;
+            paypalBusinessAnnualPlanId = data.businessAnnualPlanId;
+            console.log(`[PayPal Provision] Successfully loaded existing IDs from Firestore cache.`);
+            return;
+          }
         }
+      } catch (fsError: any) {
+        console.warn('[PayPal Provision Warning] Bypassed Firestore Config read due to access limits:', fsError.message || fsError);
       }
-    } catch (fsError: any) {
-      console.warn('[PayPal Provision Warning] Bypassed Firestore Config read due to access limits:', fsError.message || fsError);
     }
 
     // 3. Search or Create Product
@@ -661,19 +828,21 @@ async function provisionPayPalProductAndPlans() {
     }
 
     // 5. Store to Firestore for future fast retrieval
-    try {
-      const configRef = db.collection('config').doc('paypal');
-      await configRef.set({
-        productId: paypalProductId,
-        basicMonthlyPlanId: paypalBasicMonthlyPlanId,
-        basicAnnualPlanId: paypalBasicAnnualPlanId,
-        businessMonthlyPlanId: paypalBusinessMonthlyPlanId,
-        businessAnnualPlanId: paypalBusinessAnnualPlanId,
-        updatedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
-      console.log('[PayPal Provision] Successfully saved provisioned IDs to Firestore config.');
-    } catch (fsWriteErr: any) {
-      console.warn('[PayPal Provision Warning] Could not save provisioned IDs to Firestore config:', fsWriteErr.message || fsWriteErr);
+    if (isFirebaseAdminReady() && db) {
+      try {
+        const configRef = db.collection('config').doc('paypal');
+        await configRef.set({
+          productId: paypalProductId,
+          basicMonthlyPlanId: paypalBasicMonthlyPlanId,
+          basicAnnualPlanId: paypalBasicAnnualPlanId,
+          businessMonthlyPlanId: paypalBusinessMonthlyPlanId,
+          businessAnnualPlanId: paypalBusinessAnnualPlanId,
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        console.log('[PayPal Provision] Successfully saved provisioned IDs to Firestore config.');
+      } catch (fsWriteErr: any) {
+        console.warn('[PayPal Provision Warning] Could not save provisioned IDs to Firestore config:', fsWriteErr.message || fsWriteErr);
+      }
     }
 
   } catch (error: any) {
@@ -693,44 +862,6 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
   // Enable JSON body parsing
   app.use(express.json());
 
-  app.post('/api/ai/analyze-attendance', async (req, res) => {
-    try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-      if (!apiKey) {
-        return res.status(503).json({ error: 'Gemini API key not configured' });
-      }
-      const { historySummary } = req.body;
-      if (!Array.isArray(historySummary) || historySummary.length === 0) {
-        return res.json(null);
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Analyze these recent employee attendance duration records and provide a professional, encouraging work habit summary.
-      Data (Durations in minutes): ${JSON.stringify(historySummary)}`,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              summary: { type: Type.STRING },
-              suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
-              trend: { type: Type.STRING, description: 'positive, neutral, or negative' }
-            },
-            required: ['summary', 'suggestions', 'trend']
-          }
-        }
-      });
-
-      const parsed = response.text ? JSON.parse(response.text) : null;
-      return res.json(parsed);
-    } catch (err: any) {
-      console.error('[AI Endpoint Error]', err.message || err);
-      return res.status(500).json({ error: 'Failed to analyze attendance' });
-    }
-  });
-
   /* ==========================================================================
      💰 PAYPAL API ENDPOINTS (FULLY SECURED)
      ========================================================================== */
@@ -740,6 +871,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
    */
   app.post('/api/paypal/create-subscription', authenticateFirebase, async (req, res) => {
     const companyId = (req as AuthenticatedRequest).user?.companyId;
+    const idToken = (req as AuthenticatedRequest).user?.idToken;
     const { plan, billingCycle = 'monthly', quantity } = req.body;
     if (!companyId || !plan) {
       return res.status(400).json({ error: "Missing authentication or plan parameter" });
@@ -749,15 +881,8 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     console.log(`[PayPal API] Creating subscription request for company: ${cid}, Plan: ${plan}, Cycle: ${billingCycle}, Quantity: ${quantity}`);
 
     // Verify company employee count for Business plan
-    let companyEmployeeCount = 0;
-    try {
-      const usersSnap = await db.collection('users').where('companyId', '==', cid).get();
-      companyEmployeeCount = usersSnap.size;
-      console.log(`[PayPal API] Verified actual employee count for company ${cid}: ${companyEmployeeCount}`);
-    } catch (err: any) {
-      console.error(`[PayPal API] Error looking up employee count for company ${cid}:`, err.message || err);
-      return res.status(500).json({ error: "Failed to verify current employee count from database." });
-    }
+    const companyEmployeeCount = await getCompanyEmployeeCount(cid, idToken);
+    console.log(`[PayPal API] Verified actual employee count for company ${cid}: ${companyEmployeeCount}`);
 
     // Determine final quantity of seats
     let finalQty = 1;
@@ -791,17 +916,10 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     let currentStatus: string | null = null;
     let warningMessage: string | null = null;
 
-    if (db) {
-      try {
-        const companyDoc = await db.collection('companies').doc(cid).get();
-        if (companyDoc.exists) {
-          const companyData = companyDoc.data();
-          oldSubscriptionId = companyData?.paypalSubscriptionId || null;
-          currentStatus = companyData?.subscriptionStatus || null;
-        }
-      } catch (err: any) {
-        console.error(`[PayPal API] Error looking up company details in Firestore for ${cid}:`, err.message || err);
-      }
+    const companyData = await getCompanyDocData(cid, idToken);
+    if (companyData) {
+      oldSubscriptionId = companyData.paypalSubscriptionId || null;
+      currentStatus = companyData.subscriptionStatus || null;
     }
 
     const clientId = process.env.PAYPAL_CLIENT_ID;
@@ -813,41 +931,9 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     // 2. If an active subscription exists, attempt cancellation
     if (oldSubscriptionId && currentStatus === 'active') {
       console.log(`[PayPal API] Found existing active subscription "${oldSubscriptionId}" for company ${cid}. Attempting automatic cancellation...`);
-      
-      // If it is a simulated subscription, handle simulation cancellation cleanly without API calls
-      if (oldSubscriptionId.startsWith('I-SIMSUB-') || oldSubscriptionId === 'MOCK' || isCredentialsPlaceholder) {
-        console.log(`[PayPal API] Existing subscription "${oldSubscriptionId}" is a simulated subscription. Simulating automatic cancellation...`);
-      } else {
-        try {
-          const accessToken = await getPayPalAccessToken();
-          const mode = process.env.PAYPAL_MODE === 'live' ? 'live' : 'sandbox';
-          const cancelUrl = mode === 'live'
-            ? `https://api-m.paypal.com/v1/billing/subscriptions/${oldSubscriptionId}/cancel`
-            : `https://api-m.sandbox.paypal.com/v1/billing/subscriptions/${oldSubscriptionId}/cancel`;
-
-          const cancelResponse = await fetch(cancelUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-              reason: `Changing plan to ${plan}`
-            })
-          });
-
-          if (!cancelResponse.ok) {
-            const cancelErrText = await cancelResponse.text();
-            console.warn(`[PayPal API Warning] PayPal cancellation for subscription "${oldSubscriptionId}" returned status ${cancelResponse.status}:`, cancelErrText);
-            warningMessage = `We detected an existing active subscription but could not cancel it automatically. Please verify your PayPal account. Error details: ${cancelResponse.statusText}`;
-          } else {
-            console.log(`[PayPal API] Successfully cancelled old PayPal subscription "${oldSubscriptionId}"`);
-          }
-        } catch (cancelErr: any) {
-          console.error(`[PayPal API Exception] Failed to cancel existing active subscription "${oldSubscriptionId}":`, cancelErr.message || cancelErr);
-          warningMessage = `We encountered an unexpected error while trying to automatically cancel your existing active subscription. Please review your active subscriptions in your PayPal dashboard.`;
-        }
+      const cancelResult = await callPayPalCancelSubscription(oldSubscriptionId, `Changing plan to ${plan}`);
+      if (!cancelResult.success) {
+        warningMessage = `We detected an existing active subscription but could not cancel it automatically. Please verify your PayPal account. Details: ${cancelResult.errorText || 'Failed to cancel via PayPal API'}`;
       }
     }
 
@@ -1071,6 +1157,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
    */
   app.post('/api/paypal/revise-subscription', authenticateFirebase, async (req, res) => {
     const companyId = (req as AuthenticatedRequest).user?.companyId;
+    const idToken = (req as AuthenticatedRequest).user?.idToken;
     const { quantity } = req.body;
 
     if (!companyId || quantity === undefined) {
@@ -1087,24 +1174,21 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     console.log(`[PayPal API] Initiating seat upgrade revision request for company: ${cid} to ${targetQty} seats.`);
 
     try {
-      const companyRef = db.collection('companies').doc(cid);
-      const companyDoc = await companyRef.get();
-      if (!companyDoc.exists) {
+      const companyData = await getCompanyDocData(cid, idToken);
+      if (!companyData) {
         return res.status(404).json({ error: "Company not found" });
       }
 
-      const companyData = companyDoc.data();
-      const currentPlan = companyData?.plan;
-      const currentStatus = companyData?.subscriptionStatus;
-      const subscriptionId = companyData?.paypalSubscriptionId || companyData?.subscriptionId;
+      const currentPlan = companyData.plan;
+      const currentStatus = companyData.subscriptionStatus;
+      const subscriptionId = companyData.paypalSubscriptionId || companyData.subscriptionId;
 
       if (currentPlan !== 'business' || currentStatus !== 'active') {
         return res.status(400).json({ error: "Direct seat upgrades are only available for active Business plan subscriptions." });
       }
 
       // Verify company employee count for Business plan
-      const usersSnap = await db.collection('users').where('companyId', '==', cid).get();
-      const currentEmployees = usersSnap.size;
+      const currentEmployees = await getCompanyEmployeeCount(cid, idToken);
       if (targetQty < currentEmployees) {
         return res.status(400).json({ 
           error: `Your company currently has ${currentEmployees} registered staff. You cannot reduce seat capacity below your current registered team size.` 
@@ -1238,6 +1322,65 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
   });
 
   /**
+   * 2c. CANCEL SUBSCRIPTION / DOWNGRADE TO FREE (SERVER-AUTHORITATIVE)
+   */
+  app.post('/api/paypal/cancel-subscription', authenticateFirebase, async (req, res) => {
+    const companyId = (req as AuthenticatedRequest).user?.companyId;
+    const idToken = (req as AuthenticatedRequest).user?.idToken;
+    const bodyCompanyId = req.body?.companyId;
+    const targetCid = (companyId || bodyCompanyId || '').trim().toUpperCase();
+
+    if (!targetCid) {
+      return res.status(400).json({ error: "Missing company ID in authenticated session or request body." });
+    }
+
+    console.log(`[PayPal API] Request received to cancel subscription / downgrade to Free for company: ${targetCid}`);
+
+    try {
+      let activeSubId: string | null = null;
+      let currentStatus: string | null = null;
+
+      const companyData = await getCompanyDocData(targetCid, idToken);
+      if (companyData) {
+        activeSubId = companyData.paypalSubscriptionId || null;
+        currentStatus = companyData.subscriptionStatus || null;
+      }
+
+      let warningMessage: string | undefined = undefined;
+
+      // If there's an active PayPal subscription, attempt real cancellation
+      if (activeSubId && currentStatus === 'active') {
+        console.log(`[PayPal API] Found active subscription "${activeSubId}" for company ${targetCid}. Attempting cancellation...`);
+        const cancelResult = await callPayPalCancelSubscription(activeSubId, "Customer downgraded to Free plan");
+        if (!cancelResult.success) {
+          warningMessage = "Your account was downgraded to Free, but we could not cancel your active PayPal subscription automatically. Please review and cancel the recurring profile in your PayPal account.";
+        }
+      }
+
+      // Authoritatively update Firestore to Free plan
+      const persisted = await updateCompanySubscriptionData(
+        targetCid,
+        'free',
+        null,
+        'active',
+        null,
+        5
+      );
+
+      return res.json({
+        success: true,
+        plan: 'free',
+        employeeLimit: 5,
+        serverPersisted: persisted,
+        ...(warningMessage ? { warning: warningMessage } : {})
+      });
+    } catch (err: any) {
+      console.error(`[PayPal API Error] Failed to cancel subscription for ${targetCid}:`, err.message || err);
+      return res.status(500).json({ error: "Internal server error while downgrading subscription." });
+    }
+  });
+
+  /**
    * 3. WEBHOOK ENDPOINT (PAYPAL SOURCE OF TRUTH)
    */
   app.post('/api/paypal/webhook', async (req, res) => {
@@ -1312,13 +1455,25 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
         }
         case 'BILLING.SUBSCRIPTION.CANCELLED': {
           // Find company associated with subscription
-          const querySnap = await db.collection('companies')
-            .where('paypalSubscriptionId', '==', subscriptionId)
-            .limit(1)
-            .get();
-
-          const cid = !querySnap.empty ? querySnap.docs[0].id : customId;
-          const companyData = !querySnap.empty ? querySnap.docs[0].data() : null;
+          let cid = customId;
+          let companyData: Record<string, any> | null = null;
+          if (isFirebaseAdminReady() && db) {
+            try {
+              const querySnap = await db.collection('companies')
+                .where('paypalSubscriptionId', '==', subscriptionId)
+                .limit(1)
+                .get();
+              if (!querySnap.empty) {
+                cid = querySnap.docs[0].id;
+                companyData = querySnap.docs[0].data();
+              }
+            } catch (err: any) {
+              console.warn("[PayPal Webhook Warning] Admin lookup for cancelled subscription failed:", err.message || err);
+            }
+          }
+          if (!companyData && cid) {
+            companyData = await getCompanyDocData(cid);
+          }
           const currentPlan = companyData?.plan || 'basic';
           const currentLimit = companyData?.employeeLimit || 20;
           
@@ -1330,13 +1485,25 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
         case 'BILLING.SUBSCRIPTION.EXPIRED':
         case 'BILLING.SUBSCRIPTION.SUSPENDED':
         case 'PAYMENT.SALE.DENIED': {
-          const querySnap = await db.collection('companies')
-            .where('paypalSubscriptionId', '==', subscriptionId)
-            .limit(1)
-            .get();
-
-          const cid = !querySnap.empty ? querySnap.docs[0].id : customId;
-          const companyData = !querySnap.empty ? querySnap.docs[0].data() : null;
+          let cid = customId;
+          let companyData: Record<string, any> | null = null;
+          if (isFirebaseAdminReady() && db) {
+            try {
+              const querySnap = await db.collection('companies')
+                .where('paypalSubscriptionId', '==', subscriptionId)
+                .limit(1)
+                .get();
+              if (!querySnap.empty) {
+                cid = querySnap.docs[0].id;
+                companyData = querySnap.docs[0].data();
+              }
+            } catch (err: any) {
+              console.warn("[PayPal Webhook Warning] Admin lookup for expired/suspended subscription failed:", err.message || err);
+            }
+          }
+          if (!companyData && cid) {
+            companyData = await getCompanyDocData(cid);
+          }
           const currentPlan = companyData?.plan || 'basic';
           const currentLimit = companyData?.employeeLimit || 20;
           
@@ -1409,7 +1576,7 @@ export async function createApp(options?: { includeFrontend?: boolean }): Promis
     } else {
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
-      app.get('/{*splat}', (req, res) => {
+      app.get('*', (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }
@@ -1433,10 +1600,9 @@ async function startServer() {
 
 // Only call startServer() automatically when this file is run directly, NOT when createApp is imported
 const isMain = process.argv[1] && (
-  (typeof import.meta?.url === 'string' && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) ||
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) ||
   process.argv[1].endsWith('server.ts') ||
-  process.argv[1].endsWith('server.js') ||
-  process.argv[1].endsWith('server.cjs')
+  process.argv[1].endsWith('server.js')
 );
 
 if (isMain) {

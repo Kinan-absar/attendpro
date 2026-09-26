@@ -1523,22 +1523,36 @@ class DataService {
     }
   }
 
-  async updateCompanySubscription(companyId: string, plan: 'free' | 'basic' | 'business' | 'enterprise'): Promise<void> {
+  async updateCompanySubscription(companyId: string, plan: 'free' | 'basic' | 'business' | 'enterprise'): Promise<{ success: boolean; warning?: string }> {
     // Paid plans are securely managed via PayPal webhooks and the verify-subscription endpoint.
     // Standard clients are only authorized to self-downgrade to the 'free' plan.
     if (plan !== 'free') {
       throw new Error("Security Alert: Paid subscription plans can only be activated via verified PayPal endpoints.");
     }
 
-    const cid = companyId.trim().toUpperCase();
-    await updateDoc(doc(db, COMPANIES, cid), {
-      plan: 'free',
-      employeeLimit: 5,
-      subscriptionStatus: 'active',
-      paypalSubscriptionId: null,
-      paymentProvider: null,
-      updatedAt: new Date()
+    const idToken = await auth.currentUser?.getIdToken();
+    if (!idToken) {
+      throw new Error("User must be authenticated to downgrade subscription.");
+    }
+
+    const cid = (companyId || this.currentUser?.companyId || 'ABSAR').trim().toUpperCase();
+    const response = await fetch('/api/paypal/cancel-subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`,
+        'X-Company-Id': cid
+      },
+      body: JSON.stringify({ companyId: cid })
     });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to downgrade subscription to Free');
+    }
+
+    const result = await response.json();
+    return result;
   }
 
   // Actual secure Express PayPal subscription APIs protected with Firebase ID Token

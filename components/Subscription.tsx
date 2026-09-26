@@ -259,8 +259,16 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
       
       setIsProcessing(true);
       try {
-        await dataService.updateCompanySubscription(company?.id || 'ABSAR', 'free');
-        await showAlert(t('success'), language === 'ar' ? "تم التخفيض بنجاح" : "Successfully downgraded workspace limit.", "success");
+        const res = await dataService.updateCompanySubscription(company?.id || 'ABSAR', 'free');
+        if (res?.warning) {
+          await showAlert(
+            language === 'ar' ? "تنبيه" : "Subscription Downgraded with Warning",
+            res.warning,
+            "warning"
+          );
+        } else {
+          await showAlert(t('success'), language === 'ar' ? "تم التخفيض بنجاح" : "Successfully downgraded workspace limit.", "success");
+        }
         await fetchCompanyData();
         if (onRefreshUser) onRefreshUser();
       } catch (err: any) {
@@ -891,73 +899,75 @@ const Subscription: React.FC<Props> = ({ currentUser, onRefreshUser }) => {
       })()}
 
       {/* DEVELOPER WEBHOOK SANDBOX SIMULATOR */}
-      <div className="p-8 bg-slate-900 border border-slate-800 rounded-[2.5rem] text-start text-white space-y-6 shadow-2xl">
-        <div className="flex items-center gap-3">
-          <span className="w-10 h-10 rounded-2xl bg-indigo-500 text-white flex items-center justify-center">
-            <i className="fa-solid fa-flask-vial text-lg"></i>
-          </span>
-          <div>
-            <h3 className="font-black text-lg text-slate-100">{sT('devTitle')}</h3>
-            <p className="text-[10px] text-indigo-400 font-black uppercase tracking-widest">Secure State Engine Verification</p>
+      {(import.meta as any).env?.VITE_APP_ENV === 'development' && (
+        <div className="p-8 bg-slate-900 border border-slate-800 rounded-[2.5rem] text-start text-white space-y-6 shadow-2xl">
+          <div className="flex items-center gap-3">
+            <span className="w-10 h-10 rounded-2xl bg-indigo-500 text-white flex items-center justify-center">
+              <i className="fa-solid fa-flask-vial text-lg"></i>
+            </span>
+            <div>
+              <h3 className="font-black text-lg text-slate-100">{sT('devTitle')}</h3>
+              <p className="text-[10px] text-indigo-400 font-black uppercase tracking-widest">Secure State Engine Verification</p>
+            </div>
           </div>
-        </div>
 
-        <p className="text-xs text-slate-400 font-medium leading-relaxed max-w-4xl">
-          {sT('devDesc')}
-        </p>
+          <p className="text-xs text-slate-400 font-medium leading-relaxed max-w-4xl">
+            {sT('devDesc')}
+          </p>
 
-        <div className="pt-4 border-t border-slate-800">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">1. Test Basic Active ($20)</p>
-              <button
-                type="button"
-                disabled={simulatingWebhook}
-                onClick={() => triggerSimulatedWebhook('BILLING.SUBSCRIPTION.ACTIVATED', 'basic')}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md disabled:opacity-50"
-              >
-                {simulatingWebhook ? <i className="fa-solid fa-spinner fa-spin mr-1"></i> : null}
-                {sT('simSuccess')} (Basic)
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">2. Test Business Active ($1/mo/unit)</p>
-              <button
-                type="button"
-                disabled={simulatingWebhook}
-                onClick={() => triggerSimulatedWebhook('BILLING.SUBSCRIPTION.ACTIVATED', 'business')}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md disabled:opacity-50"
-              >
-                {simulatingWebhook ? <i className="fa-solid fa-spinner fa-spin mr-1"></i> : null}
-                {sT('simSuccess')} (Business - {employeeCount || 25} units)
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest">3. Test Cancel / Expiry</p>
-              <div className="flex gap-2">
+          <div className="pt-4 border-t border-slate-800">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">1. Test Basic Active ($20)</p>
                 <button
                   type="button"
                   disabled={simulatingWebhook}
-                  onClick={() => triggerSimulatedWebhook('BILLING.SUBSCRIPTION.CANCELLED', 'basic')}
-                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-rose-400 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-50"
+                  onClick={() => triggerSimulatedWebhook('BILLING.SUBSCRIPTION.ACTIVATED', 'basic')}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md disabled:opacity-50"
                 >
-                  Cancel
+                  {simulatingWebhook ? <i className="fa-solid fa-spinner fa-spin mr-1"></i> : null}
+                  {sT('simSuccess')} (Basic)
                 </button>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">2. Test Business Active ($1/mo/unit)</p>
                 <button
                   type="button"
                   disabled={simulatingWebhook}
-                  onClick={() => triggerSimulatedWebhook('BILLING.SUBSCRIPTION.EXPIRED', 'basic')}
-                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-400 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-50"
+                  onClick={() => triggerSimulatedWebhook('BILLING.SUBSCRIPTION.ACTIVATED', 'business')}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md disabled:opacity-50"
                 >
-                  Expire
+                  {simulatingWebhook ? <i className="fa-solid fa-spinner fa-spin mr-1"></i> : null}
+                  {sT('simSuccess')} (Business - {employeeCount || 25} units)
                 </button>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest">3. Test Cancel / Expiry</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={simulatingWebhook}
+                    onClick={() => triggerSimulatedWebhook('BILLING.SUBSCRIPTION.CANCELLED', 'basic')}
+                    className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-rose-400 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={simulatingWebhook}
+                    onClick={() => triggerSimulatedWebhook('BILLING.SUBSCRIPTION.EXPIRED', 'basic')}
+                    className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-400 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-50"
+                  >
+                    Expire
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

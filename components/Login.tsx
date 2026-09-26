@@ -71,7 +71,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         }
       }
     } catch (err: any) {
-      console.warn("Authentication action failed:", err);
+      console.error("Authentication action failed:", err);
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
         setError(t('incorrectCredentialsError'));
       } else if (err.code === 'auth/email-already-in-use') {
